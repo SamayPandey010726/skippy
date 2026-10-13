@@ -26,12 +26,52 @@ public enum ExternalArchiver {
   public static func missingToolMessage(for format: PackFormat) -> String {
     switch format {
     case .sevenZip:
-      return
-        "7-Zip isn't installed on this Mac. Install it with: brew install p7zip — then pack again."
+      return "7-Zip isn't installed on this Mac."
     case .rar:
-      return
-        "The RAR tool isn't installed on this Mac. Install it with: brew install rar — then pack again."
+      return "The RAR tool isn't installed on this Mac."
     case .zip: return ""
+    }
+  }
+
+  private static func brewPath() -> String? {
+    for p in ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"] {
+      if FileManager.default.isExecutableFile(atPath: p) { return p }
+    }
+    let pathEnv = ProcessInfo.processInfo.environment["PATH"] ?? ""
+    for dir in pathEnv.split(separator: ":") {
+      let full = (String(dir) as NSString).appendingPathComponent("brew")
+      if FileManager.default.isExecutableFile(atPath: full) { return full }
+    }
+    return nil
+  }
+
+  /// Runs `brew install` for the tool behind the format. Blocking — call off
+  /// the main thread.
+  public static func installTool(for format: PackFormat) throws {
+    let package: String
+    switch format {
+    case .sevenZip: package = "p7zip"
+    case .rar: package = "rar"
+    case .zip: return
+    }
+    guard let brew = brewPath() else {
+      throw ParcelError.storageError(
+        "Homebrew isn't installed. Install it from brew.sh, then install \(format.label).")
+    }
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: brew)
+    process.arguments = ["install", package]
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = pipe
+    try process.run()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else {
+      let out =
+        String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+      throw ParcelError.storageError(
+        "Could not install \(format.label): \(out.suffix(300).trimmingCharacters(in: .whitespacesAndNewlines))"
+      )
     }
   }
 

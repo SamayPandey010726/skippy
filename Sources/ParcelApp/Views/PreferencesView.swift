@@ -7,6 +7,26 @@ struct PreferencesView: View {
   @State private var tab = 0
   @State private var licenceText = ""
   @State private var message: String?
+  private var saveLocationLabel: String {
+    if let path = store.preferences.exportFolder {
+      return (path as NSString).abbreviatingWithTildeInPath
+    }
+    return "~/Downloads"
+  }
+  private func chooseSaveLocation() {
+    let panel = NSOpenPanel()
+    panel.canChooseFiles = false
+    panel.canChooseDirectories = true
+    panel.canCreateDirectories = true
+    panel.prompt = "Choose"
+    if let path = store.preferences.exportFolder {
+      panel.directoryURL = URL(fileURLWithPath: path)
+    }
+    if panel.runModal() == .OK, let url = panel.url {
+      store.preferences.exportFolder = url.path
+      store.savePreferences()
+    }
+  }
   var body: some View {
     VStack(alignment: .leading, spacing: 22) {
       HStack {
@@ -55,32 +75,30 @@ struct PreferencesView: View {
           }))
       Divider().overlay(Ink.line)
       HStack {
-        Text("Drop shelf shortcut")
+        Text("Drop popup shortcut")
         Spacer()
         Text("Control + Option + P").font(.system(size: 11, design: .monospaced)).foregroundStyle(
           Ink.moss)
       }
       Toggle(
-        "Show the drop shelf at the screen edge",
+        "Pop out the drop square when dragging files",
         isOn: Binding(
-          get: { EdgeShelfController.shared.isShelfVisible() },
-          set: { EdgeShelfController.shared.setShelfVisible($0) })
+          get: { DropPopupController.shared.isEnabled },
+          set: { DropPopupController.shared.isEnabled = $0 })
       )
+      Text(
+        "A little square appears on screen the moment a file drag begins. Drag its top grip to park it anywhere — it remembers its spot."
+      ).font(.system(size: 11)).foregroundStyle(Ink.secondary).lineSpacing(4)
+      Divider().overlay(Ink.line)
       HStack {
-        Text("Shelf edge")
+        Text("Default save location")
         Spacer()
-        Picker(
-          "Shelf edge",
-          selection: Binding(
-            get: { EdgeShelfController.shared.edge },
-            set: { EdgeShelfController.shared.edge = $0 })
-        ) {
-          ForEach(EdgeShelfController.Edge.allCases, id: \.self) { e in
-            Text(e.label).tag(e)
-          }
-        }.pickerStyle(.segmented).frame(width: 150)
+        Text(saveLocationLabel).font(.system(size: 11)).foregroundStyle(Ink.secondary).lineLimit(
+          1
+        ).truncationMode(.middle).frame(maxWidth: 220, alignment: .trailing)
+        Button("Choose…") { chooseSaveLocation() }.buttonStyle(QuietButtonStyle())
       }
-      Text("The shelf pops out on its own when you start dragging files. Drag its top grip to slide it up or down the edge.")
+      Text("“Save parcel” puts the packed file here without asking. Defaults to Downloads.")
         .font(.system(size: 11)).foregroundStyle(Ink.secondary).lineSpacing(4)
       Text(
         "Motion follows your macOS Reduce Motion setting. Sounds start off. All file preparation stays on your Mac."

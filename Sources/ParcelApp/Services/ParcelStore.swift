@@ -27,6 +27,7 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
   private let access = SourceAccess()
   private var token: CancellationToken?
   private var job: Task<Void, Never>?
+  @Published var installingTool: PackFormat?
   private var libraryWritable = true
   private var receivingCount = 0
   private var cleanupChecked = false
@@ -95,6 +96,23 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     _ = try? CacheCare.removeUnused(boxes: boxes, olderThan: Date().addingTimeInterval(-30 * 86400))
   }
   func refreshLicense() { license = LicenseManager.shared.status() }
+  /// Installs the 7-Zip / RAR tool via Homebrew, right from the app.
+  func installArchiverTool(_ format: PackFormat) {
+    guard installingTool == nil, format != .zip else { return }
+    installingTool = format
+    Task {
+      do {
+        try await Task.detached(priority: .userInitiated) {
+          try ExternalArchiver.installTool(for: format)
+        }.value
+        installingTool = nil
+        notice = "\(format.label) is installed — pack away."
+      } catch {
+        installingTool = nil
+        self.error = error.localizedDescription
+      }
+    }
+  }
   func savePackaging() { packaging.save() }
   func savePreferences() {
     preferences.save()
@@ -487,6 +505,10 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
         lastManifest = result.manifestText
         phase = .ready
         progress = 1
+        // The packed file wears Parcel's icon on the Desktop and in Finder.
+        if let icon = NSApp.applicationIconImage {
+          NSWorkspace.shared.setIcon(icon, forFile: result.archive.path, options: [])
+        }
         notice =
           options.saveToDesktop
           ? "Packed and saved to your Desktop."
@@ -536,43 +558,29 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
       notice = "Contents list copied."
     } catch { self.error = error.localizedDescription }
   }
-  func saveArchivePanel() {
+  /// Saves the packed parcel straight to the default location — no questions.
+  /// Change the location in Preferences.
+  func saveArchive() {
     guard ready, let source = archiveURL else { return }
-    let panel = NSSavePanel()
-    if packaging.format == .zip { panel.allowedContentTypes = [.zip] }
-    panel.nameFieldStringValue = source.lastPathComponent
+    let dir: URL
     if let path = preferences.exportFolder, FileManager.default.fileExists(atPath: path) {
-      panel.directoryURL = URL(fileURLWithPath: path)
+      dir = URL(fileURLWithPath: path)
+    } else if let downloads = FileManager.default.urls(
+      for: .downloadsDirectory, in: .userDomainMask).first
+    {
+      dir = downloads
+    } else {
+      self.error = "Could not find your Downloads folder."
+      return
     }
-    if panel.runModal() == .OK, let destination = panel.url {
-      do {
-        let existing = FileManager.default.fileExists(atPath: destination.path)
-        if existing
-          && items.contains(where: {
-            $0.isDirectory
-              ? FileTree.isInside(destination, directory: $0.sourceURL)
-              : destination.resolvingSymlinksInPath().standardizedFileURL
-                == $0.sourceURL.resolvingSymlinksInPath().standardizedFileURL
-          })
-        {
-          throw ParcelError.storageError(
-            "Choose a destination that does not overwrite an original parcel item.")
-        }
-        if existing {
-          // NSSavePanel explicitly confirmed replacement. Stage a copy, then atomically replace.
-          let temp = destination.deletingLastPathComponent().appendingPathComponent(
-            ".parcel-save-" + UUID().uuidString)
-          defer { try? FileManager.default.removeItem(at: temp) }
-          try FileManager.default.copyItem(at: source, to: temp)
-          _ = try FileManager.default.replaceItemAt(destination, withItemAt: temp)
-        } else {
-          try FileManager.default.copyItem(at: source, to: destination)
-        }
-        preferences.exportFolder = destination.deletingLastPathComponent().path
-        preferences.save()
-        notice = "Saved \(destination.lastPathComponent)."
-      } catch { self.error = error.localizedDescription }
-    }
+    let destination = uniqueURL(dir.appendingPathComponent(source.lastPathComponent))
+    do {
+      try FileManager.default.copyItem(at: source, to: destination)
+      preferences.exportFolder = dir.path
+      preferences.save()
+      Toaster.shared.note("Saved to \(dir.lastPathComponent)")
+      notice = "Saved \(destination.lastPathComponent) to \(dir.lastPathComponent)."
+    } catch { self.error = error.localizedDescription }
   }
   func revealArchive() {
     if let archiveURL { NSWorkspace.shared.activateFileViewerSelecting([archiveURL]) }

@@ -13,6 +13,11 @@ import SwiftUI
     show("\(label) copied to clipboard")
   }
 
+  /// A plain floating note (not a copy confirmation).
+  func note(_ text: String) {
+    show(text)
+  }
+
   private func show(_ text: String) {
     hideWork?.cancel()
     let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion

@@ -33,7 +33,7 @@ import SwiftUI
           "c", modifiers: [.command, .shift])
         Button("Copy shareable link") { store.copyArchiveLink() }.disabled(
           !store.ready || store.busy || !store.canExport)
-        Button("Show drop shelf") { AppController.shared.toggleShelf() }.keyboardShortcut(
+        Button("Show drop popup") { AppController.shared.toggleDropPopup() }.keyboardShortcut(
           "p", modifiers: [.control, .option])
         Divider()
         Button("Share via WhatsApp") { store.shareViaWhatsApp() }.disabled(
@@ -47,13 +47,14 @@ import SwiftUI
     }
     MenuBarExtra("Parcel", systemImage: "folder") {
       Button("Open Parcel") { AppController.shared.openWorkbench() }
-      Button("Drop shelf    ⌃⌥P") { AppController.shared.toggleShelf() }
+      Button("Drop popup    ⌃⌥P") { AppController.shared.toggleDropPopup() }
       Button("Add files…") { store.addFilesPanel() }.disabled(store.busy)
       Button("Paste into parcel") { store.paste() }.disabled(store.busy)
       Divider()
       // Packed parcels, fanned out: peek inside and open anything directly,
-      // without opening the app window.
+      // without opening the app window. Also on the Dock icon menu.
       if !store.recentParcels.isEmpty {
+        Text("Packed parcels — open anything directly")
         ForEach(store.recentParcels.prefix(6)) { box in
           Menu(box.name) {
             ForEach(box.items.prefix(15)) { item in

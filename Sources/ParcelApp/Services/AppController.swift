@@ -11,14 +11,14 @@ import SwiftUI
   var showWorkbench: (() -> Void)?
   func install(store: ParcelStore) {
     self.store = store
-    EdgeShelfController.shared.install(store: store)
+    DropPopupController.shared.install(store: store)
     guard hotKey == nil else { return }
     var spec = EventTypeSpec(
       eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
     InstallEventHandler(
       GetApplicationEventTarget(),
       { _, _, _ in
-        Task { @MainActor in AppController.shared.toggleShelf() }
+        Task { @MainActor in AppController.shared.toggleDropPopup() }
         return noErr
       }, 1, &spec, nil, &eventHandler)
     let id = EventHotKeyID(signature: 0x5052_434C, id: 1)
@@ -26,8 +26,16 @@ import SwiftUI
       UInt32(kVK_ANSI_P), UInt32(controlKey | optionKey), id, GetApplicationEventTarget(), 0,
       &hotKey)
   }
-  /// The drop shelf lives at the screen edge; the floating window is retired.
-  func toggleShelf() { EdgeShelfController.shared.toggle() }
+  /// The drop popup appears on screen while files are dragged; ⌃⌥P summons it by hand.
+  func toggleDropPopup() { DropPopupController.shared.togglePopup() }
+  /// Dock menu: open a parcel item directly.
+  @objc nonisolated func openDockItem(_ sender: NSMenuItem) {
+    if let path = sender.representedObject as? String {
+      DispatchQueue.main.async {
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+      }
+    }
+  }
   func openWorkbench() {
     showWorkbench?()
     NSApp.activate(ignoringOtherApps: true)
@@ -52,6 +60,26 @@ import SwiftUI
     return .terminateCancel
   }
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+  /// Right-click the Dock icon: packed parcels fan out, anything opens directly.
+  func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+    guard let store = ParcelRuntime.store, !store.recentParcels.isEmpty else { return nil }
+    let menu = NSMenu()
+    for box in store.recentParcels.prefix(6) {
+      let sub = NSMenu()
+      for item in box.items.prefix(15) {
+        let mi = NSMenuItem(
+          title: item.displayName, action: #selector(AppController.openDockItem(_:)),
+          keyEquivalent: "")
+        mi.target = AppController.shared
+        mi.representedObject = item.effectiveURL.path
+        sub.addItem(mi)
+      }
+      let mi = NSMenuItem(title: box.name, action: nil, keyEquivalent: "")
+      mi.submenu = sub
+      menu.addItem(mi)
+    }
+    return menu
+  }
   func application(_ application: NSApplication, open urls: [URL]) {
     ParcelRuntime.receive(urls)
     AppController.shared.openWorkbench()

@@ -96,9 +96,9 @@ struct WorkbenchView: View {
       Spacer(minLength: 16)
       VStack(alignment: .leading, spacing: 14) {
         Button {
-          AppController.shared.toggleShelf()
+          AppController.shared.toggleDropPopup()
         } label: {
-          Label("Drop shelf", systemImage: "rectangle.on.rectangle")
+          Label("Drop popup", systemImage: "rectangle.on.rectangle")
         }.buttonStyle(.plain)
         HStack {
           Text("⌃ ⌥ P").font(.system(size: 10, design: .monospaced))
@@ -185,23 +185,36 @@ struct WorkbenchView: View {
           HStack {
             Text("Format").font(.system(size: 11)).foregroundStyle(Ink.secondary)
             Spacer()
-            Picker("Format", selection: $store.packaging.format) {
+            Picker(selection: $store.packaging.format) {
               ForEach(PackFormat.allCases, id: \.self) { f in Text(f.label).tag(f) }
-            }.pickerStyle(.segmented).frame(width: 168)
+            } label: {}.labelsHidden().pickerStyle(.segmented).frame(width: 168)
           }
           if store.packaging.format != .zip
             && ExternalArchiver.toolPath(for: store.packaging.format) == nil
           {
-            Text(ExternalArchiver.missingToolMessage(for: store.packaging.format)).font(
-              .system(size: 10)
-            ).foregroundStyle(Ink.secondary).lineSpacing(3)
+            VStack(alignment: .leading, spacing: 8) {
+              Text(ExternalArchiver.missingToolMessage(for: store.packaging.format)).font(
+                .system(size: 10)
+              ).foregroundStyle(Ink.secondary).lineSpacing(3)
+              if store.installingTool == store.packaging.format {
+                HStack(spacing: 8) {
+                  ProgressView().scaleEffect(0.7)
+                  Text("Installing \(store.packaging.format.label)…").font(.system(size: 11))
+                    .foregroundStyle(Ink.secondary)
+                }
+              } else {
+                Button("Install \(store.packaging.format.label)") {
+                  store.installArchiverTool(store.packaging.format)
+                }.buttonStyle(MossButtonStyle(secondary: true))
+              }
+            }.padding(.vertical, 2)
           }
           HStack {
             Text("Compression").font(.system(size: 11)).foregroundStyle(Ink.secondary)
             Spacer()
-            Picker("Compression", selection: $store.packaging.strength) {
+            Picker(selection: $store.packaging.strength) {
               ForEach(PackStrength.allCases, id: \.self) { s in Text(s.label).tag(s) }
-            }.pickerStyle(.segmented).frame(width: 168)
+            } label: {}.labelsHidden().pickerStyle(.segmented).frame(width: 168)
           }
           Text(store.packaging.strength.hint).font(.system(size: 10)).foregroundStyle(
             Ink.secondary)
@@ -268,10 +281,10 @@ struct WorkbenchView: View {
           }
           if store.ready {
             Button {
-              store.saveArchivePanel()
+              store.saveArchive()
             } label: {
-              Label("Save parcel…", systemImage: "arrow.down.to.line")
-            }.buttonStyle(QuietButtonStyle())
+              Label("Save parcel", systemImage: "arrow.down.to.line")
+            }.buttonStyle(QuietButtonStyle()).help("Save to your default location")
             Button {
               store.revealArchive()
             } label: {
@@ -353,7 +366,7 @@ struct ParcelHero: View {
               Label("Open folder", systemImage: "folder")
             }.buttonStyle(MossButtonStyle(secondary: true))
             Button {
-              store.saveArchivePanel()
+              store.saveArchive()
             } label: {
               Label("Save parcel", systemImage: "arrow.down.to.line")
             }.buttonStyle(MossButtonStyle())

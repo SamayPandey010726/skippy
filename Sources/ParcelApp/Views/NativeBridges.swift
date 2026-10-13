@@ -160,6 +160,8 @@ struct DragOutSurface: NSViewRepresentable {
       let valid = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
       guard !valid.isEmpty else { return }
       started = true
+      // Don't let our own drag-out summon the drop popup.
+      DragMonitor.shared.suppressNextOwnDrag()
       let origin = convert(event.locationInWindow, from: nil)
       let items = valid.enumerated().map { idx, url -> NSDraggingItem in
         let item = NSDraggingItem(pasteboardWriter: url as NSURL)
