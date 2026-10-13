@@ -88,6 +88,7 @@ struct WorkbenchView: View {
               .background(
                 store.selectedBox == box.id ? Ink.paleGreen : Color.clear,
                 in: RoundedRectangle(cornerRadius: 11))
+              .animation(.easeInOut(duration: 0.2), value: store.selectedBox)
             }.buttonStyle(.plain).disabled(store.busy)
           }
         }.padding(.horizontal, 12)
@@ -138,6 +139,7 @@ struct WorkbenchView: View {
       Image(systemName: "checkmark.shield").font(.system(size: 12)).foregroundStyle(Ink.moss)
       Text(store.notice ?? "Your originals always stay safe.").font(.system(size: 11))
         .foregroundStyle(Ink.secondary).lineLimit(2)
+        .animation(.easeInOut(duration: 0.25), value: store.notice)
       Spacer()
       if store.notice != nil {
         Button {
@@ -180,16 +182,45 @@ struct WorkbenchView: View {
         VStack(alignment: .leading, spacing: 12) {
           Text("Pack with care").font(.system(size: 12, weight: .semibold)).foregroundStyle(
             Ink.green)
+          HStack {
+            Text("Format").font(.system(size: 11)).foregroundStyle(Ink.secondary)
+            Spacer()
+            Picker("Format", selection: $store.packaging.format) {
+              ForEach(PackFormat.allCases, id: \.self) { f in Text(f.label).tag(f) }
+            }.pickerStyle(.segmented).frame(width: 168)
+          }
+          if store.packaging.format != .zip
+            && ExternalArchiver.toolPath(for: store.packaging.format) == nil
+          {
+            Text(ExternalArchiver.missingToolMessage(for: store.packaging.format)).font(
+              .system(size: 10)
+            ).foregroundStyle(Ink.secondary).lineSpacing(3)
+          }
+          HStack {
+            Text("Compression").font(.system(size: 11)).foregroundStyle(Ink.secondary)
+            Spacer()
+            Picker("Compression", selection: $store.packaging.strength) {
+              ForEach(PackStrength.allCases, id: \.self) { s in Text(s.label).tag(s) }
+            }.pickerStyle(.segmented).frame(width: 168)
+          }
+          Text(store.packaging.strength.hint).font(.system(size: 10)).foregroundStyle(
+            Ink.secondary)
           Toggle("Clean Mac ZIP clutter", isOn: $store.packaging.cleanMacMetadata).font(
             .system(size: 11))
           Toggle("Include contents list", isOn: $store.packaging.includeManifest).font(
             .system(size: 11))
           Toggle("Date on package name", isOn: $store.packaging.appendDate).font(.system(size: 11))
+          Toggle("Save packed parcels to Desktop", isOn: $store.packaging.saveToDesktop).font(
+            .system(size: 11))
           Text("Duplicate names get a gentle number. Your originals aren't renamed.").font(
             .system(size: 10)
           ).foregroundStyle(Ink.secondary).lineSpacing(3)
         }.toggleStyle(.checkbox).disabled(store.busy)
-          .onChange(of: store.packaging) { _, _ in if !store.busy { store.invalidateArchive() } }
+          .onChange(of: store.packaging) {
+            _, _ in
+            if !store.busy { store.invalidateArchive() }
+            store.savePackaging()
+          }
         VStack(alignment: .leading, spacing: 8) {
           Text("A note for the recipient").font(.system(size: 11, weight: .medium))
           TextEditor(text: Binding(get: { store.current?.note ?? "" }, set: store.updateNote)).font(
@@ -225,7 +256,13 @@ struct WorkbenchView: View {
             Button {
               store.copyArchiveToClipboard()
             } label: {
-              Image(systemName: "doc.on.doc").help("Copy the packed ZIP to the clipboard")
+              Image(systemName: "doc.on.doc").help("Copy the packed parcel to the clipboard")
+            }.buttonStyle(QuietButtonStyle()).disabled(
+              !store.ready || store.busy || !store.canExport)
+            Button {
+              store.copyArchiveLink()
+            } label: {
+              Image(systemName: "link").help("Copy a shareable link to the packed parcel")
             }.buttonStyle(QuietButtonStyle()).disabled(
               !store.ready || store.busy || !store.canExport)
           }
@@ -233,7 +270,7 @@ struct WorkbenchView: View {
             Button {
               store.saveArchivePanel()
             } label: {
-              Label("Save ZIP…", systemImage: "arrow.down.to.line")
+              Label("Save parcel…", systemImage: "arrow.down.to.line")
             }.buttonStyle(QuietButtonStyle())
             Button {
               store.revealArchive()
@@ -297,6 +334,7 @@ struct ParcelHero: View {
         Text(subtitle).font(.system(size: 12)).foregroundStyle(Ink.secondary)
           .multilineTextAlignment(.center)
       }.padding(.top, 2).padding(.horizontal, 20)
+      .animation(.easeInOut(duration: 0.25), value: store.phase)
       if store.busy {
         VStack(spacing: 9) {
           ProgressView(value: store.progress).tint(Ink.moss)
@@ -328,7 +366,7 @@ struct ParcelHero: View {
             Button {
               store.seal()
             } label: {
-              Label("Pack ZIP", systemImage: "folder.fill")
+              Label("Pack \(store.packaging.format.label)", systemImage: "folder.fill")
             }.buttonStyle(MossButtonStyle()).disabled(store.items.isEmpty || !store.canExport)
           }
         }.padding(.top, 19).padding(.bottom, 14)

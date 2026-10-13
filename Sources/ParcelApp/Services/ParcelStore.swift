@@ -19,7 +19,7 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
   @Published var showRenameBox = false
   @Published var showWelcome = false
   @Published var recipe = ImageRecipe()
-  @Published var packaging = PackagingOptions()
+  @Published var packaging = PackagingOptions.load()
   @Published var archiveURL: URL?
   @Published var lastManifest = ""
   @Published var preferences = AppPreferences.load()
@@ -95,6 +95,7 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     _ = try? CacheCare.removeUnused(boxes: boxes, olderThan: Date().addingTimeInterval(-30 * 86400))
   }
   func refreshLicense() { license = LicenseManager.shared.status() }
+  func savePackaging() { packaging.save() }
   func savePreferences() {
     preferences.save()
     var next = packaging
@@ -429,15 +430,28 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     let options = packaging
     let t = CancellationToken()
     let boxID = box.id
-    let folder = StoragePaths.exports.appendingPathComponent(UUID().uuidString, isDirectory: true)
-    do {
-      try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-    } catch {
-      self.error = error.localizedDescription
-      return
-    }
+    let ext = options.format.fileExtension
     let title = NamePolicy.safeArchiveStem(box.name, date: options.appendDate ? Date() : nil)
-    let output = folder.appendingPathComponent(title + ".zip")
+    // Desktop parcels land on the Desktop itself; otherwise they stage in
+    // Parcel's own folder until saved elsewhere.
+    let folder = StoragePaths.exports.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let desktopURL =
+      options.saveToDesktop
+      ? FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first : nil
+    if desktopURL == nil {
+      do {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+      } catch {
+        self.error = error.localizedDescription
+        return
+      }
+    }
+    let output: URL
+    if let desktopURL {
+      output = uniqueURL(desktopURL.appendingPathComponent(title + "." + ext))
+    } else {
+      output = folder.appendingPathComponent(title + "." + ext)
+    }
     let inputs = box.items.map {
       PackageInput(url: $0.effectiveURL, desiredName: $0.effectiveName, originalBytes: $0.byteCount)
     }
@@ -473,7 +487,10 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
         lastManifest = result.manifestText
         phase = .ready
         progress = 1
-        notice = "Packed. Ready to drag or share."
+        notice =
+          options.saveToDesktop
+          ? "Packed and saved to your Desktop."
+          : "Packed. Ready to drag or share."
         save()
         if preferences.playSounds { FeedbackSounds.shared.seal() }
       } catch {
@@ -515,13 +532,14 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
         : lastManifest
       NSPasteboard.general.clearContents()
       NSPasteboard.general.setString(text, forType: .string)
+      Toaster.shared.copied("Contents list")
       notice = "Contents list copied."
     } catch { self.error = error.localizedDescription }
   }
   func saveArchivePanel() {
     guard ready, let source = archiveURL else { return }
     let panel = NSSavePanel()
-    panel.allowedContentTypes = [.zip]
+    if packaging.format == .zip { panel.allowedContentTypes = [.zip] }
     panel.nameFieldStringValue = source.lastPathComponent
     if let path = preferences.exportFolder, FileManager.default.fileExists(atPath: path) {
       panel.directoryURL = URL(fileURLWithPath: path)
@@ -583,12 +601,44 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     save()
     ingestText(text, into: nb.id)
   }
+  /// A free filename next to the given URL ("Name 2.ext" when taken).
+  private func uniqueURL(_ url: URL) -> URL {
+    let fm = FileManager.default
+    guard fm.fileExists(atPath: url.path) else { return url }
+    let stem = url.deletingPathExtension().lastPathComponent
+    let ext = url.pathExtension
+    var i = 2
+    while true {
+      let candidate = url.deletingLastPathComponent().appendingPathComponent(
+        "\(stem) \(i).\(ext)")
+      if !fm.fileExists(atPath: candidate.path) { return candidate }
+      i += 1
+    }
+  }
   func copyArchiveToClipboard() {
     guard canExport, !busy, ready, let zip = archiveURL else { return }
     let pb = NSPasteboard.general
     pb.clearContents()
     pb.writeObjects([zip as NSURL])
-    notice = "Parcel ZIP copied — paste it anywhere."
+    Toaster.shared.copied("Parcel \(zip.pathExtension.uppercased())")
+    notice = "Parcel \(zip.pathExtension.uppercased()) copied — paste it anywhere."
+  }
+  /// A shareable file link to the packed parcel — paste it into any app on
+  /// this Mac to hand the parcel over.
+  func copyArchiveLink() {
+    guard canExport, !busy, ready, let url = archiveURL else { return }
+    let pb = NSPasteboard.general
+    pb.clearContents()
+    pb.setString(url.absoluteString, forType: .string)
+    Toaster.shared.copied("Share link")
+    notice = "Link copied — it opens this parcel on your Mac."
+  }
+  /// Parcels with a packed file on disk, newest first — for the menu bar.
+  var recentParcels: [ParcelBox] {
+    boxes.filter {
+      guard let path = $0.lastArchivePath else { return false }
+      return FileManager.default.fileExists(atPath: path)
+    }
   }
   /// WhatsApp on macOS has no file-share API, so the packed parcel is copied
   /// and WhatsApp is brought forward — one paste drops it into any chat.
@@ -602,6 +652,7 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     let pb = NSPasteboard.general
     pb.clearContents()
     pb.writeObjects([zip as NSURL])
+    Toaster.shared.copied("Parcel \(zip.pathExtension.uppercased())")
     if let appURL = NSWorkspace.shared.urlForApplication(
       withBundleIdentifier: "net.whatsapp.WhatsApp")
     {

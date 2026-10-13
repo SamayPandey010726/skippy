@@ -71,25 +71,35 @@ public enum PackageBuilder {
       )
     }
     let paths = try FileTree.relativeEntries(in: payload)
-    // A local temporary ZIP is fully closed and verified before the final name is published.
-    do {
-      let archive = try Archive(url: partial, accessMode: .create)
-      for (index, path) in paths.enumerated() {
-        try token.check()
-        progress(0.55 + Double(index) / Double(max(paths.count, 1)) * 0.4, "Sealing \(path)")
-        let p = Progress(totalUnitCount: 0)
-        token.track(p)
-        try archive.addEntry(
-          with: path, relativeTo: payload,
-          compressionMethod: options.compressArchive ? .deflate : .none, progress: p)
+    switch options.format {
+    case .zip:
+      // A local temporary ZIP is fully closed and verified before the final name is published.
+      do {
+        let archive = try Archive(url: partial, accessMode: .create)
+        for (index, path) in paths.enumerated() {
+          try token.check()
+          progress(0.55 + Double(index) / Double(max(paths.count, 1)) * 0.4, "Sealing \(path)")
+          let p = Progress(totalUnitCount: 0)
+          token.track(p)
+          try archive.addEntry(
+            with: path, relativeTo: payload,
+            compressionMethod: options.strength == .light ? .none : .deflate, progress: p)
+        }
       }
-    }
-    try token.check()
-    do {
-      let archive = try Archive(url: partial, accessMode: .read)
-      guard Array(archive).count == paths.count else {
-        throw ParcelError.storageError("Archive verification failed. Please try again.")
+      try token.check()
+      do {
+        let archive = try Archive(url: partial, accessMode: .read)
+        guard Array(archive).count == paths.count else {
+          throw ParcelError.storageError("Archive verification failed. Please try again.")
+        }
       }
+    case .sevenZip, .rar:
+      guard let tool = ExternalArchiver.toolPath(for: options.format) else {
+        throw ParcelError.storageError(ExternalArchiver.missingToolMessage(for: options.format))
+      }
+      try ExternalArchiver.archive(
+        tool: tool, format: options.format, strength: options.strength, payload: payload,
+        destination: partial, token: token, progress: progress)
     }
     // moveItem refuses to overwrite a destination that appeared while the job was running.
     try fm.moveItem(at: partial, to: destination)

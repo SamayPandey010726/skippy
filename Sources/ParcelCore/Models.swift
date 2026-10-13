@@ -97,7 +97,60 @@ public struct PackagingOptions: Codable, Equatable, Sendable {
   public var includeManifest = true
   public var appendDate = false
   public var compressArchive = true
+  public var format: PackFormat = .zip
+  public var strength: PackStrength = .balanced
+  public var saveToDesktop = false
   public init() {}
+  public static func load() -> PackagingOptions {
+    guard let data = UserDefaults.standard.data(forKey: "parcel-packaging-options"),
+      let o = try? JSONDecoder().decode(PackagingOptions.self, from: data)
+    else { return PackagingOptions() }
+    return o
+  }
+  public func save() {
+    if let data = try? JSONEncoder().encode(self) {
+      UserDefaults.standard.set(data, forKey: "parcel-packaging-options")
+    }
+  }
+}
+
+/// Archive formats Parcel can pack. ZIP is built in; 7z and RAR use the
+/// matching command-line tool when it is installed on the Mac.
+public enum PackFormat: String, Codable, CaseIterable, Sendable {
+  case zip, sevenZip, rar
+  public var label: String {
+    switch self {
+    case .zip: return "ZIP"
+    case .sevenZip: return "7z"
+    case .rar: return "RAR"
+    }
+  }
+  public var fileExtension: String {
+    switch self {
+    case .zip: return "zip"
+    case .sevenZip: return "7z"
+    case .rar: return "rar"
+    }
+  }
+}
+
+/// How hard the packer squeezes. Light is fastest, heavy is smallest.
+public enum PackStrength: String, Codable, CaseIterable, Sendable {
+  case light, balanced, heavy
+  public var label: String {
+    switch self {
+    case .light: return "Light"
+    case .balanced: return "Balanced"
+    case .heavy: return "Heavy"
+    }
+  }
+  public var hint: String {
+    switch self {
+    case .light: return "Fastest, larger file"
+    case .balanced: return "A good middle"
+    case .heavy: return "Smallest, takes longer"
+    }
+  }
 }
 public struct PackageInput: Sendable {
   public var url: URL

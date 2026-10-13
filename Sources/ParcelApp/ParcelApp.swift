@@ -23,12 +23,16 @@ import SwiftUI
         ).disabled(store.busy)
       }
       CommandMenu("Parcel") {
-        Button("Pack ZIP") { store.seal() }.keyboardShortcut("p", modifiers: [.command, .shift])
-          .disabled(store.busy || store.items.isEmpty || !store.canExport)
+        Button("Pack \(store.packaging.format.label)") { store.seal() }.keyboardShortcut(
+          "p", modifiers: [.command, .shift]
+        )
+        .disabled(store.busy || store.items.isEmpty || !store.canExport)
         Button("Prepare images…") { store.showPrepare = true }.keyboardShortcut("e").disabled(
           store.imageItems.isEmpty || store.busy || !store.canExport)
         Button("Copy contents list") { store.copyManifest() }.keyboardShortcut(
           "c", modifiers: [.command, .shift])
+        Button("Copy shareable link") { store.copyArchiveLink() }.disabled(
+          !store.ready || store.busy || !store.canExport)
         Button("Show drop shelf") { AppController.shared.toggleShelf() }.keyboardShortcut(
           "p", modifiers: [.control, .option])
         Divider()
@@ -47,6 +51,29 @@ import SwiftUI
       Button("Add files…") { store.addFilesPanel() }.disabled(store.busy)
       Button("Paste into parcel") { store.paste() }.disabled(store.busy)
       Divider()
+      // Packed parcels, fanned out: peek inside and open anything directly,
+      // without opening the app window.
+      if !store.recentParcels.isEmpty {
+        ForEach(store.recentParcels.prefix(6)) { box in
+          Menu(box.name) {
+            ForEach(box.items.prefix(15)) { item in
+              Button(item.displayName) {
+                NSWorkspace.shared.open(item.effectiveURL)
+              }
+            }
+            if box.items.count > 15 {
+              Text("\(box.items.count - 15) more inside the app").font(.system(size: 11))
+            }
+            Divider()
+            Button("Show packed file in Finder") {
+              if let path = box.lastArchivePath {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+              }
+            }
+          }
+        }
+        Divider()
+      }
       ForEach(store.boxes.prefix(8)) { box in
         Button(box.name) {
           store.selectBox(box.id)

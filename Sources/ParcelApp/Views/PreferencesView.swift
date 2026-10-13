@@ -66,6 +66,22 @@ struct PreferencesView: View {
           get: { EdgeShelfController.shared.isShelfVisible() },
           set: { EdgeShelfController.shared.setShelfVisible($0) })
       )
+      HStack {
+        Text("Shelf edge")
+        Spacer()
+        Picker(
+          "Shelf edge",
+          selection: Binding(
+            get: { EdgeShelfController.shared.edge },
+            set: { EdgeShelfController.shared.edge = $0 })
+        ) {
+          ForEach(EdgeShelfController.Edge.allCases, id: \.self) { e in
+            Text(e.label).tag(e)
+          }
+        }.pickerStyle(.segmented).frame(width: 150)
+      }
+      Text("The shelf pops out on its own when you start dragging files. Drag its top grip to slide it up or down the edge.")
+        .font(.system(size: 11)).foregroundStyle(Ink.secondary).lineSpacing(4)
       Text(
         "Motion follows your macOS Reduce Motion setting. Sounds start off. All file preparation stays on your Mac."
       ).font(.system(size: 11)).foregroundStyle(Ink.secondary).lineSpacing(4)
@@ -127,6 +143,7 @@ struct PreferencesView: View {
             Button("Copy") {
               NSPasteboard.general.clearContents()
               NSPasteboard.general.setString(MachineID.current, forType: .string)
+              Toaster.shared.copied("Mac ID")
               message =
                 "Mac ID copied — send it with your order and we'll issue a licence locked to this Mac."
             }.buttonStyle(QuietButtonStyle())
