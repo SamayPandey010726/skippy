@@ -424,7 +424,7 @@ struct ParcelHero: View {
     if store.ready { return "Grab the parcel to drag a real ZIP. Click it to open again." }
     if store.busy { return "Your originals stay exactly where they are." }
     if store.items.isEmpty {
-      return "Drop files here. We'll keep them together until you're ready."
+      return "Drop files here. They stay where they are — Parcel only keeps references, never copies."
     }
     return
       "\(store.items.count) pieces · \(store.items.contains(where:{$0.isDirectory}) ? "files & folders" : byteString(store.current?.totalBytes ?? 0)) · grab the folder to drag loose files"

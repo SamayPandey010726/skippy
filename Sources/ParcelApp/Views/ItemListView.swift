@@ -139,6 +139,9 @@ struct ItemListView: View {
         }
         Button("Locate original…") { store.locate(item) }.disabled(store.busy)
         if item.preparedPath != nil { Button("Compare copies…") { comparing = item } }
+        if TextRecognition.isProbablyText(url: item.effectiveURL) {
+          Button("Copy Contents") { store.copyTextContents(of: item) }.disabled(store.busy)
+        }
         Divider()
         Button("Remove from parcel", role: .destructive) { store.remove([item.id]) }.disabled(
           store.busy)

@@ -28,6 +28,7 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
   private var token: CancellationToken?
   private var job: Task<Void, Never>?
   @Published var installingTool: PackFormat?
+  @Published var extractingText = false
   private var libraryWritable = true
   private var receivingCount = 0
   private var cleanupChecked = false
@@ -578,6 +579,59 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
       Toaster.shared.copied("Contents list")
       notice = "Contents list copied."
     } catch { self.error = error.localizedDescription }
+  }
+  /// Copies a text file's contents straight to the clipboard — Dropover's
+  /// "copy text-file contents" as a built-in Parcel action.
+  func copyTextContents(of item: ParcelItem) {
+    guard !busy else { return }
+    let url = item.effectiveURL
+    guard TextRecognition.isProbablyText(url: url) else {
+      notice = "\"\(item.displayName)\" doesn't look like a text file."
+      return
+    }
+    do {
+      let text = try String(contentsOf: url, encoding: .utf8)
+      NSPasteboard.general.clearContents()
+      NSPasteboard.general.setString(text, forType: .string)
+      Toaster.shared.copied("Text contents")
+      notice = "Copied the contents of \"\(item.displayName)\"."
+    } catch {
+      self.error = "Couldn't read \"\(item.displayName)\": \(error.localizedDescription)"
+    }
+  }
+  /// Runs on-device OCR over the parcel's images and copies all recognized
+  /// text to the clipboard — Dropover's built-in "extract text" action.
+  func extractTextFromImages() {
+    guard !extractingText else { return }
+    let targets = imageItems
+    guard !targets.isEmpty else {
+      notice = "Add an image to the parcel first, then extract its text."
+      return
+    }
+    extractingText = true
+    notice = "Reading text from \(targets.count) image\(targets.count == 1 ? "" : "s")…"
+    Task { [weak self] in
+      var parts: [String] = []
+      for item in targets {
+        if Task.isCancelled { break }
+        if let text = await TextRecognition.recognizeText(in: item.effectiveURL) {
+          parts.append(text)
+        }
+      }
+      let combined = parts.joined(separator: "\n\n")
+      await MainActor.run { [weak self] in
+        guard let self else { return }
+        self.extractingText = false
+        if parts.isEmpty {
+          self.notice = "No readable text found in those images."
+        } else {
+          NSPasteboard.general.clearContents()
+          NSPasteboard.general.setString(combined, forType: .string)
+          Toaster.shared.copied("Extracted text")
+          self.notice = "Copied text from \(parts.count) image\(parts.count == 1 ? "" : "s")."
+        }
+      }
+    }
   }
   /// Saves the packed parcel straight to the default location — no questions.
   /// Change the location in Preferences.

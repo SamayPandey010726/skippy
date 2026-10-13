@@ -65,6 +65,14 @@ struct PrepareSheet: View {
         Button("Cancel") { dismiss() }.buttonStyle(QuietButtonStyle())
         Spacer()
         Button {
+          store.extractTextFromImages()
+        } label: {
+          Label(
+            store.extractingText ? "Reading text…" : "Copy text from images",
+            systemImage: "text.viewfinder")
+        }.buttonStyle(QuietButtonStyle()).disabled(
+          store.imageItems.isEmpty || store.extractingText)
+        Button {
           store.prepareImages()
         } label: {
           Label("Prepare copies", systemImage: "wand.and.stars")
