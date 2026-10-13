@@ -42,7 +42,8 @@ struct ItemListView: View {
               .foregroundStyle(Ink.moss)
             VStack(alignment: .leading, spacing: 5) {
               Text("Start with a few pieces.").font(.system(size: 12, weight: .medium))
-              Text("Files, folders and images are all welcome.").font(.system(size: 11))
+              Text("Files, folders and images are all welcome. Pin what matters — the shelf tidies itself daily.")
+                .font(.system(size: 11))
                 .foregroundStyle(Ink.secondary)
             }
             Spacer()
@@ -52,7 +53,14 @@ struct ItemListView: View {
               Ink.line, style: StrokeStyle(lineWidth: 1, dash: [4, 4])))
         }
       } else {
-        LazyVStack(spacing: 6) { ForEach(store.filteredItems) { item in itemRow(item) } }
+        LazyVStack(spacing: 6) {
+          ForEach(store.filteredItems) { item in
+            itemRow(item)
+              .transition(.asymmetric(
+                insertion: .move(edge: .top).combined(with: .opacity),
+                removal: .move(edge: .trailing).combined(with: .opacity)))
+          }
+        }.animation(.spring(response: 0.35, dampingFraction: 0.8), value: store.filteredItems.map(\.id))
         HStack {
           Text("Names and order apply to your ZIP copies.").font(.system(size: 10))
             .foregroundStyle(Ink.secondary)

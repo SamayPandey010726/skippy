@@ -344,6 +344,18 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     boxes[i].items[j].isPinned.toggle()
     changed()
   }
+  /// Pin or unpin every selected item at once.
+  func togglePinSelected() {
+    guard !busy, let i = index, !selectedItems.isEmpty else { return }
+    let targets = boxes[i].items.filter { selectedItems.contains($0.id) }
+    let pinning = targets.contains { !$0.isPinned }
+    for j in boxes[i].items.indices where selectedItems.contains(boxes[i].items[j].id) {
+      boxes[i].items[j].isPinned = pinning
+    }
+    changed()
+    notice = pinning ? "Pinned — these will survive the shelf's self-cleaning."
+      : "Unpinned."
+  }
   /// Self-cleaning shelf: drop unpinned items older than 24h. Pinned items always survive.
   /// Inspired by FlowShelf's self-cleaning model — shelves rot into junk drawers otherwise.
   func clearStaleItems() {

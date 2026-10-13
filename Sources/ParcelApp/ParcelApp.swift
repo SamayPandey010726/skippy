@@ -41,6 +41,9 @@ import SwiftUI
           store.busy || !store.canExport)
         Divider()
         Button("Select all pieces") { store.selectAll() }.keyboardShortcut("a")
+        Button("Pin/unpin selected pieces") { store.togglePinSelected() }.keyboardShortcut(
+          "p", modifiers: [.command, .option]
+        ).disabled(store.selectedItems.isEmpty || store.busy)
         Button("Remove selected pieces") { store.remove(store.selectedItems) }.keyboardShortcut(
           .delete, modifiers: [.command]
         ).disabled(store.selectedItems.isEmpty || store.busy)
