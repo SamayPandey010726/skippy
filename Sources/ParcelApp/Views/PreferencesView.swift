@@ -89,6 +89,22 @@ struct PreferencesView: View {
       Text(
         "A little square appears on screen the moment a file drag begins. Drag its top grip to park it anywhere — it remembers its spot."
       ).font(.system(size: 11)).foregroundStyle(Ink.secondary).lineSpacing(4)
+      if DropPopupController.shared.needsAccessibilityGrant {
+        HStack(spacing: 9) {
+          Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange).font(
+            .system(size: 13))
+          Text("Grant Accessibility access for the instant pop-out.").font(.system(size: 11))
+            .foregroundStyle(Ink.secondary)
+          Spacer()
+          Button("Open Settings") { DropPopupController.shared.openAccessibilitySettings() }
+            .buttonStyle(QuietButtonStyle())
+        }
+      }
+      HStack {
+        Button("Test the drop square") { DropPopupController.shared.summon() }
+          .buttonStyle(QuietButtonStyle())
+        Spacer()
+      }
       Divider().overlay(Ink.line)
       HStack {
         Text("Default save location")

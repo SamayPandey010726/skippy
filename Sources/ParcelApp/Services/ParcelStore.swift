@@ -34,6 +34,27 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
   var busy: Bool { phase == .packing || phase == .preparing }
   var current: ParcelBox? { boxes.first { $0.id == selectedBox } }
   var items: [ParcelItem] { current?.items ?? [] }
+  @Published var searchText = ""
+  var isSearching: Bool { !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+  /// Parcels whose name matches, or that contain a matching file.
+  var filteredBoxes: [ParcelBox] {
+    guard isSearching else { return boxes }
+    let q = searchText.lowercased()
+    return boxes.filter { box in
+      box.name.lowercased().contains(q)
+        || box.items.contains {
+          $0.displayName.lowercased().contains(q) || $0.effectiveName.lowercased().contains(q)
+        }
+    }
+  }
+  /// Files in the current parcel matching the search.
+  var filteredItems: [ParcelItem] {
+    guard isSearching else { return items }
+    let q = searchText.lowercased()
+    return items.filter {
+      $0.displayName.lowercased().contains(q) || $0.effectiveName.lowercased().contains(q)
+    }
+  }
   var workingItems: [ParcelItem] {
     selectedItems.isEmpty ? items : items.filter { selectedItems.contains($0.id) }
   }

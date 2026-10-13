@@ -19,22 +19,40 @@ struct ItemListView: View {
         }
       }
       .foregroundStyle(Ink.secondary)
-      if store.items.isEmpty {
-        HStack(spacing: 14) {
-          Image(systemName: "plus.rectangle.on.folder").font(.system(size: 25, weight: .ultraLight))
-            .foregroundStyle(Ink.moss)
-          VStack(alignment: .leading, spacing: 5) {
-            Text("Start with a few pieces.").font(.system(size: 12, weight: .medium))
-            Text("Files, folders and images are all welcome.").font(.system(size: 11))
-              .foregroundStyle(Ink.secondary)
-          }
-          Spacer()
-          Button("Browse…") { store.addFilesPanel() }.buttonStyle(QuietButtonStyle())
-        }.padding(20).background(Ink.canvas, in: RoundedRectangle(cornerRadius: 13)).overlay(
-          RoundedRectangle(cornerRadius: 13).stroke(
-            Ink.line, style: StrokeStyle(lineWidth: 1, dash: [4, 4])))
+      if store.isSearching {
+        Text(
+          "\(store.filteredItems.count) match\(store.filteredItems.count == 1 ? "" : "es") for “\(store.searchText)” in this parcel."
+        ).font(.system(size: 11)).foregroundStyle(Ink.moss)
+      }
+      if store.filteredItems.isEmpty {
+        if store.isSearching {
+          HStack(spacing: 14) {
+            Image(systemName: "magnifyingglass").font(.system(size: 22, weight: .ultraLight))
+              .foregroundStyle(Ink.moss)
+            VStack(alignment: .leading, spacing: 5) {
+              Text("Nothing matches here.").font(.system(size: 12, weight: .medium))
+              Text("Try another parcel from the sidebar.").font(.system(size: 11))
+                .foregroundStyle(Ink.secondary)
+            }
+            Spacer()
+          }.padding(20).background(Ink.canvas, in: RoundedRectangle(cornerRadius: 13))
+        } else {
+          HStack(spacing: 14) {
+            Image(systemName: "plus.rectangle.on.folder").font(.system(size: 25, weight: .ultraLight))
+              .foregroundStyle(Ink.moss)
+            VStack(alignment: .leading, spacing: 5) {
+              Text("Start with a few pieces.").font(.system(size: 12, weight: .medium))
+              Text("Files, folders and images are all welcome.").font(.system(size: 11))
+                .foregroundStyle(Ink.secondary)
+            }
+            Spacer()
+            Button("Browse…") { store.addFilesPanel() }.buttonStyle(QuietButtonStyle())
+          }.padding(20).background(Ink.canvas, in: RoundedRectangle(cornerRadius: 13)).overlay(
+            RoundedRectangle(cornerRadius: 13).stroke(
+              Ink.line, style: StrokeStyle(lineWidth: 1, dash: [4, 4])))
+        }
       } else {
-        LazyVStack(spacing: 6) { ForEach(store.items) { item in itemRow(item) } }
+        LazyVStack(spacing: 6) { ForEach(store.filteredItems) { item in itemRow(item) } }
         HStack {
           Text("Names and order apply to your ZIP copies.").font(.system(size: 10))
             .foregroundStyle(Ink.secondary)

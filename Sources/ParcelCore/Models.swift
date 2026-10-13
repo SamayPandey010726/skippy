@@ -105,6 +105,13 @@ public struct PackagingOptions: Codable, Equatable, Sendable {
     guard let data = UserDefaults.standard.data(forKey: "parcel-packaging-options"),
       let o = try? JSONDecoder().decode(PackagingOptions.self, from: data)
     else { return PackagingOptions() }
+    // RAR's installer is Gatekeeper-blocked: fall back to ZIP when the tool
+    // isn't on the Mac.
+    if o.format == .rar, !o.format.isUsable {
+      var normalized = o
+      normalized.format = .zip
+      return normalized
+    }
     return o
   }
   public func save() {
@@ -131,6 +138,18 @@ public enum PackFormat: String, Codable, CaseIterable, Sendable {
     case .sevenZip: return "7z"
     case .rar: return "rar"
     }
+  }
+  /// RAR's installer is blocked by macOS Gatekeeper (Homebrew disabled the
+  /// cask), so it is only offered when the tool is already on the Mac.
+  /// Everything else installs from inside the app.
+  public static var availableCases: [PackFormat] {
+    var cases: [PackFormat] = [.zip, .sevenZip]
+    if ExternalArchiver.toolPath(for: .rar) != nil { cases.append(.rar) }
+    return cases
+  }
+  /// True when picking this format can actually pack right now.
+  public var isUsable: Bool {
+    self == .zip || ExternalArchiver.toolPath(for: self) != nil
   }
 }
 

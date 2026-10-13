@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import SwiftUI
 
 /// The drop popup: a small square that appears on screen the moment a file
@@ -21,6 +22,17 @@ import SwiftUI
     set {
       UserDefaults.standard.set(newValue, forKey: enabledKey)
       if !newValue { hide() }
+    }
+  }
+
+  /// The instant event-driven detection needs Accessibility. The backup poll
+  /// works without it, but granting it makes the pop-out immediate.
+  var needsAccessibilityGrant: Bool { !AXIsProcessTrusted() }
+  func openAccessibilitySettings() {
+    if let url = URL(
+      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+    {
+      NSWorkspace.shared.open(url)
     }
   }
 

@@ -68,10 +68,26 @@ struct WorkbenchView: View {
         } label: {
           Image(systemName: "plus").font(.system(size: 13))
         }.buttonStyle(.plain).disabled(store.busy)
-      }.foregroundStyle(Ink.secondary).padding(.horizontal, 22).padding(.bottom, 12)
+      }.foregroundStyle(Ink.secondary).padding(.horizontal, 22).padding(.bottom, 10)
+      HStack(spacing: 8) {
+        Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(
+          Ink.secondary)
+        TextField("Search parcels and files", text: $store.searchText)
+          .textFieldStyle(.plain).font(.system(size: 12))
+        if store.isSearching {
+          Button {
+            store.searchText = ""
+          } label: {
+            Image(systemName: "xmark.circle.fill").font(.system(size: 11))
+          }.buttonStyle(.plain).foregroundStyle(Ink.secondary)
+        }
+      }.padding(.horizontal, 11).padding(.vertical, 7)
+        .background(Ink.canvas, in: RoundedRectangle(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).stroke(Ink.line.opacity(0.7), lineWidth: 1))
+        .padding(.horizontal, 18).padding(.bottom, 10)
       ScrollView {
         VStack(spacing: 5) {
-          ForEach(store.boxes) { box in
+          ForEach(store.filteredBoxes) { box in
             Button {
               store.selectBox(box.id)
             } label: {
@@ -90,6 +106,10 @@ struct WorkbenchView: View {
                 in: RoundedRectangle(cornerRadius: 11))
               .animation(.easeInOut(duration: 0.2), value: store.selectedBox)
             }.buttonStyle(.plain).disabled(store.busy)
+          }
+          if store.isSearching && store.filteredBoxes.isEmpty {
+            Text("No parcels match “\(store.searchText)”.").font(.system(size: 11))
+              .foregroundStyle(Ink.secondary).padding(.top, 12)
           }
         }.padding(.horizontal, 12)
       }
@@ -158,27 +178,31 @@ struct WorkbenchView: View {
           Spacer()
           Image(systemName: "paperclip").font(.system(size: 12)).foregroundStyle(Ink.moss)
         }.foregroundStyle(Ink.secondary)
-        VStack(alignment: .leading, spacing: 12) {
-          Text("Make it ready.").font(.custom(Ink.serif, size: 22)).foregroundStyle(Ink.green)
-          Text("Resize, change format or lighten your images. We'll make copies.").font(
-            .system(size: 11)
-          ).foregroundStyle(Ink.secondary).lineSpacing(3)
-          Button {
-            store.showPrepare = true
-          } label: {
-            Label(
-              store.imageItems.isEmpty ? "Prepare images"
-                : "Prepare \(store.imageItems.count) image\(store.imageItems.count == 1 ? "" : "s")",
-              systemImage: "wand.and.stars")
-          }.buttonStyle(MossButtonStyle(secondary: true)).disabled(
-            store.imageItems.isEmpty || store.busy || !store.canExport)
-          if store.items.contains(where: { $0.preparedPath != nil }) {
-            Button("Use originals again") { store.restoreOriginals() }.buttonStyle(
-              QuietButtonStyle()
-            ).disabled(store.busy)
+        // Preparing only makes sense when images are involved.
+        if !store.imageItems.isEmpty || store.items.contains(where: { $0.preparedPath != nil }) {
+          VStack(alignment: .leading, spacing: 12) {
+            Text("Make it ready.").font(.custom(Ink.serif, size: 22)).foregroundStyle(Ink.green)
+            Text("Resize, change format or lighten your images. We'll make copies.").font(
+              .system(size: 11)
+            ).foregroundStyle(Ink.secondary).lineSpacing(3)
+            if !store.imageItems.isEmpty {
+              Button {
+                store.showPrepare = true
+              } label: {
+                Label(
+                  "Prepare \(store.imageItems.count) image\(store.imageItems.count == 1 ? "" : "s")",
+                  systemImage: "wand.and.stars")
+              }.buttonStyle(MossButtonStyle(secondary: true)).disabled(
+                store.busy || !store.canExport)
+            }
+            if store.items.contains(where: { $0.preparedPath != nil }) {
+              Button("Use originals again") { store.restoreOriginals() }.buttonStyle(
+                QuietButtonStyle()
+              ).disabled(store.busy)
+            }
           }
+          Divider().overlay(Ink.line)
         }
-        Divider().overlay(Ink.line)
         VStack(alignment: .leading, spacing: 12) {
           Text("Pack with care").font(.system(size: 12, weight: .semibold)).foregroundStyle(
             Ink.green)
@@ -186,25 +210,24 @@ struct WorkbenchView: View {
             Text("Format").font(.system(size: 11)).foregroundStyle(Ink.secondary)
             Spacer()
             Picker(selection: $store.packaging.format) {
-              ForEach(PackFormat.allCases, id: \.self) { f in Text(f.label).tag(f) }
+              ForEach(PackFormat.availableCases, id: \.self) { f in Text(f.label).tag(f) }
             } label: {}.labelsHidden().pickerStyle(.segmented).frame(width: 168)
           }
-          if store.packaging.format != .zip
-            && ExternalArchiver.toolPath(for: store.packaging.format) == nil
+          if store.packaging.format == .sevenZip
+            && ExternalArchiver.toolPath(for: .sevenZip) == nil
           {
             VStack(alignment: .leading, spacing: 8) {
-              Text(ExternalArchiver.missingToolMessage(for: store.packaging.format)).font(
-                .system(size: 10)
-              ).foregroundStyle(Ink.secondary).lineSpacing(3)
-              if store.installingTool == store.packaging.format {
+              Text("7-Zip isn't installed on this Mac.").font(.system(size: 10))
+                .foregroundStyle(Ink.secondary).lineSpacing(3)
+              if store.installingTool == .sevenZip {
                 HStack(spacing: 8) {
                   ProgressView().scaleEffect(0.7)
-                  Text("Installing \(store.packaging.format.label)…").font(.system(size: 11))
+                  Text("Installing 7-Zip…").font(.system(size: 11))
                     .foregroundStyle(Ink.secondary)
                 }
               } else {
-                Button("Install \(store.packaging.format.label)") {
-                  store.installArchiverTool(store.packaging.format)
+                Button("Install 7-Zip") {
+                  store.installArchiverTool(.sevenZip)
                 }.buttonStyle(MossButtonStyle(secondary: true))
               }
             }.padding(.vertical, 2)

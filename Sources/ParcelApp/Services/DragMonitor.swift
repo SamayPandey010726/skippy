@@ -3,14 +3,16 @@ import AppKit
 /// Notices when a file drag begins anywhere on screen, so the drop popup can
 /// appear on its own.
 ///
-/// Two mechanisms, belt and suspenders:
-/// 1. A global left-mouse-dragged monitor (event-driven): the moment the
-///    mouse moves with the button down, the drag pasteboard is checked for
-///    file URLs. A global left-mouse-up ends the drag.
-/// 2. A lightweight pasteboard poll as fallback.
+/// Three mechanisms, each covering the others' blind spots:
+/// 1. Permission-free poll (primary): left mouse button down + the cursor
+///    moving means a drag is likely in flight — the drag pasteboard is then
+///    checked for file URLs. Button up ends it. Needs no permissions.
+/// 2. Global mouse monitors (when Accessibility is granted): event-driven and
+///    instant.
+/// 3. Drags that start inside Parcel itself (dragging the packed file out)
+///    are suppressed so the popup doesn't chase its own tail.
 ///
-/// All local-only. Drags that start inside Parcel itself (dragging the packed
-/// file out) are suppressed so the popup doesn't chase its own tail.
+/// All local-only.
 @MainActor final class DragMonitor {
   static let shared = DragMonitor()
   /// Called with true when a file drag starts, false when it ends.
@@ -19,7 +21,7 @@ import AppKit
   private var timer: Timer?
   private var mouseMonitor: Any?
   private var upMonitor: Any?
-  private var lastChange = 0
+  private var lastMouse = NSPoint.zero
   private var dragging = false
   private var suppressOwnDrag = false
 
@@ -29,7 +31,7 @@ import AppKit
   func start() {
     mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDragged) {
       [weak self] _ in
-      Task { @MainActor [weak self] in self?.dragActivity() }
+      Task { @MainActor [weak self] in self?.checkPasteboard() }
     }
     upMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] _ in
       Task { @MainActor [weak self] in
@@ -38,29 +40,30 @@ import AppKit
       }
     }
     guard timer == nil else { return }
-    lastChange = board.changeCount
-    let t = Timer(timeInterval: 0.4, repeats: true) { [weak self] _ in
+    lastMouse = NSEvent.mouseLocation
+    let t = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
       Task { @MainActor [weak self] in self?.tick() }
     }
     RunLoop.main.add(t, forMode: .common)
     timer = t
   }
 
-  private func dragActivity() {
-    guard !suppressOwnDrag else { return }
-    if board.changeCount != lastChange {
-      lastChange = board.changeCount
-      let urls = board.readObjects(
-        forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
-      setDragging(!(urls?.isEmpty ?? true))
-    }
-  }
-
   private func tick() {
     guard !suppressOwnDrag else { return }
-    let c = board.changeCount
-    guard c != lastChange else { return }
-    lastChange = c
+    let leftDown = (NSEvent.pressedMouseButtons & 1) == 1
+    let mouse = NSEvent.mouseLocation
+    let moved = hypot(mouse.x - lastMouse.x, mouse.y - lastMouse.y) > 6
+    lastMouse = mouse
+    if leftDown && moved {
+      checkPasteboard()
+    } else if !leftDown {
+      setDragging(false)
+    }
+    // Button held without moving: keep the current state.
+  }
+
+  private func checkPasteboard() {
+    guard !suppressOwnDrag else { return }
     let urls = board.readObjects(
       forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
     setDragging(!(urls?.isEmpty ?? true))
