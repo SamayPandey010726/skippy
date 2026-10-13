@@ -24,7 +24,9 @@ final class ClipboardHistory: ObservableObject {
   static let shared = ClipboardHistory()
 
   @Published private(set) var entries: [Entry] = []
-  @Published var isEnabled = true
+  @Published var isEnabled = UserDefaults.standard.object(forKey: "parcel-clipboard-watch") as? Bool ?? true {
+    didSet { UserDefaults.standard.set(isEnabled, forKey: "parcel-clipboard-watch") }
+  }
 
   private var timer: Timer?
   private var lastChangeCount: Int = -1
@@ -74,8 +76,8 @@ final class ClipboardHistory: ObservableObject {
 
   private func capture(from pb: NSPasteboard) {
     if let text = pb.string(forType: .string), !text.isEmpty {
-      // Skip our own re-copies and trivial clips.
-      guard !entries.first.map({ $0.text == text }) ?? true else { return }
+      // Skip if the most recent entry already holds this text.
+      if entries.first?.text == text { return }
       push(Entry(text: text))
       return
     }
