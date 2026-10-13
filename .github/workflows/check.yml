@@ -1,0 +1,22 @@
+name: Parcel checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  native-macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compiler and core tests
+        run: swift test
+      - name: Compile and bundle the native app
+        run: bash Scripts/build-macos.sh
+      - name: Native image smoke checks
+        run: bash Scripts/check-macos.sh
+      - name: Preserve app executable permissions in ZIP
+        run: ditto -c -k --keepParent build/Parcel.app build/Parcel-developer.zip
+      - name: Upload unsigned review build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Parcel-developer-build
+          path: build/Parcel-developer.zip

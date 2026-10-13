@@ -1,0 +1,384 @@
+{
+  "project": "Parcel",
+  "handoffDate": "2026-10-13",
+  "visualDirection": "Single gender-neutral kraft folder family; slate/forest accents; cover-close and metal paperclip finish",
+  "firstDocument": "START-HERE.md",
+  "nativeVerification": "macOS SDK compilation, runtime and release verification pending; see Docs/VERIFICATION.md",
+  "files": [
+    {
+      "path": ".github/workflows/check.yml",
+      "bytes": 734,
+      "sha256": "d55733fc8336ec37f5bc4255be4487e2843e92ae39847d7d738ed671d2d7074a"
+    },
+    {
+      "path": ".gitignore",
+      "bytes": 105,
+      "sha256": "7c1c3f3fb795634ba1e385315e5427ed9510f36f9385e2af1b73ea16cfcfd349"
+    },
+    {
+      "path": "Assets/AppIcon-1024.png",
+      "bytes": 45859,
+      "sha256": "76bf87c659c9e3da90f86938f263783dbdda062df740ed82b417f99f6c9663b8"
+    },
+    {
+      "path": "Assets/AppIcon.iconset/icon_128x128.png",
+      "bytes": 5187,
+      "sha256": "4490603ef2d581ca1540454f37df8bea480f3de30a1c48eac04d9ceecf24b47c"
+    },
+    {
+      "path": "Assets/AppIcon.iconset/icon_128x128@2x.png",
+      "bytes": 10963,
+      "sha256": "cb2b6cc8e1195157f32c7e2ad20696717c5cfe540d97fb33f24f768633b8d3fd"
+    },
+    {
+      "path": "Assets/AppIcon.iconset/icon_16x16.png",
+      "bytes": 644,
+      "sha256": "e2aae89925072176524d4ba61b3862f4c4824389d08a68df73a4cc795f83571c"
+    },
+    {
+      "path": "Assets/AppIcon.iconset/icon_16x16@2x.png",
+      "bytes": 1220,
+      "sha256": "40ddb952ebc5c7706502bd040df2d068c060bfdea19f681eea268881072cc59e"
+    },
+    {
+      "path": "Assets/AppIcon.iconset/icon_256x256.png",
+      "bytes": 10963,
+      "sha256": "cb2b6cc8e1195157f32c7e2ad20696717c5cfe540d97fb33f24f768633b8d3fd"
+    },
+    {
+      "path": "Assets/AppIcon.iconset/icon_256x256@2x.png",
+      "bytes": 24209,
+      "sha256": "006b05462ff2b3551647d2ce24291164ceba8eb9447ed27ac6add889abaf1a6a"
+    },
+    {
+      "path": "Assets/AppIcon.iconset/icon_32x32.png",
+      "bytes": 1220,
+      "sha256": "40ddb952ebc5c7706502bd040df2d068c060bfdea19f681eea268881072cc59e"
+    },
+    {
+      "path": "Assets/AppIcon.iconset/icon_32x32@2x.png",
+      "bytes": 2606,
+      "sha256": "31a87176a91f2713e3f7da1de327261cd397a23303a767d563ec80dce44f54b1"
+    },
+    {
+      "path": "Assets/AppIcon.iconset/icon_512x512.png",
+      "bytes": 24209,
+      "sha256": "006b05462ff2b3551647d2ce24291164ceba8eb9447ed27ac6add889abaf1a6a"
+    },
+    {
+      "path": "Assets/AppIcon.iconset/icon_512x512@2x.png",
+      "bytes": 45859,
+      "sha256": "76bf87c659c9e3da90f86938f263783dbdda062df740ed82b417f99f6c9663b8"
+    },
+    {
+      "path": "COPYRIGHT.md",
+      "bytes": 787,
+      "sha256": "26a35d7ee2acf35e5a22962f9d5ed5c276e455cfb55bb13da14ea09bae2f2abd"
+    },
+    {
+      "path": "Config/Info.plist",
+      "bytes": 1407,
+      "sha256": "97ca23bb14729aee0c879ecf0e59a4128e7a857b8f00eb2ca1e360c7bd51f6f1"
+    },
+    {
+      "path": "Config/Parcel.entitlements",
+      "bytes": 234,
+      "sha256": "fa5d82a612df9adfa9e8bcea98a78842e589575fc48e5ab5939a04a93c3f6c2c"
+    },
+    {
+      "path": "Docs/DECISIONS.md",
+      "bytes": 9011,
+      "sha256": "0d12268623ef861063da6572d9e854e677615e3fad76d4b49134ec71c7dbf2be"
+    },
+    {
+      "path": "Docs/DEPLOYMENT.md",
+      "bytes": 6892,
+      "sha256": "78445bc6a9c57b09046be8560def5628492a4abc363292e03d6ba683278383bd"
+    },
+    {
+      "path": "Docs/MAC_ACCEPTANCE.md",
+      "bytes": 5229,
+      "sha256": "b045a659fcf3fdb5f54b00678a7187b107022efe3c913d8d484b9e094b7d3c66"
+    },
+    {
+      "path": "Docs/RESEARCH.md",
+      "bytes": 3389,
+      "sha256": "ca9b5fcbbd63c9a323f6bf9c6d0a52aeacbb16d6e6efde04ea279997685f4893"
+    },
+    {
+      "path": "Docs/VERIFICATION.md",
+      "bytes": 4991,
+      "sha256": "eeb20b50248cdf8734932860501f2d37dcc5ac609192546b121985a3bd81cc73"
+    },
+    {
+      "path": "Package.resolved",
+      "bytes": 312,
+      "sha256": "8e1a1d7de570f9bacd587f56f70f41fa0da6d077505047bdf26ed31437e9dfc1"
+    },
+    {
+      "path": "Package.swift",
+      "bytes": 1043,
+      "sha256": "4a0c954114257a3de6d76e9598e52dd9b0e2e530f5f913a9bc7d6bbf23f8a423"
+    },
+    {
+      "path": "Preview/Parcel-preview.html",
+      "bytes": 75777,
+      "sha256": "7ad928d2709f4631cf2375c5990bd336c3f3c869e89cce15ce1ba4b72a16f69e"
+    },
+    {
+      "path": "Preview/check-preview.cjs",
+      "bytes": 3131,
+      "sha256": "ad3dbba3c7a3feb399df314d76f1d6307c269e32cc422f476d4c5b7ab13d326c"
+    },
+    {
+      "path": "Preview/fflate.js",
+      "bytes": 32665,
+      "sha256": "c3b34f2e9f5e74d4d7d64e01cac7a0c01954c6c406414d42185c7b53d6875ddf"
+    },
+    {
+      "path": "Preview/folder-art.svg",
+      "bytes": 3101,
+      "sha256": "c878040454153f4bcddec50e07003a0524e566352da5e5bd7d92cdb7fb15cc90"
+    },
+    {
+      "path": "Preview/parcel-art.svg",
+      "bytes": 3092,
+      "sha256": "fda99a4d69db132d2a5cb19c7ff9a718a7be94ee3e7e13d20a8031f08885e925"
+    },
+    {
+      "path": "Preview/preview-template.html",
+      "bytes": 4506,
+      "sha256": "0a536d5a4fa2175573326bba8981233530319b2fd9f405a61478dc808505e6df"
+    },
+    {
+      "path": "Preview/preview.css",
+      "bytes": 11845,
+      "sha256": "6f55779bd078d7177207d86009339b6bf3a0df7a9aad80a9d34995d16d8a29b2"
+    },
+    {
+      "path": "Preview/preview.js",
+      "bytes": 23687,
+      "sha256": "bb06e6e8a6bbd7bbfa244c33cc9c98df19bec3b42938705d5379cc1c3347df48"
+    },
+    {
+      "path": "README.md",
+      "bytes": 10116,
+      "sha256": "bfc743f287490fcf4386c18be86651ce3fc29363fd5863377a6e521d996fade8"
+    },
+    {
+      "path": "START-HERE.md",
+      "bytes": 6844,
+      "sha256": "0cc05289936f081e3def5814844e20a9404e23e9a77cea10514c7aafb225dfe0"
+    },
+    {
+      "path": "Samples/A little place.png",
+      "bytes": 8484,
+      "sha256": "06f3bccadb3e007bef22edfc5dce85bc49e5085b4c7111ed3ed006f034a0a1b4"
+    },
+    {
+      "path": "Samples/Garden sketch.svg",
+      "bytes": 3092,
+      "sha256": "fda99a4d69db132d2a5cb19c7ff9a718a7be94ee3e7e13d20a8031f08885e925"
+    },
+    {
+      "path": "Samples/Launch notes.txt",
+      "bytes": 82,
+      "sha256": "5c2d2f14d5bddb8aa2401acc7cdd48622af86062a26e0088d9de0554895e86c0"
+    },
+    {
+      "path": "Scripts/MacSmoke.swift",
+      "bytes": 5703,
+      "sha256": "8e4af64e121c7d825f22c87741f5d61ffa2dcd395216497faca1112a20ce1a44"
+    },
+    {
+      "path": "Scripts/build-macos.sh",
+      "bytes": 3520,
+      "sha256": "6c9ac997403f3d464d63f37f09118e3efa5bcdeafb9fb4f1959d7e41285f43cb"
+    },
+    {
+      "path": "Scripts/build-preview.py",
+      "bytes": 598,
+      "sha256": "0c085a765dc054f0ebfc964dd36c96e99e5bd41b5f6c91899cf612f08358f794"
+    },
+    {
+      "path": "Scripts/check-macos.sh",
+      "bytes": 945,
+      "sha256": "baf6b98f0bccc727a304bf9344cb535bc4afb4fb2bb56fc33f50b4e0701313b0"
+    },
+    {
+      "path": "Scripts/generate-assets.py",
+      "bytes": 3418,
+      "sha256": "4527582254109c861a8e14fb8cc3810ce1501ef88bdadb0dfc5bde07dae5735d"
+    },
+    {
+      "path": "Scripts/license-tool.py",
+      "bytes": 2531,
+      "sha256": "b0ffd732fd9f730077e734daac4977fd061f83f9e8468c1e0cdb7c44ddb47e1a"
+    },
+    {
+      "path": "Scripts/notarize-macos.sh",
+      "bytes": 1272,
+      "sha256": "b2377c3caa4fdf86dbd9460dab86b806468605405dc69d94c51b507e909c018d"
+    },
+    {
+      "path": "Sources/ParcelApp/ParcelApp.swift",
+      "bytes": 2690,
+      "sha256": "1764307589eaab1dd0d8593d39738b50df9123acba37b96649cab33cd48c3dd2"
+    },
+    {
+      "path": "Sources/ParcelApp/Resources/Acknowledgements.txt",
+      "bytes": 1105,
+      "sha256": "93a5b6f4c4fcfbca71aaf17f5758d249cf205d5d1c237becc37f14e43af09f6b"
+    },
+    {
+      "path": "Sources/ParcelApp/Resources/PrivacyInfo.xcprivacy",
+      "bytes": 718,
+      "sha256": "de92e817c8969bbcc2b2fe5d2ad8dc2fc47606fe4ad13e0fedfbaf5048ec33c6"
+    },
+    {
+      "path": "Sources/ParcelApp/Resources/paper-seal.wav",
+      "bytes": 9746,
+      "sha256": "1789d3bff677383e30a4e0c81b02a4229247979431c21f57b6fdf32601b56972"
+    },
+    {
+      "path": "Sources/ParcelApp/Services/AppController.swift",
+      "bytes": 3303,
+      "sha256": "d770a5b88536578da52d29d62e431c850b75788e693f8b0981e0659eaaf6ea50"
+    },
+    {
+      "path": "Sources/ParcelApp/Services/AppPreferences.swift",
+      "bytes": 586,
+      "sha256": "1f41712698777211785ce9e9629a0e35d3ec5ce927637ee4238d4165c64dd13b"
+    },
+    {
+      "path": "Sources/ParcelApp/Services/CacheCare.swift",
+      "bytes": 1110,
+      "sha256": "cd38021d90a68b63b73f473568af3f55bd8ec254d715bc760e0dd4d084bf4d3f"
+    },
+    {
+      "path": "Sources/ParcelApp/Services/ImagePipeline.swift",
+      "bytes": 7548,
+      "sha256": "12af22457ac7247571ef759b0f21bb5031a67229a3d42df89e40189d878cb7ed"
+    },
+    {
+      "path": "Sources/ParcelApp/Services/LicenseManager.swift",
+      "bytes": 5277,
+      "sha256": "7032aca4fa6540e9b1f5620ef6b8d525f24f2433d262b6a990e89ac6ff9eb07b"
+    },
+    {
+      "path": "Sources/ParcelApp/Services/ParcelStore.swift",
+      "bytes": 22188,
+      "sha256": "48a122ea37c0868414021410a301364d608d472a0ece92a79820855ae6941623"
+    },
+    {
+      "path": "Sources/ParcelApp/Services/ResourceLocator.swift",
+      "bytes": 895,
+      "sha256": "091c9ce26c07cf0a1303579a5de0bf8ccac5edbf8e8ea1a0278db55d594c0ac2"
+    },
+    {
+      "path": "Sources/ParcelApp/Services/StoragePaths.swift",
+      "bytes": 2782,
+      "sha256": "b9efada19af81db0a34f98d20e402ceb76e924a508c3b4fa4a57fcf3792c5826"
+    },
+    {
+      "path": "Sources/ParcelApp/Views/CompactParcelView.swift",
+      "bytes": 2822,
+      "sha256": "b9ca14cdc311d84a1eb7830535c3d7278ed1935971f9542dc969440f8761f4a8"
+    },
+    {
+      "path": "Sources/ParcelApp/Views/DesignSystem.swift",
+      "bytes": 3059,
+      "sha256": "8d2e0f08ad0e2dfa6dae1c68626689cee1bf0b2af30e9c48f08732927a1c4b01"
+    },
+    {
+      "path": "Sources/ParcelApp/Views/ItemListView.swift",
+      "bytes": 6130,
+      "sha256": "0c98b099c836cd9767402153bf73f4f58ab0dc85ef4b7ef77c7a93f69e1902c2"
+    },
+    {
+      "path": "Sources/ParcelApp/Views/NativeBridges.swift",
+      "bytes": 9664,
+      "sha256": "f91bfc099b9b4b301efb9fa573d9e64cdfbcec5da2b915fd3e8f362845dda63d"
+    },
+    {
+      "path": "Sources/ParcelApp/Views/ParcelIllustration.swift",
+      "bytes": 9889,
+      "sha256": "92cdb3dbd66e65d6d83b1066d3315a9327824442e8cd216dcd809aa60f18950d"
+    },
+    {
+      "path": "Sources/ParcelApp/Views/PreferencesView.swift",
+      "bytes": 6323,
+      "sha256": "c349851a32410d6f81c26f3dc705bcaf139a5c620e0fd3114937c1d40c83e64a"
+    },
+    {
+      "path": "Sources/ParcelApp/Views/PrepareSheet.swift",
+      "bytes": 5815,
+      "sha256": "d01e85adb436d137f619fd1f8401aa6d62d5f215e490865620bbd1aef5889e44"
+    },
+    {
+      "path": "Sources/ParcelApp/Views/WelcomeView.swift",
+      "bytes": 1438,
+      "sha256": "95285455939639b3622b3443d4a66017007bcd159211a9dfa7491c903b2697e2"
+    },
+    {
+      "path": "Sources/ParcelApp/Views/WorkbenchView.swift",
+      "bytes": 15090,
+      "sha256": "a387ce45e5343fdde7e38350ff3afbb403efb323f8d5976825367d193727e5f3"
+    },
+    {
+      "path": "Sources/ParcelCheck/main.swift",
+      "bytes": 1203,
+      "sha256": "4d17699b69f1f297b55491e99791de5654cc37e2162ea3d3706c23ad094a740e"
+    },
+    {
+      "path": "Sources/ParcelCore/CollectionStore.swift",
+      "bytes": 1021,
+      "sha256": "34c3169b0e36abc0e687551d2ad8c060db0ed0874250f2d15b0a2b4856277d37"
+    },
+    {
+      "path": "Sources/ParcelCore/FileTree.swift",
+      "bytes": 4698,
+      "sha256": "556fc1d7c0234d42869366a69b8d532e12965296d96ccb41bcb4b30e80b251ff"
+    },
+    {
+      "path": "Sources/ParcelCore/Models.swift",
+      "bytes": 4884,
+      "sha256": "3ba1b81d59f5cc7d435ff1698c7c07fe23f149c41a971bd1be3213bf16bee4a0"
+    },
+    {
+      "path": "Sources/ParcelCore/NamePolicy.swift",
+      "bytes": 1990,
+      "sha256": "d0391e041ccc57ffa51f8166af135f8578dad4a4db6742dbed3c42b4f50f37c7"
+    },
+    {
+      "path": "Sources/ParcelCore/PackageBuilder.swift",
+      "bytes": 4644,
+      "sha256": "df60cc432f6edae5e8f9a7fdedfcd6bc29fe77e62201ad83fc5622d6d969400a"
+    },
+    {
+      "path": "Tests/ParcelCoreTests/NameAndPersistenceTests.swift",
+      "bytes": 2102,
+      "sha256": "1be41587ff457054f11bd55faa0009e6e644c95649611e9f318aeacc11703d20"
+    },
+    {
+      "path": "Tests/ParcelCoreTests/PackagingTests.swift",
+      "bytes": 9364,
+      "sha256": "4df604fe6c76f43506ca8d49a12167a7cbf159beb4acaafc612f41a502b84a04"
+    },
+    {
+      "path": "Tests/test_license_tool.py",
+      "bytes": 1391,
+      "sha256": "6a9c7f8bf45f5a95d834f18e2df3eba51f6a7417f40e5af743cfe4c8ae64e553"
+    },
+    {
+      "path": "ThirdParty/ZIPFoundation-LICENSE.txt",
+      "bytes": 1105,
+      "sha256": "93a5b6f4c4fcfbca71aaf17f5758d249cf205d5d1c237becc37f14e43af09f6b"
+    },
+    {
+      "path": "ThirdParty/fflate-LICENSE.txt",
+      "bytes": 1069,
+      "sha256": "805f6cb28bb8b6d3a0badd83c93bccd9671fa01a3b4b92b7042b0743325ac243"
+    }
+  ]
+}

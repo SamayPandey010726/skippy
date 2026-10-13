@@ -1,0 +1,11 @@
+.build/
+build/
+.DS_Store
+*.private
+*.privatekey
+*.pem
+*.p12
+.env
+__pycache__/
+*.pyc
+verification-output/

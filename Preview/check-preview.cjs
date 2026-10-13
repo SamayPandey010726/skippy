@@ -1,0 +1,33 @@
+// Runs against the self-contained deliverable; requires Playwright in the developer's Node environment.
+const fs=require('fs'),path=require('path');
+const pw=process.env.PARCEL_PLAYWRIGHT||'playwright';
+const {chromium}=require(pw);
+(async()=>{
+ const launch={headless:true};if(process.env.PARCEL_CHROME)launch.executablePath=process.env.PARCEL_CHROME;
+ const browser=await chromium.launch(launch),page=await browser.newPage({viewport:{width:1400,height:1000}}),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('file://'+path.resolve(__dirname,'Parcel-preview.html'));await page.waitForFunction(()=>window.parcelPreviewReady===true);
+ const assert=(v,m)=>{if(!v)throw Error(m);};
+ assert(await page.locator('.item').count()===3,'Sample collection did not load');
+ await page.locator('#prepare').click();await page.getByRole('button',{name:'Prepare copies',exact:true}).click();
+ await page.waitForFunction(()=>document.getElementById('status').textContent.includes('prepared copies'));
+ assert(await page.locator('.prepared-label').count()===1,'Expected one prepared PNG copy');
+ await page.locator('#seal').click();await page.waitForFunction(()=>document.getElementById('hero-title').textContent==='Packed. Ready to go.');
+ const downloadPromise=page.waitForEvent('download');await page.locator('#save').click();const download=await downloadPromise;
+ const output=process.env.PARCEL_QA_OUTPUT||path.join(__dirname,'verification-output');fs.mkdirSync(output,{recursive:true});
+ await download.saveAs(path.join(output,'preview.zip'));
+ await page.waitForTimeout(800);await page.screenshot({path:path.join(output,'sealed-desktop.png')});
+ await page.locator('#open-box').click();await page.waitForTimeout(700);
+ await page.screenshot({path:path.join(output,'open-desktop.png')});
+ await page.locator('#new-box').click();assert(await page.locator('.item').count()===0,'New parcel should be empty');
+ await page.locator('#file-input').setInputFiles([{name:'café.txt',mimeType:'text/plain',buffer:Buffer.from('One')},{name:'CAFE\u0301.txt',mimeType:'text/plain',buffer:Buffer.from('Two')}]);
+ await page.waitForFunction(()=>document.querySelectorAll('.item').length===2);
+ await page.locator('#seal').click();await page.waitForFunction(()=>document.getElementById('hero-title').textContent==='Packed. Ready to go.');
+ const p2=page.waitForEvent('download');await page.locator('#save').click();await (await p2).saveAs(path.join(output,'unicode-collision.zip'));
+ await page.locator('#open-box').click();await page.emulateMedia({reducedMotion:'reduce'});await page.setViewportSize({width:390,height:844});await page.waitForTimeout(100);
+ assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'Mobile overflow');
+ await page.screenshot({path:path.join(output,'mobile.png')});
+ assert(errors.length===0,'Browser errors: '+errors.join('; '));
+ console.log(JSON.stringify({fileIntake:true,imagePreparation:true,zipDownload:true,unicodeCollision:true,reducedMotion:true,mobile:true,pageErrors:errors}));
+ await browser.close();
+})().catch(e=>{console.error(e);process.exit(1)});
