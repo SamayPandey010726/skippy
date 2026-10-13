@@ -11,6 +11,7 @@ import SwiftUI
           ParcelRuntime.store = store
           AppController.shared.install(store: store)
           store.checkCacheOnStartup()
+          ClipboardHistory.shared.start()
         }
     }
     .windowStyle(.hiddenTitleBar).defaultSize(width: 1160, height: 820)
