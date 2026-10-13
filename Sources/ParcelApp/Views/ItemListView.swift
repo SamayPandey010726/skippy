@@ -102,6 +102,10 @@ struct ItemListView: View {
       }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture {
         store.toggleSelection(item.id)
       }
+      if item.isPinned {
+        Image(systemName: "pin.fill").font(.system(size: 10)).foregroundStyle(Ink.moss).help(
+          "Pinned — kept when the shelf self-cleans")
+      }
       if item.preparedPath != nil {
         Button {
           comparing = item
@@ -142,6 +146,7 @@ struct ItemListView: View {
         if TextRecognition.isProbablyText(url: item.effectiveURL) {
           Button("Copy Contents") { store.copyTextContents(of: item) }.disabled(store.busy)
         }
+        Button(item.isPinned ? "Unpin" : "Pin") { store.togglePin(item.id) }.disabled(store.busy)
         Divider()
         Button("Remove from parcel", role: .destructive) { store.remove([item.id]) }.disabled(
           store.busy)

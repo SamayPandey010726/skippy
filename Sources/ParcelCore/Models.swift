@@ -38,9 +38,11 @@ public struct ParcelItem: Codable, Identifiable, Equatable, Sendable {
   public var preparedPath: String?
   public var preparedBytes: Int64?
   public var preparedDescription: String?
+  /// Pinned items survive the self-cleaning auto-clear. Inspired by FlowShelf's pin model.
+  public var isPinned: Bool
   public init(
     id: UUID = UUID(), sourcePath: String, bookmark: Data? = nil, displayName: String,
-    isDirectory: Bool = false, byteCount: Int64 = 0
+    isDirectory: Bool = false, byteCount: Int64 = 0, isPinned: Bool = false
   ) {
     self.id = id
     self.sourcePath = sourcePath
@@ -48,7 +50,26 @@ public struct ParcelItem: Codable, Identifiable, Equatable, Sendable {
     self.displayName = displayName
     self.isDirectory = isDirectory
     self.byteCount = byteCount
+    self.isPinned = isPinned
     addedAt = Date()
+  }
+  private enum CodingKeys: String, CodingKey {
+    case id, sourcePath, bookmark, displayName, isDirectory, byteCount, addedAt
+    case preparedPath, preparedBytes, preparedDescription, isPinned
+  }
+  public init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    id = try c.decode(UUID.self, forKey: .id)
+    sourcePath = try c.decode(String.self, forKey: .sourcePath)
+    bookmark = try c.decodeIfPresent(Data.self, forKey: .bookmark)
+    displayName = try c.decode(String.self, forKey: .displayName)
+    isDirectory = try c.decode(Bool.self, forKey: .isDirectory)
+    byteCount = try c.decode(Int64.self, forKey: .byteCount)
+    addedAt = try c.decode(Date.self, forKey: .addedAt)
+    preparedPath = try c.decodeIfPresent(String.self, forKey: .preparedPath)
+    preparedBytes = try c.decodeIfPresent(Int64.self, forKey: .preparedBytes)
+    preparedDescription = try c.decodeIfPresent(String.self, forKey: .preparedDescription)
+    isPinned = try c.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
   }
   public var sourceURL: URL { URL(fileURLWithPath: sourcePath) }
   public var effectiveURL: URL { URL(fileURLWithPath: preparedPath ?? sourcePath) }

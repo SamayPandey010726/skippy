@@ -116,6 +116,7 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     guard !cleanupChecked, libraryWritable else { return }
     cleanupChecked = true
     _ = try? CacheCare.removeUnused(boxes: boxes, olderThan: Date().addingTimeInterval(-30 * 86400))
+    if preferences.autoClearStale { clearStaleItems() }
   }
   func refreshLicense() { license = LicenseManager.shared.status() }
   /// Installs the 7-Zip / RAR tool via Homebrew, right from the app.
@@ -334,6 +335,32 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     selectedItems.subtract(ids)
     changed()
     reconcileAccess()
+  }
+  /// Pin/unpin an item. Pinned items survive the self-cleaning auto-clear.
+  func togglePin(_ id: UUID) {
+    guard !busy, let i = index, let j = boxes[i].items.firstIndex(where: { $0.id == id }) else {
+      return
+    }
+    boxes[i].items[j].isPinned.toggle()
+    changed()
+  }
+  /// Self-cleaning shelf: drop unpinned items older than 24h. Pinned items always survive.
+  /// Inspired by FlowShelf's self-cleaning model — shelves rot into junk drawers otherwise.
+  func clearStaleItems() {
+    guard !busy else { return }
+    let cutoff = Date().addingTimeInterval(-24 * 3600)
+    var removed = 0
+    for b in boxes.indices {
+      let before = boxes[b].items.count
+      boxes[b].items.removeAll { !$0.isPinned && $0.addedAt < cutoff }
+      removed += before - boxes[b].items.count
+    }
+    if removed > 0 {
+      selectedItems.removeAll()
+      changed()
+      reconcileAccess()
+      notice = "Cleared \(removed) stale item\(removed == 1 ? "" : "s"). Pinned items were kept."
+    }
   }
   func renameItem(_ id: UUID, name: String) {
     guard !busy, let i = index, let j = boxes[i].items.firstIndex(where: { $0.id == id }) else {

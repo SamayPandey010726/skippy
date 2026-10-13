@@ -7,6 +7,8 @@ struct AppPreferences: Codable, Equatable {
   var playSounds = false
   var exportFolder: String?
   var launchAtLogin = false
+  /// Self-cleaning shelf: automatically clear unpinned items older than 24h on launch.
+  var autoClearStale = true
   static func load() -> AppPreferences {
     guard let data = UserDefaults.standard.data(forKey: "preferences"),
       let p = try? JSONDecoder().decode(Self.self, from: data)

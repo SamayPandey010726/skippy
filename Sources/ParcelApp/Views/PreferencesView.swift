@@ -56,6 +56,8 @@ struct PreferencesView: View {
       Toggle("Add the date to parcel filenames", isOn: $store.preferences.appendDate).disabled(
         store.busy)
       Toggle("Soft sound when a parcel is sealed", isOn: $store.preferences.playSounds)
+      Toggle("Self-cleaning shelf: clear unpinned items older than a day", isOn: $store.preferences.autoClearStale)
+        .disabled(store.busy)
       Toggle(
         "Open Parcel at login",
         isOn: Binding(
