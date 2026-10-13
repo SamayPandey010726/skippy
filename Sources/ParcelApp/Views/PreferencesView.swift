@@ -55,11 +55,17 @@ struct PreferencesView: View {
           }))
       Divider().overlay(Ink.line)
       HStack {
-        Text("Floating folder shortcut")
+        Text("Drop shelf shortcut")
         Spacer()
         Text("Control + Option + P").font(.system(size: 11, design: .monospaced)).foregroundStyle(
           Ink.moss)
       }
+      Toggle(
+        "Show the drop shelf at the screen edge",
+        isOn: Binding(
+          get: { EdgeShelfController.shared.isShelfVisible() },
+          set: { EdgeShelfController.shared.setShelfVisible($0) })
+      )
       Text(
         "Motion follows your macOS Reduce Motion setting. Sounds start off. All file preparation stays on your Mac."
       ).font(.system(size: 11)).foregroundStyle(Ink.secondary).lineSpacing(4)

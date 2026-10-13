@@ -548,22 +548,32 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
   func revealArchive() {
     if let archiveURL { NSWorkspace.shared.activateFileViewerSelecting([archiveURL]) }
   }
-  /// A drop onto the floating shelf starts a fresh parcel when the current one
-  /// already holds pieces, so a quick drop never mixes into an earlier parcel.
-  func dropOntoShelf(_ urls: [URL]) {
+  /// Edge shelf: a brand-new parcel from these files, packed at once.
+  func dropToNewParcelAndSeal(_ urls: [URL]) {
     guard !busy, !urls.isEmpty else { return }
-    var fresh = false
-    if let box = current, !box.items.isEmpty {
-      let nb = ParcelBox(name: "Untitled parcel")
-      boxes.insert(nb, at: 0)
-      selectedBox = nb.id
-      selectedItems = []
-      invalidateArchive()
-      save()
-      fresh = true
-    }
+    let nb = ParcelBox(name: "Untitled parcel")
+    boxes.insert(nb, at: 0)
+    selectedBox = nb.id
+    selectedItems = []
+    invalidateArchive()
+    save()
     ingest(urls)
-    if fresh { notice = "New parcel started with your drop — press Pack ZIP when ready." }
+    guard canExport, let box = current, !box.items.isEmpty else {
+      notice = "Parcel gathered — press Pack ZIP when ready."
+      return
+    }
+    seal()
+  }
+  /// Edge shelf: a brand-new parcel from dropped text.
+  func dropTextToNewParcel(_ text: String) {
+    guard !busy, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    let nb = ParcelBox(name: "Untitled parcel")
+    boxes.insert(nb, at: 0)
+    selectedBox = nb.id
+    selectedItems = []
+    invalidateArchive()
+    save()
+    ingestText(text, into: nb.id)
   }
   func copyArchiveToClipboard() {
     guard canExport, !busy, ready, let zip = archiveURL else { return }

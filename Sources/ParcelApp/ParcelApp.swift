@@ -29,8 +29,11 @@ import SwiftUI
           store.imageItems.isEmpty || store.busy || !store.canExport)
         Button("Copy contents list") { store.copyManifest() }.keyboardShortcut(
           "c", modifiers: [.command, .shift])
-        Button("Show floating folder") { AppController.shared.togglePanel() }.keyboardShortcut(
+        Button("Show drop shelf") { AppController.shared.toggleShelf() }.keyboardShortcut(
           "p", modifiers: [.control, .option])
+        Divider()
+        Button("Share via WhatsApp") { store.shareViaWhatsApp() }.disabled(
+          store.busy || !store.canExport)
         Divider()
         Button("Select all pieces") { store.selectAll() }.keyboardShortcut("a")
         Button("Remove selected pieces") { store.remove(store.selectedItems) }.keyboardShortcut(
@@ -40,14 +43,14 @@ import SwiftUI
     }
     MenuBarExtra("Parcel", systemImage: "folder") {
       Button("Open Parcel") { AppController.shared.openWorkbench() }
-      Button("Floating folder    ⌃⌥P") { AppController.shared.togglePanel() }
+      Button("Drop shelf    ⌃⌥P") { AppController.shared.toggleShelf() }
       Button("Add files…") { store.addFilesPanel() }.disabled(store.busy)
       Button("Paste into parcel") { store.paste() }.disabled(store.busy)
       Divider()
       ForEach(store.boxes.prefix(8)) { box in
         Button(box.name) {
           store.selectBox(box.id)
-          AppController.shared.togglePanel()
+          AppController.shared.openWorkbench()
         }.disabled(store.busy)
       }
       Divider()

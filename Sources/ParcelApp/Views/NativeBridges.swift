@@ -72,7 +72,9 @@ struct FileDropSurface: NSViewRepresentable {
           let receiveCallback = receive
           let receivingCallback = receiving
           let failureCallback = failure
-          for _ in 0..<max(promise.fileNames.count, 1) { receivingCallback(true) }
+          // Balanced: one begin per promise, one end per promise. An unbalanced
+          // count would silently block Pack, Prepare and box switching.
+          receivingCallback(true)
           promise.receivePromisedFiles(
             atDestination: folder, options: [:], operationQueue: OperationQueue.main
           ) { url, error in
