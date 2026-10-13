@@ -214,6 +214,7 @@ struct WorkbenchView: View {
         VStack(alignment: .leading, spacing: 12) {
           Text("Pack with care").font(.system(size: 12, weight: .semibold)).foregroundStyle(
             Ink.green)
+          PackProfilePicker()
           HStack {
             Text("Format").font(.system(size: 11)).foregroundStyle(Ink.secondary)
             Spacer()
