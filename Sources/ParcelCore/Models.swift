@@ -113,6 +113,11 @@ public struct ManifestEntry: Codable, Equatable, Sendable {
   public let name: String
   public let bytes: Int64
   public let folder: Bool
+  public init(name: String, bytes: Int64, folder: Bool) {
+    self.name = name
+    self.bytes = bytes
+    self.folder = folder
+  }
 }
 public struct PackageResult: Sendable {
   public var archive: URL
