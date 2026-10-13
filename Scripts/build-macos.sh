@@ -4,8 +4,9 @@ cd "$(dirname "$0")/.."
 if [[ "$(uname -s)" != Darwin ]]; then echo 'This bundle build requires macOS and Xcode.' >&2; exit 1; fi
 production=false
 universal=false
+appstore=false
 for flag in "$@"; do
-    case "$flag" in --production) production=true ;; --universal) universal=true ;; *) echo "Unknown option: $flag" >&2;exit 2 ;; esac
+    case "$flag" in --production) production=true ;; --universal) universal=true ;; --appstore) appstore=true ;; *) echo "Unknown option: $flag" >&2;exit 2 ;; esac
 done
 xcode-select -p >/dev/null
 bundle_id="${PARCEL_BUNDLE_ID:-com.yourcompany.parcel}"
@@ -22,6 +23,11 @@ key=base64.b64decode(os.environ['PARCEL_LICENSE_PUBLIC_KEY'],validate=True)
 assert len(key)==32,'The Ed25519 public key must be 32 bytes.'
 u=urllib.parse.urlparse(os.environ['PARCEL_CHECKOUT_URL']);assert u.scheme=='https' and u.netloc,'Use an HTTPS checkout URL.'
 PY
+fi
+if $appstore; then
+    # App Store builds need no licence key infrastructure: Apple ties the
+    # purchase to the buyer's Apple ID and the app validates its receipt.
+    [[ "$bundle_id" != com.yourcompany.parcel ]] || { echo 'Set PARCEL_BUNDLE_ID to your App Store identifier.' >&2;exit 1; }
 fi
 mkdir -p build
 architectures=("$(uname -m)")
@@ -43,8 +49,10 @@ cp Config/Info.plist "$app/Contents/Info.plist"
 plutil -replace CFBundleIdentifier -string "$bundle_id" "$app/Contents/Info.plist"
 plutil -replace CFBundleShortVersionString -string "$version" "$app/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$build_number" "$app/Contents/Info.plist"
-if $production; then
+if $production || $appstore; then
     plutil -replace ParcelDevelopmentMode -bool NO "$app/Contents/Info.plist"
+fi
+if $production; then
     plutil -replace ParcelLicensePublicKey -string "$PARCEL_LICENSE_PUBLIC_KEY" "$app/Contents/Info.plist"
     plutil -replace ParcelCheckoutURL -string "$PARCEL_CHECKOUT_URL" "$app/Contents/Info.plist"
 fi
@@ -60,6 +68,10 @@ if $production; then
     codesign --force --options runtime --timestamp --sign "$identity" --entitlements Config/Parcel.entitlements "$app"
 else
     codesign --force --sign - "$app"
+fi
+if $appstore; then
+    echo 'App Store note: submit through Xcode (Product > Archive) with your Apple Distribution certificate'
+    echo 'and App Store provisioning profile, and enable the App Sandbox entitlement before review.'
 fi
 codesign --verify --strict --verbose=2 "$app"
 plutil -lint "$app/Contents/Info.plist"

@@ -41,14 +41,28 @@ After a verified paid order:
 python3 Scripts/license-tool.py issue \
   --private "$HOME/.config/parcel/merchant.private" \
   --customer "Customer name" \
-  --license-id "your-provider-order-id" > customer-licence.txt
+  --license-id "your-provider-order-id" \
+  --machine-id "PASTE_CUSTOMER_MAC_ID" > customer-licence.txt
 ```
 
 Deliver the complete token from that file to the buyer. They paste it into Parcel → Preferences → Your licence. The token is verified offline with CryptoKit and stored in Keychain. Default tokens are perpetual; `--expiry` exists for controlled test/support use.
 
+**Machine-locked keys (unshareable).** Ask the buyer for their Mac ID from Parcel → Preferences → Your licence → "This Mac's ID", and pass it as `--machine-id` when issuing. The app only accepts that key on the matching Mac, so one key cannot unlock two people's machines. Omit `--machine-id` only for legacy portable keys.
+
 No merchant fulfilment service has been deployed. A manual early launch can issue keys after verified orders. For automation, call the same issuance function from a merchant-side handler only after verifying the payment provider's webhook signature, product and paid status, then make issuance idempotent using the provider order ID. Delivery/receipt configuration belongs to the chosen merchant platform. Do not trust a browser success redirect as proof of payment.
 
-The proposed two-personal-Mac policy is not enforced by an activation server in this build. Decide the actual update entitlement, refund/support terms and device policy before publishing them. The code does not silently claim an online enforcement system it does not have.
+Machine-locking is enforced offline by the app (one key, one Mac). There is no activation server counting installs; decide the actual update entitlement and refund/support terms before publishing them. The code does not silently claim an online enforcement system it does not have.
+
+## App Store distribution
+
+On the App Store you need no licence keys at all: Apple ties the purchase to the buyer's Apple ID, and the app unlocks itself when it finds a valid App Store receipt (`LicenseStatus.appStore`). Build with:
+
+```bash
+export PARCEL_BUNDLE_ID="com.yourcompany.yourproduct"
+bash Scripts/build-macos.sh --appstore
+```
+
+This turns off development mode without requiring a licence public key or checkout URL. Final submission goes through Xcode (Product → Archive) with your Apple Distribution certificate and App Store provisioning profile, and the App Sandbox entitlement must be enabled before review — the bundled `Config/Parcel.entitlements` targets direct Developer ID distribution with sandbox disabled, so do not submit that configuration unchanged.
 
 ## Production bundle
 

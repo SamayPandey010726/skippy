@@ -3,11 +3,19 @@ import SwiftUI
 
 struct CompactParcelView: View {
   @EnvironmentObject private var store: ParcelStore
+  @State private var pinned = AppController.shared.isPinned()
   var body: some View {
     VStack(spacing: 0) {
       HStack {
         BrandMark()
         Spacer()
+        Button {
+          pinned.toggle()
+          AppController.shared.setPinned(pinned)
+        } label: {
+          Image(systemName: pinned ? "pin.fill" : "pin").font(.system(size: 11))
+        }.buttonStyle(QuietButtonStyle()).help(
+          pinned ? "Unpin from the screen edge" : "Pin to the screen edge")
         Button {
           AppController.shared.openWorkbench()
         } label: {
@@ -25,7 +33,7 @@ struct CompactParcelView: View {
           Image(systemName: "plus")
         }.buttonStyle(QuietButtonStyle()).disabled(store.busy)
       }.padding(.horizontal, 25).padding(.top, 5)
-      ParcelHero(compact: true).padding(.horizontal, 13)
+      ParcelHero(compact: true, shelfMode: true).padding(.horizontal, 13)
       if store.items.isEmpty {
         Text("A little box, wherever you work.").font(.system(size: 11)).foregroundStyle(
           Ink.secondary
@@ -55,6 +63,12 @@ struct CompactParcelView: View {
         Image(systemName: "checkmark.shield")
         Text(store.notice ?? "Originals are always safe.").lineLimit(1)
         Spacer()
+        Button {
+          store.shareViaWhatsApp()
+        } label: {
+          Image(systemName: "message").font(.system(size: 11))
+        }.buttonStyle(QuietButtonStyle()).help("Send via WhatsApp").disabled(
+          !store.ready || store.busy || !store.canExport)
         ShareButton(items: store.shareItems(), enabled: store.canExport && !store.busy).frame(
           width: 73, height: 24)
       }.font(.system(size: 10)).foregroundStyle(Ink.secondary).padding(.horizontal, 22).padding(

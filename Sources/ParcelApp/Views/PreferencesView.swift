@@ -77,7 +77,11 @@ struct PreferencesView: View {
   private var licence: some View {
     VStack(alignment: .leading, spacing: 17) {
       Text(store.license.label).font(.custom(Ink.serif, size: 25)).foregroundStyle(Ink.green)
-      if case .licensed(let name) = store.license {
+      if case .appStore = store.license {
+        Text("You're covered by your App Store purchase — no licence key needed.").font(
+          .system(size: 12)
+        ).foregroundStyle(Ink.secondary).lineSpacing(4)
+      } else if case .licensed(let name) = store.license {
         Text("Thank you, \(name). Your parcel is yours to keep.").font(.system(size: 12))
           .foregroundStyle(Ink.secondary)
       } else {
@@ -103,6 +107,26 @@ struct PreferencesView: View {
             Button("Get Parcel") { NSWorkspace.shared.open(url) }.buttonStyle(
               MossButtonStyle(secondary: true))
           }
+        }
+      }
+      if store.license != .development {
+        Divider().overlay(Ink.line)
+        VStack(alignment: .leading, spacing: 8) {
+          Text("This Mac's ID").font(.system(size: 11, weight: .medium))
+          HStack {
+            Text(MachineID.current).font(.system(size: 10, design: .monospaced)).foregroundStyle(
+              Ink.secondary
+            ).lineLimit(1).truncationMode(.middle)
+            Spacer()
+            Button("Copy") {
+              NSPasteboard.general.clearContents()
+              NSPasteboard.general.setString(MachineID.current, forType: .string)
+              message =
+                "Mac ID copied — send it with your order and we'll issue a licence locked to this Mac."
+            }.buttonStyle(QuietButtonStyle())
+          }
+          Text("Direct licences are locked to one Mac, so a key can't be shared between people.")
+            .font(.system(size: 11)).foregroundStyle(Ink.secondary).lineSpacing(4)
         }
       }
       Text(

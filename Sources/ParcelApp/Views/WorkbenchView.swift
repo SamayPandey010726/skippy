@@ -214,6 +214,18 @@ struct WorkbenchView: View {
               Image(systemName: "airplayaudio").help("AirDrop the current parcel or selected files")
             }.buttonStyle(QuietButtonStyle()).disabled(
               store.busy || store.items.isEmpty || !store.canExport)
+            Button {
+              store.shareViaWhatsApp()
+            } label: {
+              Image(systemName: "message").help("Send the packed parcel via WhatsApp")
+            }.buttonStyle(QuietButtonStyle()).disabled(
+              !store.ready || store.busy || !store.canExport)
+            Button {
+              store.copyArchiveToClipboard()
+            } label: {
+              Image(systemName: "doc.on.doc").help("Copy the packed ZIP to the clipboard")
+            }.buttonStyle(QuietButtonStyle()).disabled(
+              !store.ready || store.busy || !store.canExport)
           }
           if store.ready {
             Button {
@@ -241,6 +253,7 @@ struct ParcelHero: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var hovering = false
   var compact = false
+  var shelfMode = false
   private var packed: Bool { store.phase == .packing || store.phase == .ready }
   private var outgoing: [URL] {
     guard !store.busy, store.canExport else { return [] }
@@ -264,7 +277,7 @@ struct ParcelHero: View {
           reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.8), value: hovering)
         FileDropSurface(
           enabled: !store.busy, outgoing: outgoing, tap: { if store.ready { store.unseal() } },
-          receive: { store.ingest($0, into: destinationBox) },
+          receive: shelfMode ? { store.dropOntoShelf($0) } : { store.ingest($0, into: destinationBox) },
           receiveText: { store.ingestText($0, into: destinationBox) },
           receiving: { if $0 { store.beginReceiving() } else { store.endReceiving() } },
           hover: { hovering = $0 }, failure: { store.error = $0 })

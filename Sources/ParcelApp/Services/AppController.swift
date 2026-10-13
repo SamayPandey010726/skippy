@@ -10,6 +10,47 @@ import SwiftUI
   private var hotKey: EventHotKeyRef?
   private var eventHandler: EventHandlerRef?
   var showWorkbench: (() -> Void)?
+  private let pinKey = "parcel.panelPinned"
+  private let originKey = "parcel.panelOrigin"
+  /// Whether the floating folder sticks to the screen edge.
+  func isPinned() -> Bool { UserDefaults.standard.bool(forKey: pinKey) }
+  func setPinned(_ pinned: Bool) {
+    UserDefaults.standard.set(pinned, forKey: pinKey)
+    guard pinned, let p = panel, let screen = p.screen ?? NSScreen.main else { return }
+    let vf = screen.visibleFrame
+    p.setFrameOrigin(NSPoint(x: vf.maxX - p.frame.width, y: vf.midY - p.frame.height / 2))
+  }
+  private func placePanel(_ p: NSPanel) {
+    if let saved = UserDefaults.standard.string(forKey: originKey) {
+      p.setFrameOrigin(NSPointFromString(saved))
+    } else {
+      p.center()
+    }
+    if isPinned(), let screen = p.screen ?? NSScreen.main {
+      let vf = screen.visibleFrame
+      p.setFrameOrigin(NSPoint(x: vf.maxX - p.frame.width, y: vf.midY - p.frame.height / 2))
+    }
+  }
+  private func watchPanelMovement(_ p: NSPanel) {
+    NotificationCenter.default.addObserver(
+      forName: NSWindow.didMoveNotification, object: p, queue: .main
+    ) { [weak self, weak p] _ in
+      guard let self, let p else { return }
+      self.snapAndRemember(p)
+    }
+  }
+  private func snapAndRemember(_ p: NSPanel) {
+    guard let screen = p.screen ?? NSScreen.main else { return }
+    let vf = screen.visibleFrame
+    var origin = p.frame.origin
+    let d: CGFloat = 24
+    if abs(p.frame.minX - vf.minX) < d { origin.x = vf.minX }
+    if abs(vf.maxX - p.frame.maxX) < d { origin.x = vf.maxX - p.frame.width }
+    if abs(vf.maxY - p.frame.maxY) < d { origin.y = vf.maxY - p.frame.height }
+    if abs(p.frame.minY - vf.minY) < d { origin.y = vf.minY }
+    if origin != p.frame.origin { p.setFrameOrigin(origin) }
+    UserDefaults.standard.set(NSStringFromPoint(p.frame.origin), forKey: originKey)
+  }
   func install(store: ParcelStore) {
     self.store = store
     guard hotKey == nil else { return }
@@ -47,7 +88,8 @@ import SwiftUI
       p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
       p.backgroundColor = NSColor(red: 0.98, green: 0.965, blue: 0.92, alpha: 1)
       p.contentView = NSHostingView(rootView: CompactParcelView().environmentObject(store))
-      p.center()
+      placePanel(p)
+      watchPanelMovement(p)
       panel = p
     }
     panel?.makeKeyAndOrderFront(nil)

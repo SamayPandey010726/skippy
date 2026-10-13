@@ -462,7 +462,7 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
         lastManifest = result.manifestText
         phase = .ready
         progress = 1
-        notice = "Packed. Ready to go. Ready to drag or share."
+        notice = "Packed. Ready to drag or share."
         save()
         if preferences.playSounds { FeedbackSounds.shared.seal() }
       } catch {
@@ -547,6 +547,55 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
   }
   func revealArchive() {
     if let archiveURL { NSWorkspace.shared.activateFileViewerSelecting([archiveURL]) }
+  }
+  /// A drop onto the floating shelf starts a fresh parcel when the current one
+  /// already holds pieces, so a quick drop never mixes into an earlier parcel.
+  func dropOntoShelf(_ urls: [URL]) {
+    guard !busy, !urls.isEmpty else { return }
+    var fresh = false
+    if let box = current, !box.items.isEmpty {
+      let nb = ParcelBox(name: "Untitled parcel")
+      boxes.insert(nb, at: 0)
+      selectedBox = nb.id
+      selectedItems = []
+      invalidateArchive()
+      save()
+      fresh = true
+    }
+    ingest(urls)
+    if fresh { notice = "New parcel started with your drop — press Pack ZIP when ready." }
+  }
+  func copyArchiveToClipboard() {
+    guard canExport, !busy, ready, let zip = archiveURL else { return }
+    let pb = NSPasteboard.general
+    pb.clearContents()
+    pb.writeObjects([zip as NSURL])
+    notice = "Parcel ZIP copied — paste it anywhere."
+  }
+  /// WhatsApp on macOS has no file-share API, so the packed parcel is copied
+  /// and WhatsApp is brought forward — one paste drops it into any chat.
+  func shareViaWhatsApp() {
+    refreshLicense()
+    guard canExport, !busy else { return }
+    guard ready, let zip = archiveURL else {
+      notice = "Pack your parcel first, then send it with WhatsApp."
+      return
+    }
+    let pb = NSPasteboard.general
+    pb.clearContents()
+    pb.writeObjects([zip as NSURL])
+    if let appURL = NSWorkspace.shared.urlForApplication(
+      withBundleIdentifier: "net.whatsapp.WhatsApp")
+    {
+      let config = NSWorkspace.OpenConfiguration()
+      config.activates = true
+      NSWorkspace.shared.openApplication(at: appURL, configuration: config) { _, _ in }
+      notice = "Parcel copied — paste it into your WhatsApp chat."
+    } else {
+      revealArchive()
+      notice =
+        "WhatsApp isn't installed on this Mac. Your parcel is copied and shown in Finder — drag it into any chat."
+    }
   }
   func shareItems() -> [Any] {
     guard canExport, !busy else { return [] }
