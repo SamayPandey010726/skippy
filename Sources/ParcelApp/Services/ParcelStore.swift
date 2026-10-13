@@ -354,9 +354,20 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
   }
   func prepareImages() {
     refreshLicense()
-    guard !busy, receivingCount == 0, !imageItems.isEmpty, canExport, let boxID = selectedBox else {
+    // Every refusal explains itself — a dead button with no feedback is a bug.
+    guard canExport else {
+      error = "Preparing images needs an active licence. Your trial may have ended."
       return
     }
+    guard !busy else {
+      notice = "Hold on — your parcel is still packing. Try again in a moment."
+      return
+    }
+    guard receivingCount == 0 else {
+      notice = "Still receiving your files — one moment."
+      return
+    }
+    guard !imageItems.isEmpty, let boxID = selectedBox else { return }
     let targets = imageItems
     let settings = recipe
     let t = CancellationToken()
@@ -548,8 +559,9 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
   func revealArchive() {
     if let archiveURL { NSWorkspace.shared.activateFileViewerSelecting([archiveURL]) }
   }
-  /// Edge shelf: a brand-new parcel from these files, packed at once.
-  func dropToNewParcelAndSeal(_ urls: [URL]) {
+  /// Edge shelf: a brand-new parcel gathered from these files. Packing stays a
+  /// deliberate one-click step, so drops never collide with a running pack.
+  func dropToNewParcel(_ urls: [URL]) {
     guard !busy, !urls.isEmpty else { return }
     let nb = ParcelBox(name: "Untitled parcel")
     boxes.insert(nb, at: 0)
@@ -558,11 +570,7 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     invalidateArchive()
     save()
     ingest(urls)
-    guard canExport, let box = current, !box.items.isEmpty else {
-      notice = "Parcel gathered — press Pack ZIP when ready."
-      return
-    }
-    seal()
+    notice = "New parcel started — press Pack ZIP when ready."
   }
   /// Edge shelf: a brand-new parcel from dropped text.
   func dropTextToNewParcel(_ text: String) {

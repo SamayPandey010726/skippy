@@ -11,7 +11,9 @@ import SwiftUI
   private let visibleKey = "parcel.edgeShelfVisible"
   private let shelfWidth: CGFloat = 336
   private let shelfHeight: CGFloat = 400
-  private let tabWidth: CGFloat = 26
+  /// The docked trigger is a whisper of an edge strip — the shelf itself only
+  /// appears while files hover it.
+  private let tabWidth: CGFloat = 5
 
   func install(store: ParcelStore) {
     self.store = store
@@ -48,7 +50,8 @@ import SwiftUI
   func handleDrop(_ urls: [URL]) {
     setExpanded(false)
     guard let store, !urls.isEmpty else { return }
-    store.dropToNewParcelAndSeal(urls)
+    // The app opens only on drop — never while hovering.
+    store.dropToNewParcel(urls)
     AppController.shared.openWorkbench()
   }
   func handleTextDrop(_ text: String) {
@@ -95,26 +98,26 @@ import SwiftUI
 
 struct EdgeShelfView: View {
   @EnvironmentObject private var store: ParcelStore
+  @State private var dropCount = 0
   var body: some View {
     HStack(spacing: 0) {
-      // The tab: the only part visible while docked.
-      VStack(spacing: 7) {
-        Image(systemName: "folder.fill").font(.system(size: 13)).foregroundStyle(.white)
-        Text("parcel").font(.system(size: 9, weight: .semibold)).foregroundStyle(
-          .white.opacity(0.92))
-      }
-      .frame(width: 26)
-      .frame(maxHeight: .infinity)
-      .background(Ink.green)
+      // The trigger: a whisper of an edge strip. The shelf itself only
+      // appears while files hover it.
+      RoundedRectangle(cornerRadius: 2.5)
+        .fill(Ink.green.opacity(0.45))
+        .frame(width: 5)
+        .padding(.vertical, 10)
       // The drop area, revealed on hover.
       ZStack {
         Ink.paper
         VStack(spacing: 13) {
-          ParcelIllustration(sealed: false, count: 3, bounce: 0).frame(width: 150, height: 118)
-          Text("Drop files here").font(.system(size: 15, weight: .semibold)).foregroundStyle(
-            Ink.green)
-          Text("A parcel packs itself\nand opens in the app.").font(.system(size: 11))
-            .foregroundStyle(Ink.secondary).multilineTextAlignment(.center).lineSpacing(3)
+          ParcelIllustration(sealed: false, count: max(dropCount, 1), bounce: 0)
+            .frame(width: 150, height: 118)
+          Text(dropCount > 0 ? "Drop \(dropCount) file\(dropCount == 1 ? "" : "s")" : "Drop files here")
+            .font(.system(size: 15, weight: .semibold)).foregroundStyle(Ink.green)
+          Text("A new parcel starts instantly\nand opens in the app, ready to pack.")
+            .font(.system(size: 11)).foregroundStyle(Ink.secondary)
+            .multilineTextAlignment(.center).lineSpacing(3)
           Text("or click to open Parcel").font(.system(size: 10)).foregroundStyle(
             Ink.secondary.opacity(0.75))
         }.padding(26)
@@ -130,7 +133,11 @@ struct EdgeShelfView: View {
         receive: { EdgeShelfController.shared.handleDrop($0) },
         receiveText: { EdgeShelfController.shared.handleTextDrop($0) },
         receiving: { _ in },
-        hover: { EdgeShelfController.shared.setExpanded($0) },
+        hover: {
+          EdgeShelfController.shared.setExpanded($0)
+          if !$0 { dropCount = 0 }
+        },
+        willReceive: { dropCount = $0.count },
         failure: { store.error = $0 }
       )
     )

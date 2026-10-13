@@ -12,6 +12,7 @@ struct FileDropSurface: NSViewRepresentable {
   var receiveText: (String) -> Void = { _ in }
   var receiving: (Bool) -> Void
   var hover: (Bool) -> Void
+  var willReceive: ([URL]) -> Void = { _ in }
   var failure: (String) -> Void
   func makeNSView(context: Context) -> ReceivingView {
     let v = ReceivingView()
@@ -28,6 +29,7 @@ struct FileDropSurface: NSViewRepresentable {
     view.receiveText = receiveText
     view.receiving = receiving
     view.hover = hover
+    view.willReceive = willReceive
     view.failure = failure
   }
   @MainActor final class ReceivingView: DragOutSurface.SendingView {
@@ -35,10 +37,17 @@ struct FileDropSurface: NSViewRepresentable {
     var receiveText: (String) -> Void = { _ in }
     var receiving: (Bool) -> Void = { _ in }
     var hover: (Bool) -> Void = { _ in }
+    var willReceive: ([URL]) -> Void = { _ in }
     var failure: (String) -> Void = { _ in }
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
       guard enabled else { return [] }
       hover(true)
+      if let urls = sender.draggingPasteboard.readObjects(
+        forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
+        !urls.isEmpty
+      {
+        willReceive(urls)
+      }
       return .copy
     }
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
