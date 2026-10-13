@@ -13,6 +13,7 @@ struct WorkbenchView: View {
       Rectangle().fill(Ink.line.opacity(0.65)).frame(width: 1)
       VStack(spacing: 0) {
         header
+        QuickActionsBar().environmentObject(store)
         ScrollView {
           VStack(spacing: 20) {
             ParcelHero()
