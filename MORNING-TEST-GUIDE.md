@@ -1,6 +1,8 @@
-# Parcel — Morning Test Guide (2026-10-14)
+# Parcel — Test Guide (Shreyash direction, 2026-10-14)
 
-Branch: `feature/shelf-share-licensing` · 5 new commits on top of `a212670`
+Branch: `feature/shelf-share-licensing` · Head: `2318ffc`
+
+**New product identity:** Parcel is a living file shelf. Put files down → navigate → pick up. NOT gather → prepare → pack → share.
 
 ## Setup
 
@@ -13,38 +15,33 @@ open build/Parcel.app
 
 ## What's new to test
 
-### 1. Pinnable items + self-cleaning shelf
-- Right-click any item → **Pin**. A pin badge appears in the row.
-- `⌥⌘P` pins/unpins all selected items.
-- Preferences → **"Self-cleaning shelf"** (on by default): unpinned items older than 24h clear on launch. Pinned items always survive.
-- To verify: pin one item, leave one unpinned, quit, set the Mac clock forward a day (or wait), relaunch — only the pinned one remains.
+### 1. Cuts (verify they're gone)
+- No pack profiles / recipes anywhere (inspector has no recipe picker)
+- No Clipboard button, panel, or menu
+- No "Copy link" in the quick-action bar
+- Manifest defaults OFF (Preferences → "Include a readable contents list" unchecked)
 
-### 2. Clipboard history
-- Click **Clipboard** in the workbench header.
-- Copy some text or an image anywhere — it appears in the panel.
-- Search, pin, re-copy on tap. Password-manager apps are never watched.
-- Toggle "Watch clipboard" off/on.
+### 2. Skin system
+- Preferences → **Shelf skin**: Kraft Courier / Night Messenger / Moss Courier
+- Switch skins — the drop popup changes palette, layout stays identical
+- Quit + relaunch — skin persists
 
-### 3. Quick-action bar
-- Strip under the header: **Pack**, **AirDrop**, **Copy link**, **Contents**.
-- One click each, no dialogs. Hover states + tooltips.
+### 3. Drop popup (the shelf)
+- Drag a file → popup springs in (scale + fade)
+- Drop lands → illustration bounces
+- Copy reads "Give your files somewhere delightful to wait"
+- Skin palette applies to the popup
 
-### 4. Pack profiles (recipes)
-- Inspector → Pack section → bookmark icon: **save current settings as a recipe**.
-- Switch recipes from the "Saved recipes" menu. Delete from the manage view.
+### 4. Inspector
+- "Pack with care" is now "Pack as ZIP" with a shelf-first note
 
-### 5. UI polish
-- Items animate in/out with a spring when added/removed.
-- Empty state mentions pinning + self-cleaning.
-
-## Regression checklist (core still intact)
+## Regression checklist (core shelf still works)
 - [ ] Drop popup appears on drag, no visual errors
-- [ ] Gather → Prepare → Pack → Send flow works end to end
-- [ ] OCR "Copy text from images" in Prepare sheet
-- [ ] "Copy Contents" on text files
-- [ ] ZIP / 7z / RAR packing
-- [ ] Sidebar + in-parcel search
-- [ ] Menu-bar and Dock menus
+- [ ] Drag files in/out of the shelf
+- [ ] Pin items (⌥⌘P), self-cleaning clears unpinned after 24h
+- [ ] Quick Look, reorder, remove
+- [ ] Basic ZIP pack still works
+- [ ] Sidebar, search, menu-bar + Dock menus
 - [ ] Reduce Motion respected
 
 ## If something breaks
