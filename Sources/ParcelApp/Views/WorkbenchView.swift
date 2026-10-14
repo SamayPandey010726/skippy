@@ -69,7 +69,7 @@ struct WorkbenchView: View {
         } label: {
           Image(systemName: "plus").font(.system(size: 13))
         }.buttonStyle(.plain).disabled(store.busy)
-      }.foregroundStyle(Ink.secondary).padding(.horizontal, 22).padding(.bottom, 10)
+      }.foregroundStyle(Ink.secondary).padding(.horizontal, 25).padding(.bottom, 10)
       HStack(spacing: 8) {
         Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(
           Ink.secondary)
@@ -85,7 +85,7 @@ struct WorkbenchView: View {
       }.padding(.horizontal, 11).padding(.vertical, 7)
         .background(Ink.canvas, in: RoundedRectangle(cornerRadius: 9))
         .overlay(RoundedRectangle(cornerRadius: 9).stroke(Ink.line.opacity(0.7), lineWidth: 1))
-        .padding(.horizontal, 18).padding(.bottom, 10)
+        .padding(.horizontal, 14).padding(.bottom, 10)
       ScrollView {
         VStack(spacing: 5) {
           ForEach(store.filteredBoxes) { box in
@@ -129,13 +129,13 @@ struct WorkbenchView: View {
         SettingsLink { Label("Preferences", systemImage: "slider.horizontal.3") }.buttonStyle(
           .plain)
         Text(store.license.label).font(.system(size: 10)).foregroundStyle(Ink.secondary)
-      }.font(.system(size: 11)).foregroundStyle(Ink.green).padding(23)
+      }.font(.system(size: 11)).foregroundStyle(Ink.green).padding(25)
     }.frame(maxHeight: .infinity).background(Ink.cream.opacity(0.65))
   }
   private var header: some View {
     HStack(alignment: .center) {
       VStack(alignment: .leading, spacing: 4) {
-        Text("THE PACKING TABLE").font(.system(size: 9, weight: .semibold)).tracking(2)
+        Text("THE SHELF").font(.system(size: 9, weight: .semibold)).tracking(2)
           .foregroundStyle(Ink.secondary)
         Button {
           store.showRenameBox = true
@@ -321,7 +321,7 @@ struct WorkbenchView: View {
         Spacer(minLength: 12)
         Button("Remove parcel…") { deleteConfirmation = true }.buttonStyle(QuietButtonStyle())
           .disabled(store.busy)
-      }.padding(.horizontal, 21).padding(.top, 43).padding(.bottom, 20)
+      }.padding(.horizontal, 25).padding(.top, 43).padding(.bottom, 20)
     }.background(Ink.cream.opacity(0.32))
   }
 }

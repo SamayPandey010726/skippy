@@ -62,7 +62,7 @@ struct ItemListView: View {
           }
         }.animation(.spring(response: 0.35, dampingFraction: 0.8), value: store.filteredItems.map(\.id))
         HStack {
-          Text("Names and order apply to your ZIP copies.").font(.system(size: 10))
+          Text("Names and order apply when you drag items out.").font(.system(size: 10))
             .foregroundStyle(Ink.secondary)
           Spacer()
           if !store.selectedItems.isEmpty {
@@ -77,7 +77,7 @@ struct ItemListView: View {
     }.sheet(item: $renaming) { item in
       RenameSheet(
         title: "Rename in this parcel", initial: item.displayName,
-        caption: "The ZIP uses this name. Loose-file drags keep the actual filename."
+        caption: "This name is used when you drag the item out or pack it."
       ) { name in store.renameItem(item.id, name: name) }
     }
     .sheet(item: $comparing) { item in ImageComparisonView(item: item) }
