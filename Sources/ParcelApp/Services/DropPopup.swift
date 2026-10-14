@@ -204,10 +204,25 @@ struct DropPopupView: View {
     let p = skinStore.skin.palette
     ZStack {
       RoundedRectangle(cornerRadius: 24).fill(p.paper)
-        .shadow(color: .black.opacity(0.18), radius: 14, y: 5)
+        // Layered shadows: contact shadow + lift shadow. Hover lifts
+        // the bag toward the pointer (shadow grows).
+        .shadow(
+          color: .black.opacity(hovering ? 0.26 : 0.18),
+          radius: hovering ? 18 : 14, x: 0, y: hovering ? 8 : 5
+        )
         .overlay(
           RoundedRectangle(cornerRadius: 24)
             .stroke(hovering ? p.accentSoft.opacity(0.6) : p.line.opacity(0.5), lineWidth: 1))
+        .overlay(
+          // Specular edge: cheap "printed/machined" cue — a white
+          // gradient stroke fading top-to-bottom.
+          RoundedRectangle(cornerRadius: 24)
+            .stroke(
+              LinearGradient(
+                colors: [.white.opacity(0.35), .white.opacity(0)],
+                startPoint: .top, endPoint: .bottom),
+              lineWidth: 0.75)
+        )
       VStack(spacing: 9) {
         // Grip — drag to park the popup anywhere on screen.
         RoundedRectangle(cornerRadius: 2)
@@ -221,8 +236,8 @@ struct DropPopupView: View {
           )
         ParcelIllustration(sealed: false, count: max(dropCount, 1), bounce: dropBounce)
           .frame(width: 104, height: 82)
-          .scaleEffect(hovering ? 1.06 : 1)
-          .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hovering)
+          .scaleEffect(hovering ? 1.035 : 1)
+          .animation(Motion.hoverLift, value: hovering)
         Text(
           dropCount > 0
             ? "Drop \(dropCount) file\(dropCount == 1 ? "" : "s")" : "Drop files here"
@@ -234,7 +249,8 @@ struct DropPopupView: View {
     }
     .scaleEffect(appeared ? 1 : 0.88)
     .opacity(appeared ? 1 : 0)
-    .animation(.spring(response: 0.35, dampingFraction: 0.75), value: appeared)
+    // Asymmetric: summon with spring overshoot, dismiss fast + flat.
+    .animation(Motion.uiReveal, value: appeared)
     .onAppear {
       appeared = true
       dropBounce = 0

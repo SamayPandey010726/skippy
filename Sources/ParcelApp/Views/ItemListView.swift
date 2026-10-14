@@ -60,7 +60,7 @@ struct ItemListView: View {
                 insertion: .move(edge: .top).combined(with: .opacity),
                 removal: .move(edge: .trailing).combined(with: .opacity)))
           }
-        }.animation(.spring(response: 0.35, dampingFraction: 0.8), value: store.filteredItems.map(\.id))
+        }.animation(Motion.layoutRelayout, value: store.filteredItems.map(\.id))
         HStack {
           Text("Names and order apply when you drag items out.").font(.system(size: 10))
             .foregroundStyle(Ink.secondary)
@@ -84,7 +84,8 @@ struct ItemListView: View {
   }
   private func itemRow(_ item: ParcelItem) -> some View {
     let available = FileManager.default.fileExists(atPath: item.effectiveURL.path)
-    return HStack(spacing: 12) {
+    return RowPressContainer {
+      HStack(spacing: 12) {
       Image(systemName: "line.3.horizontal").font(.system(size: 10)).foregroundStyle(Ink.line)
         .onDrag { NSItemProvider(object: item.id.uuidString as NSString) }
         .help("Drag this handle to reorder")
@@ -107,9 +108,8 @@ struct ItemListView: View {
             Text(desc).foregroundStyle(Ink.moss).lineLimit(1)
           }
         }.font(.system(size: 10))
-      }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()).onTapGesture {
-        store.toggleSelection(item.id)
-      }
+      }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+      .onTapGesture { store.toggleSelection(item.id) }
       if item.isPinned {
         Image(systemName: "pin.fill").font(.system(size: 10)).foregroundStyle(Ink.moss).help(
           "Pinned — kept when the shelf self-cleans")
@@ -142,6 +142,15 @@ struct ItemListView: View {
           store.selectedItems.contains(item.id) ? Ink.moss.opacity(0.5) : Ink.line.opacity(0.7),
           lineWidth: 1)
       )
+      .overlay(
+        // Specular edge: white gradient fading top-to-bottom.
+        RoundedRectangle(cornerRadius: 12)
+          .stroke(
+            LinearGradient(
+              colors: [.white.opacity(0.25), .white.opacity(0)],
+              startPoint: .top, endPoint: .bottom),
+            lineWidth: 0.5)
+      )
       .contextMenu {
         Button("Preview") { QuickLookController.shared.show([item.effectiveURL]) }.disabled(
           !available)
@@ -167,5 +176,26 @@ struct ItemListView: View {
         }
         return true
       }
+    }
+  }
+}
+
+/// Wraps a row to give it press feedback: squishes slightly while the
+/// pointer is down, so the row feels like a physical object being
+/// picked up. Uses a zero-distance drag so it doesn't interfere with
+/// the row's own buttons or drag-out surface.
+private struct RowPressContainer<Content: View>: View {
+  @GestureState private var pressing = false
+  let content: Content
+  init(@ViewBuilder content: () -> Content) { self.content = content() }
+  var body: some View {
+    content
+      .scaleEffect(pressing ? 0.985 : 1)
+      .animation(Motion.pressSquish, value: pressing)
+      // Simultaneous so it never blocks the row's own drag-out or reorder.
+      .simultaneousGesture(
+        DragGesture(minimumDistance: 0)
+          .updating($pressing) { _, state, _ in state = true }
+      )
   }
 }

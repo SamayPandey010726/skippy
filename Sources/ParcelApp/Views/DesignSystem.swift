@@ -36,6 +36,18 @@ struct QuietButtonStyle: ButtonStyle {
       .background(
         configuration.isPressed ? Ink.paleGreen : Color.clear, in: RoundedRectangle(cornerRadius: 8)
       )
+      // Press squish: responds on mouse-down, not mouse-up.
+      .scaleEffect(configuration.isPressed ? 0.95 : 1)
+      .animation(Motion.pressSquish, value: configuration.isPressed)
+  }
+}
+/// Press-aware row style: the whole row squishes slightly on press,
+/// so it feels like a physical object being picked up.
+struct RowPressStyle: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .scaleEffect(configuration.isPressed ? 0.985 : 1)
+      .animation(Motion.pressSquish, value: configuration.isPressed)
   }
 }
 struct PaperCard<Content: View>: View {
