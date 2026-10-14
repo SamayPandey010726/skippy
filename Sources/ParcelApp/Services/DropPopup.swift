@@ -198,6 +198,8 @@ struct DropPopupView: View {
   @StateObject private var skinStore = SkinStore.shared
   @State private var dropCount = 0
   @State private var hovering = false
+  @State private var appeared = false
+  @State private var dropBounce = 0
   var body: some View {
     let p = skinStore.skin.palette
     ZStack {
@@ -217,7 +219,7 @@ struct DropPopupView: View {
               .onChanged { DropPopupController.shared.movePopup(by: $0.translation) }
               .onEnded { _ in DropPopupController.shared.finishPopupMove() }
           )
-        ParcelIllustration(sealed: false, count: max(dropCount, 1), bounce: 0)
+        ParcelIllustration(sealed: false, count: max(dropCount, 1), bounce: dropBounce)
           .frame(width: 104, height: 82)
           .scaleEffect(hovering ? 1.06 : 1)
           .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hovering)
@@ -226,9 +228,19 @@ struct DropPopupView: View {
             ? "Drop \(dropCount) file\(dropCount == 1 ? "" : "s")" : "Drop files here"
         )
         .font(.system(size: 14, weight: .semibold)).foregroundStyle(p.accent)
-        Text("A new parcel starts instantly.").font(.system(size: 10))
+        Text("Give your files somewhere delightful to wait.").font(.system(size: 10))
           .foregroundStyle(p.secondary)
       }.padding(.bottom, 14)
+    }
+    .scaleEffect(appeared ? 1 : 0.88)
+    .opacity(appeared ? 1 : 0)
+    .animation(.spring(response: 0.35, dampingFraction: 0.75), value: appeared)
+    .onAppear {
+      appeared = true
+      dropBounce = 0
+    }
+    .onChange(of: dropCount) { _, new in
+      if new > 0 { dropBounce += 1 }
     }
     .frame(width: 232, height: 232)
     .background(
