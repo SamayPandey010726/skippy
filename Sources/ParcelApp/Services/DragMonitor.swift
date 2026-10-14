@@ -16,7 +16,14 @@ import AppKit
 @MainActor final class DragMonitor {
   static let shared = DragMonitor()
   /// Called with true when a file drag starts, false when it ends.
-  var onDragState: (Bool) -> Void = { _ in }
+  /// Multiple listeners supported (drop popup + Dock picker).
+  private var dragStateHandlers: [(Bool) -> Void] = []
+  var onDragState: (Bool) -> Void {
+    get { { [weak self] dragging in self?.dragStateHandlers.forEach { $0(dragging) } } }
+    set { dragStateHandlers.append(newValue) }
+  }
+  /// Current drag state, for spring-load activation (Dock hover).
+  var isDragging: Bool { dragging }
   private let board = NSPasteboard(name: NSPasteboard.Name("NSDragPboard"))
   private var timer: Timer?
   private var mouseMonitor: Any?

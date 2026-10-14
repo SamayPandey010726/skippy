@@ -12,6 +12,10 @@ import SwiftUI
   func install(store: ParcelStore) {
     self.store = store
     DropPopupController.shared.install(store: store)
+    DockPickerController.shared.install(store: store)
+    DragMonitor.shared.onDragState = { dragging in
+      if !dragging { DockPickerController.shared.hide() }
+    }
     guard hotKey == nil else { return }
     var spec = EventTypeSpec(
       eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
@@ -48,6 +52,17 @@ import SwiftUI
     // Clicking the Dock icon with no windows open must bring the app back.
     if !flag { AppController.shared.openWorkbench() }
     return true
+  }
+  func applicationDidBecomeActive(_ notification: Notification) {
+    // Spring Loading: the user dragged a file over Parcel's Dock icon and
+    // held it. Show the picker near the Dock so they can drop into a
+    // parcel without opening the app window.
+    if DragMonitor.shared.isDragging {
+      DockPickerController.shared.show()
+    }
+  }
+  func applicationDidResignActive(_ notification: Notification) {
+    DockPickerController.shared.hide()
   }
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     guard let store = ParcelRuntime.store, store.busy else { return .terminateNow }
