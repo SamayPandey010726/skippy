@@ -6,7 +6,6 @@ struct WorkbenchView: View {
   @EnvironmentObject private var store: ParcelStore
   @Environment(\.openWindow) private var openWindow
   @State private var deleteConfirmation = false
-  @State private var showClipboard = false
   var body: some View {
     HStack(spacing: 0) {
       sidebar.frame(width: 196)
@@ -37,7 +36,6 @@ struct WorkbenchView: View {
           caption: "A name makes it easier to find and send again.", save: store.renameBox)
       }
       .sheet(isPresented: $store.showWelcome) { WelcomeView().environmentObject(store) }
-      .sheet(isPresented: $showClipboard) { ClipboardView().environmentObject(store) }
       .alert(
         "Something needs a little care",
         isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })
@@ -151,11 +149,6 @@ struct WorkbenchView: View {
       }
       Spacer()
       Button {
-        showClipboard = true
-      } label: {
-        Label("Clipboard", systemImage: "doc.on.clipboard")
-      }.buttonStyle(MossButtonStyle(secondary: true))
-      Button {
         store.addFilesPanel()
       } label: {
         Label("Add files", systemImage: "plus")
@@ -214,7 +207,6 @@ struct WorkbenchView: View {
         VStack(alignment: .leading, spacing: 12) {
           Text("Pack with care").font(.system(size: 12, weight: .semibold)).foregroundStyle(
             Ink.green)
-          PackProfilePicker()
           HStack {
             Text("Format").font(.system(size: 11)).foregroundStyle(Ink.secondary)
             Spacer()
