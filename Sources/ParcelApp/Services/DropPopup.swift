@@ -270,6 +270,9 @@ struct DropPopupView: View {
             ? "Drop \(dropCount) file\(dropCount == 1 ? "" : "s")" : "Drop files here"
         )
         .font(.system(size: 14, weight: .semibold)).foregroundStyle(p.accent)
+        .accessibilityLabel(
+          dropCount > 0
+            ? "Drop \(dropCount) file\(dropCount == 1 ? "" : "s") into Parcel" : "Drop files here to start a parcel")
         Text("Give your files somewhere delightful to wait.").font(.system(size: 10))
           .foregroundStyle(p.secondary)
       }.padding(.bottom, 14)

@@ -8,6 +8,7 @@ struct WorkbenchView: View {
   @State private var deleteConfirmation = false
   @State private var sidebarCollapsed = false
   @State private var inspectorHidden = false
+  @FocusState private var searchFocused: Bool
   var body: some View {
     GeometryReader { geo in
       let width = geo.size.width
@@ -46,6 +47,9 @@ struct WorkbenchView: View {
       .onReceive(
         NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
       ) { _ in store.refreshLicense() }
+      .onReceive(NotificationCenter.default.publisher(for: .parcelFocusSearch)) { _ in
+        searchFocused = true
+      }
       .sheet(isPresented: $store.showPrepare) { PrepareSheet().environmentObject(store) }
       .sheet(isPresented: $store.showRenameBox) {
         RenameSheet(
@@ -92,6 +96,9 @@ struct WorkbenchView: View {
           Ink.secondary)
         TextField("Search parcels and files", text: $store.searchText)
           .textFieldStyle(.plain).font(.system(size: 12))
+          .focused($searchFocused)
+          .accessibilityLabel("Search parcels and files")
+          .onExitCommand { searchFocused = false }
         if store.isSearching {
           Button {
             store.searchText = ""

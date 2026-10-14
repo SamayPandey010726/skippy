@@ -36,14 +36,26 @@ import UniformTypeIdentifiers
       p.ignoresMouseEvents = false
       panel = p
     }
-    // Position near the Dock: bottom-center of the main screen, just
-    // above where the Dock sits.
+    // Position near the Dock, adapting to the screen and Dock side:
+    // bottom Dock -> bottom-center; left Dock -> bottom-left;
+    // right Dock -> bottom-right. Height caps to the visible frame.
     if let screen = NSScreen.main {
       let frame = screen.visibleFrame
-      let w: CGFloat = 300
-      let h: CGFloat = 340
-      let x = frame.midX - w / 2
-      let y = frame.minY + 16
+      let w: CGFloat = min(300, frame.width - 32)
+      let h: CGFloat = min(340, frame.height - 48)
+      var x = frame.midX - w / 2
+      var y = frame.minY + 16
+      // Dock side heuristic: if the visible frame is inset on the left
+      // or right (Dock occupies that edge), hug the opposite side.
+      if frame.minX > screen.frame.minX + 40 {
+        x = frame.minX + 16
+      } else if screen.frame.maxX - frame.maxX > 40 {
+        x = frame.maxX - w - 16
+      }
+      // Top Dock (rare): anchor to the top instead.
+      if screen.frame.maxY - frame.maxY > 40 {
+        y = frame.maxY - h - 16
+      }
       panel?.setFrame(NSRect(x: x, y: y, width: w, height: h), display: true)
     }
     panel?.orderFrontRegardless()
@@ -111,6 +123,7 @@ struct DockPickerView: View {
         VStack(alignment: .leading, spacing: 2) {
           Text(box.name).font(.system(size: 12, weight: .medium)).lineLimit(1)
             .foregroundStyle(p.text)
+            .accessibilityLabel("\(box.name), \(box.items.count) piece\(box.items.count == 1 ? "" : "s")")
           Text("\(box.items.count) piece\(box.items.count == 1 ? "" : "s")")
             .font(.system(size: 10)).foregroundStyle(p.secondary)
         }

@@ -98,6 +98,8 @@ struct ItemListView: View {
       }.frame(width: 49, height: 49)
       VStack(alignment: .leading, spacing: 5) {
         Text(item.effectiveName).font(.system(size: 12, weight: .medium)).lineLimit(1)
+          .accessibilityLabel(
+            "\(item.effectiveName), \(item.isDirectory ? "folder" : byteString(item.effectiveBytes))\(item.isPinned ? ", pinned" : "")")
         HStack(spacing: 6) {
           Text(
             available

@@ -1,6 +1,10 @@
 import AppKit
 import SwiftUI
 
+extension Notification.Name {
+  static let parcelFocusSearch = Notification.Name("parcel-focus-search")
+}
+
 @main @MainActor struct ParcelApp: App {
   @NSApplicationDelegateAdaptor(ParcelAppDelegate.self) private var delegate
   @StateObject private var store = ParcelStore()
@@ -21,6 +25,11 @@ import SwiftUI
         Button("Paste into parcel") { store.paste() }.keyboardShortcut(
           "v", modifiers: [.command, .shift]
         ).disabled(store.busy)
+      }
+      CommandMenu("Go") {
+        Button("Focus search") {
+          NotificationCenter.default.post(name: .parcelFocusSearch, object: nil)
+        }.keyboardShortcut("f", modifiers: [.command])
       }
       CommandMenu("Parcel") {
         Button("Pack \(store.packaging.format.label)") { store.seal() }.keyboardShortcut(
