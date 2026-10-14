@@ -24,7 +24,7 @@ final class ClipboardHistory: ObservableObject {
   static let shared = ClipboardHistory()
 
   @Published private(set) var entries: [Entry] = []
-  @Published var isEnabled = UserDefaults.standard.object(forKey: "parcel-clipboard-watch") as? Bool ?? true {
+  @Published var isEnabled = UserDefaults.standard.object(forKey: "parcel-clipboard-watch") as? Bool ?? false {
     didSet { UserDefaults.standard.set(isEnabled, forKey: "parcel-clipboard-watch") }
   }
 

@@ -1,4 +1,5 @@
 import Foundation
+import ParcelCore
 
 /// Named, re-usable pack recipes. Inspired by CleanShot's editable project
 /// presets: save the full packaging setup once, re-apply it in one tap.

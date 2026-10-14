@@ -490,6 +490,7 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
       token = nil
       job = nil
       archiveURL = nil
+      lastManifest = ""  // Prepared names/sizes changed; rebuild the manifest on next copy.
       progress = 0
       save()
       if !failures.isEmpty { error = failures.joined(separator: "\n") }
