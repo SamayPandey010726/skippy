@@ -58,6 +58,7 @@ struct PreferencesView: View {
       Toggle("Soft sound when a parcel is sealed", isOn: $store.preferences.playSounds)
       Toggle("Self-cleaning shelf: clear unpinned items older than a day", isOn: $store.preferences.autoClearStale)
         .disabled(store.busy)
+      SkinPickerRow()
       Toggle(
         "Open Parcel at login",
         isOn: Binding(

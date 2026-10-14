@@ -195,19 +195,21 @@ import SwiftUI
 
 struct DropPopupView: View {
   @EnvironmentObject private var store: ParcelStore
+  @StateObject private var skinStore = SkinStore.shared
   @State private var dropCount = 0
   @State private var hovering = false
   var body: some View {
+    let p = skinStore.skin.palette
     ZStack {
-      RoundedRectangle(cornerRadius: 24).fill(Ink.paper)
+      RoundedRectangle(cornerRadius: 24).fill(p.paper)
         .shadow(color: .black.opacity(0.18), radius: 14, y: 5)
         .overlay(
           RoundedRectangle(cornerRadius: 24)
-            .stroke(hovering ? Ink.moss.opacity(0.6) : Ink.line.opacity(0.5), lineWidth: 1))
+            .stroke(hovering ? p.accentSoft.opacity(0.6) : p.line.opacity(0.5), lineWidth: 1))
       VStack(spacing: 9) {
         // Grip — drag to park the popup anywhere on screen.
         RoundedRectangle(cornerRadius: 2)
-          .fill(Ink.secondary.opacity(0.4))
+          .fill(p.secondary.opacity(0.4))
           .frame(width: 40, height: 4)
           .padding(.top, 12)
           .gesture(
@@ -223,9 +225,9 @@ struct DropPopupView: View {
           dropCount > 0
             ? "Drop \(dropCount) file\(dropCount == 1 ? "" : "s")" : "Drop files here"
         )
-        .font(.system(size: 14, weight: .semibold)).foregroundStyle(Ink.green)
+        .font(.system(size: 14, weight: .semibold)).foregroundStyle(p.accent)
         Text("A new parcel starts instantly.").font(.system(size: 10))
-          .foregroundStyle(Ink.secondary)
+          .foregroundStyle(p.secondary)
       }.padding(.bottom, 14)
     }
     .frame(width: 232, height: 232)
