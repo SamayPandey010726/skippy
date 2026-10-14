@@ -6,24 +6,41 @@ struct WorkbenchView: View {
   @EnvironmentObject private var store: ParcelStore
   @Environment(\.openWindow) private var openWindow
   @State private var deleteConfirmation = false
+  @State private var sidebarCollapsed = false
+  @State private var inspectorHidden = false
   var body: some View {
-    HStack(spacing: 0) {
-      sidebar.frame(width: 196)
-      Rectangle().fill(Ink.line.opacity(0.65)).frame(width: 1)
-      VStack(spacing: 0) {
-        header
-        QuickActionsBar().environmentObject(store)
-        ScrollView {
-          VStack(spacing: 20) {
-            ParcelHero()
-            ItemListView()
-          }.padding(.horizontal, 28).padding(.top, 12).padding(.bottom, 20)
+    GeometryReader { geo in
+      let width = geo.size.width
+      HStack(spacing: 0) {
+        if !sidebarCollapsed {
+          sidebar.frame(width: 196)
+          Rectangle().fill(Ink.line.opacity(0.65)).frame(width: 1)
         }
-        footer
+        VStack(spacing: 0) {
+          header
+          QuickActionsBar().environmentObject(store)
+          ScrollView {
+            VStack(spacing: 20) {
+              ParcelHero()
+              ItemListView()
+            }.padding(.horizontal, 28).padding(.top, 12).padding(.bottom, 20)
+          }
+          footer
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity).background(Ink.paper)
+        if !inspectorHidden {
+          Rectangle().fill(Ink.line.opacity(0.65)).frame(width: 1)
+          inspector.frame(width: 250)
+        }
       }
-      .frame(maxWidth: .infinity, maxHeight: .infinity).background(Ink.paper)
-      Rectangle().fill(Ink.line.opacity(0.65)).frame(width: 1)
-      inspector.frame(width: 250)
+      .onChange(of: width) { _, newWidth in
+        // Adaptive columns: as the window narrows, hide the inspector
+        // first, then collapse the sidebar — content never gets crushed.
+        if newWidth < 1150 { inspectorHidden = true }
+        if newWidth < 850 { sidebarCollapsed = true }
+        if newWidth >= 1150 { inspectorHidden = false }
+        if newWidth >= 850 { sidebarCollapsed = false }
+      }
     }.background(Ink.paper).foregroundStyle(Ink.text).preferredColorScheme(.light)
       .onAppear { AppController.shared.showWorkbench = { openWindow(id: "workbench") } }
       .onReceive(
@@ -148,6 +165,20 @@ struct WorkbenchView: View {
         }.buttonStyle(.plain).disabled(store.busy)
       }
       Spacer()
+      Button {
+        sidebarCollapsed.toggle()
+      } label: {
+        Image(systemName: "sidebar.left")
+      }.buttonStyle(.plain).foregroundStyle(Ink.secondary)
+        .help(sidebarCollapsed ? "Show sidebar" : "Hide sidebar")
+        .accessibilityLabel(sidebarCollapsed ? "Show sidebar" : "Hide sidebar")
+      Button {
+        inspectorHidden.toggle()
+      } label: {
+        Image(systemName: "sidebar.right")
+      }.buttonStyle(.plain).foregroundStyle(Ink.secondary)
+        .help(inspectorHidden ? "Show inspector" : "Hide inspector")
+        .accessibilityLabel(inspectorHidden ? "Show inspector" : "Hide inspector")
       Button {
         store.addFilesPanel()
       } label: {

@@ -2,7 +2,9 @@ import Foundation
 
 struct AppPreferences: Codable, Equatable {
   var cleanMetadata = true
-  var includeManifest = true
+  // Shreyash direction: basic ZIP stays, manifest emphasis removed.
+  // Saved user choices are preserved (load() decodes stored values).
+  var includeManifest = false
   var appendDate = false
   var playSounds = false
   var exportFolder: String?

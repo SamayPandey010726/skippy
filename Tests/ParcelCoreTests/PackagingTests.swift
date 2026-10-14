@@ -29,9 +29,12 @@ final class PackagingTests: XCTestCase {
     let a = try file("A/readme.txt", "hello from A")
     let b = try file("B/README.txt", "hello from B")
     let destination = root.appendingPathComponent("handoff.zip")
+    // Manifest behaviour under test: opt in explicitly (product default is off).
+    var manifestOptions = PackagingOptions()
+    manifestOptions.includeManifest = true
     let result = try PackageBuilder.build(
       inputs: [.init(url: a, desiredName: "readme.txt"), .init(url: b, desiredName: "README.txt")],
-      title: "Launch", destination: destination)
+      title: "Launch", destination: destination, options: manifestOptions)
     XCTAssertEqual(result.entries.map(\.name), ["readme.txt", "README (2).txt"])
     XCTAssertEqual(try String(contentsOf: a), "hello from A")
     XCTAssertEqual(try String(contentsOf: b), "hello from B")
@@ -72,14 +75,33 @@ final class PackagingTests: XCTestCase {
   func testManifestNameCollisionDoesNotClobberInput() throws {
     let a = try file("Parcel contents.txt", "my real document")
     let dest = root.appendingPathComponent("result.zip")
+    // Manifest behaviour under test: opt in explicitly (product default is off).
+    var manifestOptions = PackagingOptions()
+    manifestOptions.includeManifest = true
     let r = try PackageBuilder.build(
-      inputs: [.init(url: a, desiredName: a.lastPathComponent)], title: "Test", destination: dest)
+      inputs: [.init(url: a, desiredName: a.lastPathComponent)], title: "Test", destination: dest,
+      options: manifestOptions)
     XCTAssertEqual(r.entries.first?.name, "Parcel contents (2).txt")
     XCTAssertEqual(
       String(
         data: try readEntry(
           "Parcel contents (2).txt", archive: Archive(url: dest, accessMode: .read)),
         encoding: .utf8), "my real document")
+  }
+  func testDefaultBuildOmitsManifest() throws {
+    // Product default: manifest off (Shreyash direction). A plain build
+    // must not write "Parcel contents.txt", and an input with that name
+    // keeps its name (no collision with a manifest entry).
+    let a = try file("Parcel contents.txt", "my real document")
+    let dest = root.appendingPathComponent("result.zip")
+    let r = try PackageBuilder.build(
+      inputs: [.init(url: a, desiredName: a.lastPathComponent)], title: "Test", destination: dest)
+    XCTAssertEqual(r.entries.map(\.name), ["Parcel contents.txt"])
+    let zip = try Archive(url: dest, accessMode: .read)
+    XCTAssertEqual(
+      String(
+        data: try readEntry("Parcel contents.txt", archive: zip), encoding: .utf8),
+      "my real document")
   }
   func testFailureDoesNotPublishOrLeavePartialArchive() throws {
     let a = try file("okay.txt", "okay")

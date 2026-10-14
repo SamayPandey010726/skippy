@@ -6,7 +6,7 @@ import SwiftUI
   @StateObject private var store = ParcelStore()
   var body: some Scene {
     Window("Parcel", id: "workbench") {
-      WorkbenchView().environmentObject(store).frame(minWidth: 980, minHeight: 700)
+      WorkbenchView().environmentObject(store).frame(minWidth: 720, minHeight: 520)
         .onAppear {
           ParcelRuntime.store = store
           AppController.shared.install(store: store)
