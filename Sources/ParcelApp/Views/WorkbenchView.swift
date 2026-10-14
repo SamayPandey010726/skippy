@@ -205,8 +205,10 @@ struct WorkbenchView: View {
           Divider().overlay(Ink.line)
         }
         VStack(alignment: .leading, spacing: 12) {
-          Text("Pack with care").font(.system(size: 12, weight: .semibold)).foregroundStyle(
+          Text("Pack as ZIP").font(.system(size: 12, weight: .semibold)).foregroundStyle(
             Ink.green)
+          Text("Only when you need a package. The shelf itself is the product.")
+            .font(.system(size: 10)).foregroundStyle(Ink.secondary).lineSpacing(3)
           HStack {
             Text("Format").font(.system(size: 11)).foregroundStyle(Ink.secondary)
             Spacer()

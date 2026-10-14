@@ -21,11 +21,6 @@ struct QuickActionsBar: View {
       ) { store.airDrop() }
       .disabled(store.busy || store.items.isEmpty)
       QuickActionButton(
-        icon: "link", label: "Copy link",
-        help: "Copy a shareable link to the packed parcel"
-      ) { store.copyArchiveLink() }
-      .disabled(!store.ready || store.busy || !store.canExport)
-      QuickActionButton(
         icon: "list.bullet", label: "Contents",
         help: "Copy the contents list to the clipboard"
       ) { store.copyManifest() }

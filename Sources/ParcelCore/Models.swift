@@ -115,7 +115,7 @@ public struct ImageRecipe: Codable, Equatable, Sendable {
 }
 public struct PackagingOptions: Codable, Equatable, Sendable {
   public var cleanMacMetadata = true
-  public var includeManifest = true
+  public var includeManifest = false  // Shreyash: basic ZIP stays; manifest emphasis removed.
   public var appendDate = false
   public var compressArchive = true
   public var format: PackFormat = .zip
