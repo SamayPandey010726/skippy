@@ -56,9 +56,11 @@ import SwiftUI
   func applicationDidBecomeActive(_ notification: Notification) {
     // Spring Loading: the user dragged a file over Parcel's Dock icon and
     // held it. Show the picker near the Dock so they can drop into a
-    // parcel without opening the app window.
+    // parcel without opening the app window. Also ensure the floating
+    // shelf is visible as a safety net.
     if DragMonitor.shared.isDragging {
       DockPickerController.shared.show()
+      DropPopupController.shared.showIfDragging()
     }
   }
   func applicationDidResignActive(_ notification: Notification) {

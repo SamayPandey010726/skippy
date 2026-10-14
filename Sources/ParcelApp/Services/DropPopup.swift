@@ -95,8 +95,21 @@ import SwiftUI
   private func showAt(_ origin: CGPoint) {
     ensurePanel()
     guard let p = panel else { return }
-    p.setFrameOrigin(origin)
-    if p.isVisible { return }
+    // If the saved origin drifted off-screen (display changed), reset
+    // to the main screen's center so the popup is never invisible.
+    var target = origin
+    let onAnyScreen = NSScreen.screens.contains { $0.frame.contains(target) }
+    if !onAnyScreen {
+      if let screen = NSScreen.main {
+        target = CGPoint(x: screen.frame.midX - 116, y: screen.frame.midY - 116)
+      }
+    }
+    p.setFrameOrigin(target)
+    if p.isVisible {
+      // Was mid-fade-out: bring alpha back, don't leave it invisible.
+      p.alphaValue = 1
+      return
+    }
     p.orderFrontRegardless()
     if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
       p.alphaValue = 1
@@ -107,6 +120,11 @@ import SwiftUI
         p.animator().alphaValue = 1
       }
     }
+  }
+
+  /// Show the popup if a drag is in flight (spring-load safety net).
+  func showIfDragging() {
+    if DragMonitor.shared.isDragging { showForDrag() }
   }
 
   private func hide() {
