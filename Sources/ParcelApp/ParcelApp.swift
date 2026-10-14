@@ -31,7 +31,7 @@ import SwiftUI
           store.imageItems.isEmpty || store.busy || !store.canExport)
         Button("Copy contents list") { store.copyManifest() }.keyboardShortcut(
           "c", modifiers: [.command, .shift])
-        Button("Copy shareable link") { store.copyArchiveLink() }.disabled(
+        Button("Copy local file link") { store.copyArchiveLink() }.disabled(
           !store.ready || store.busy || !store.canExport)
         Button("Show drop popup") { AppController.shared.toggleDropPopup() }.keyboardShortcut(
           "p", modifiers: [.control, .option])

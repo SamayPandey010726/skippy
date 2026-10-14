@@ -746,15 +746,16 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     Toaster.shared.copied("Parcel \(zip.pathExtension.uppercased())")
     notice = "Parcel \(zip.pathExtension.uppercased()) copied — paste it anywhere."
   }
-  /// A shareable file link to the packed parcel — paste it into any app on
-  /// this Mac to hand the parcel over.
+  /// A LOCAL file link to the packed parcel — it only works on this
+  /// Mac, it is not a cloud/internet share link. Paste it into any app
+  /// on this Mac to hand the parcel over.
   func copyArchiveLink() {
     guard canExport, !busy, ready, let url = archiveURL else { return }
     let pb = NSPasteboard.general
     pb.clearContents()
     pb.setString(url.absoluteString, forType: .string)
-    Toaster.shared.copied("Share link")
-    notice = "Link copied — it opens this parcel on your Mac."
+    Toaster.shared.copied("Local file link")
+    notice = "Local file link copied — it opens this parcel on your Mac only, not over the internet."
   }
   /// Parcels with a packed file on disk, newest first — for the menu bar.
   var recentParcels: [ParcelBox] {

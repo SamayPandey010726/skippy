@@ -16,6 +16,10 @@ import SwiftUI
   private var moveBase: CGPoint?
   private var hideWork: DispatchWorkItem?
   private var manualSummon = false
+  /// Generation guard: each show bumps this. A hide completion from an
+  /// older generation must not orderOut a panel that was re-shown since
+  /// (rapid summon/dismiss/reopen would otherwise leave it invisible).
+  private var showGeneration = 0
 
   var isEnabled: Bool {
     get { UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true }
@@ -105,6 +109,7 @@ import SwiftUI
       }
     }
     p.setFrameOrigin(target)
+    showGeneration += 1
     if p.isVisible {
       // Was mid-fade-out: bring alpha back, don't leave it invisible.
       p.alphaValue = 1
@@ -134,10 +139,14 @@ import SwiftUI
     if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
       p.orderOut(nil)
     } else {
+      let generation = showGeneration
       NSAnimationContext.runAnimationGroup({ ctx in
         ctx.duration = 0.14
         p.animator().alphaValue = 0
-      }, completionHandler: { p.orderOut(nil) })
+      }, completionHandler: {
+        // Only order out if no newer show happened during the fade.
+        if generation == self.showGeneration { p.orderOut(nil) }
+      })
     }
   }
 

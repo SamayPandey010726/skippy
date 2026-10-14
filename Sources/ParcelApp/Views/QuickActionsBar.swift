@@ -52,7 +52,7 @@ private struct QuickActionButton: View {
             .stroke(Ink.line.opacity(0.8), lineWidth: 1)
         )
         .foregroundStyle(isEnabled ? Ink.green : Ink.secondary.opacity(0.5))
-        .animation(.easeInOut(duration: 0.15), value: hovering)
+        .animation(Motion.hoverLift, value: hovering)
     }.buttonStyle(.plain)
       .help(help)
       .onHover { hovering = $0 }

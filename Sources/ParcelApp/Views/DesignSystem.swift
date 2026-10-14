@@ -26,7 +26,7 @@ struct MossButtonStyle: ButtonStyle {
       RoundedRectangle(cornerRadius: 11).stroke(secondary ? Ink.line : Ink.green, lineWidth: 1)
     )
     .scaleEffect(configuration.isPressed ? 0.97 : 1)
-    .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    .animation(Motion.pressSquish, value: configuration.isPressed)
   }
 }
 struct QuietButtonStyle: ButtonStyle {

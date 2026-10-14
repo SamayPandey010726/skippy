@@ -122,7 +122,7 @@ struct WorkbenchView: View {
               .background(
                 store.selectedBox == box.id ? Ink.paleGreen : Color.clear,
                 in: RoundedRectangle(cornerRadius: 11))
-              .animation(.easeInOut(duration: 0.2), value: store.selectedBox)
+              .animation(Motion.snappyTap, value: store.selectedBox)
             }.buttonStyle(.plain).disabled(store.busy)
           }
           if store.isSearching && store.filteredBoxes.isEmpty {
@@ -191,7 +191,7 @@ struct WorkbenchView: View {
       Image(systemName: "checkmark.shield").font(.system(size: 12)).foregroundStyle(Ink.moss)
       Text(store.notice ?? "Your originals always stay safe.").font(.system(size: 11))
         .foregroundStyle(Ink.secondary).lineLimit(2)
-        .animation(.easeInOut(duration: 0.25), value: store.notice)
+        .animation(Motion.snappyTap, value: store.notice)
       Spacer()
       if store.notice != nil {
         Button {
@@ -332,7 +332,7 @@ struct WorkbenchView: View {
             Button {
               store.copyArchiveLink()
             } label: {
-              Image(systemName: "link").help("Copy a shareable link to the packed parcel")
+              Image(systemName: "link").help("Copy a local file link to the packed parcel (this Mac only)")
             }.buttonStyle(QuietButtonStyle()).disabled(
               !store.ready || store.busy || !store.canExport)
           }
@@ -404,7 +404,7 @@ struct ParcelHero: View {
         Text(subtitle).font(.system(size: 12)).foregroundStyle(Ink.secondary)
           .multilineTextAlignment(.center)
       }.padding(.top, 2).padding(.horizontal, 20)
-      .animation(.easeInOut(duration: 0.25), value: store.phase)
+      .animation(Motion.snappyTap, value: store.phase)
       if store.busy {
         VStack(spacing: 9) {
           ProgressView(value: store.progress).tint(Ink.moss)
