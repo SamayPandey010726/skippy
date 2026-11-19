@@ -219,6 +219,19 @@ key(kVK_ANSI_P, flags: [.maskControl, .maskAlternate, .maskCommand])
 check("global shortcut opens dashboard") {
   panels().contains { $0[kCGWindowName as String] as? String == "Skippy · Skippy" }
 }
+key(kVK_ANSI_K, flags: .maskCommand)
+check("finder opens over dashboard") { control(kAXTextFieldRole, "Find an arrow") != nil }
+typeText("cal"); key(kVK_DownArrow); key(kVK_Return)
+check("Down and Return select the second matching tool") {
+  panels().contains { $0[kCGWindowName as String] as? String == "Skippy · Calculator" }
+}
+key(kVK_ANSI_K, flags: .maskCommand)
+check("finder reopens over calculator") { control(kAXTextFieldRole, "Find an arrow") != nil }
+typeText("zzzz"); check("finder explains an empty result") { contains("No matching arrows") }
+key(kVK_Escape)
+check("Escape cancels search and preserves the current tool") {
+  panels().contains { $0[kCGWindowName as String] as? String == "Skippy · Calculator" } && !contains("No matching arrows")
+}
 let arrows = ["File Shelf", "Clipboard", "Extract text", "Pick colour", "Timer", "Notes", "QR tools", "Search",
               "Apps", "Music", "Downloads", "Stay awake", "Recent actions", "Mac", "Calendar", "Calculator", "Screenshots", "Draw on screen"]
 for name in arrows {

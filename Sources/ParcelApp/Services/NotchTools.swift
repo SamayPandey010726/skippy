@@ -670,6 +670,8 @@ struct NotchToolsView: View {
   var skin: ParcelSkin
   @ObservedObject private var shortcuts = CourierShortcutStore.shared
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @State private var feedback: String?
+  @State private var feedbackRevision = 0
   @State private var qrInput = ""
   @State private var webQuery = ""
   @State private var calculation = ""
@@ -693,8 +695,8 @@ struct NotchToolsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .transition(.opacity.combined(with: .offset(y: 4)))
       HStack {
-        if tools.status != "Ready" {
-          Text(tools.status).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+        if let feedback {
+          Text(feedback).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
         }
         Spacer()
         if shelf.choosingArrow {
@@ -712,6 +714,15 @@ struct NotchToolsView: View {
     }
     .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 7)
     .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: shelf.activeModule)
+    .onReceive(tools.$status.dropFirst()) { status in
+      feedback = status
+      feedbackRevision += 1
+    }
+    .task(id: feedbackRevision) {
+      guard feedback != nil else { return }
+      do { try await Task.sleep(for: .seconds(3)) } catch { return }
+      feedback = nil
+    }
     .task(id: shelf.activeModule.rawValue + (shelf.isArrowPreview ? "-preview" : "-open")) {
       if shelf.activeModule == .system {
         var last: MacReadings.Sample?

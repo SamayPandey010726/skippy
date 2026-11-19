@@ -139,6 +139,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     if inside {
       if !unfolded { setUnfolded(true) }
     } else {
+      (previewTarget as? ArrowButton)?.pointing = false
       previewTarget = nil; previewWork?.cancel()
       let work = DispatchWorkItem { [weak self] in
         guard let self else { return }
@@ -204,6 +205,8 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     let button = icons.first { !$0.isHidden && $0.isEnabled && $0.frame.contains(point) }
     guard previewTarget !== button else { return }
     previewWork?.cancel()
+    (previewTarget as? ArrowButton)?.pointing = false
+    (button as? ArrowButton)?.pointing = true
     previewTarget = button
     guard let button, let module = arrowModules[button] else { return }
     let work = DispatchWorkItem { [weak self, weak button] in
@@ -289,7 +292,6 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
         frame: .zero, inMenu: surface == .menu) { [weak self] view in self?.show(module, from: view) }
       button.toolTip = nil
       arrowModules[button] = module
-      button.onHover = { [weak self] _ in self?.trackArrow() }
       icons.append(button)
     }
     for app in tools.pinnedApps.prefix(5 - icons.count) {
@@ -365,6 +367,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
   override func mouseExited(with event: NSEvent) { pointer?(false) }
   func addIcon(_ title: String, image: NSImage?, frame: CGRect, inMenu: Bool, action: @escaping (NSView) -> Void) -> ArrowButton {
     let button = ArrowButton(frame: frame)
+    button.onHover = { [weak self] in self?.pointerMoved?() }
     button.actionHandler = action; button.image = image
     button.imagePosition = .imageOnly; button.isBordered = false; button.bezelStyle = .accessoryBarAction
     button.contentTintColor = inMenu ? .labelColor : .white
@@ -376,21 +379,21 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
 }
 
 final class ArrowButton: NSButton {
-  var onHover: ((Bool) -> Void)?
+  var onHover: (() -> Void)?
   private var tracking: NSTrackingArea?
-  private var pointing = false
+  var pointing = false { didSet { if oldValue != pointing { needsDisplay = true } } }
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
     if let tracking { removeTrackingArea(tracking) }
     let area = NSTrackingArea(rect: .zero, options: [.activeAlways, .inVisibleRect, .mouseMoved, .mouseEnteredAndExited], owner: self)
     addTrackingArea(area); tracking = area
   }
-  override func mouseEntered(with event: NSEvent) { pointing = true; needsDisplay = true; onHover?(true) }
-  override func mouseMoved(with event: NSEvent) { onHover?(true) }
-  override func mouseExited(with event: NSEvent) { pointing = false; needsDisplay = true; onHover?(false) }
+  override func mouseEntered(with event: NSEvent) { onHover?() }
+  override func mouseMoved(with event: NSEvent) { onHover?() }
+  override func mouseExited(with event: NSEvent) { onHover?() }
   override func draw(_ dirtyRect: NSRect) {
     if pointing && isEnabled {
-      NSColor.labelColor.withAlphaComponent(0.18).setFill()
+      (contentTintColor ?? .labelColor).withAlphaComponent(0.18).setFill()
       NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 6, yRadius: 6).fill()
     }
     super.draw(dirtyRect)
