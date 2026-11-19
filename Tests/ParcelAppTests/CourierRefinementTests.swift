@@ -120,17 +120,22 @@ final class CourierRefinementTests: XCTestCase {
   @MainActor func testPreviewHandoffCancelsExpiryUntilPointerLeavesPreview() async throws {
     let preview = CourierHoverPreview(enterDelay: .milliseconds(5), exitDelay: .milliseconds(90))
     let item = ParcelItem(sourcePath: "/handoff.csv", displayName: "Handoff.csv")
+    let shown = expectation(description: "File preview is on screen before pointer handoff")
+    let observed = preview.$item.first { $0?.id == item.id }.sink { _ in shown.fulfill() }
+    defer { observed.cancel() }
     preview.hover(item, inside: true)
-    try await Task.sleep(for: .milliseconds(25))
+    await fulfillment(of: [shown], timeout: 2)
     preview.hover(item, inside: false)
     preview.previewHover(true)
     try await Task.sleep(for: .milliseconds(140))
     XCTAssertEqual(preview.item?.id, item.id)
     XCTAssertTrue(preview.isInsidePreview)
+    let hidden = expectation(description: "Preview expires after leaving")
+    let removed = preview.$item.first { $0 == nil }.sink { _ in hidden.fulfill() }
+    defer { removed.cancel() }
     preview.previewHover(false)
-    try await Task.sleep(for: .milliseconds(35))
     XCTAssertNotNil(preview.item)
-    try await Task.sleep(for: .milliseconds(100))
+    await fulfillment(of: [hidden], timeout: 2)
     XCTAssertNil(preview.item)
     preview.clear()
     XCTAssertFalse(preview.isInsidePreview)
