@@ -13,7 +13,7 @@ These are observations of the vendors’ public demonstrations. The transition t
 
 ## Reproducing the checks
 
-Run the **Skippy checks** workflow or use a Mac with Xcode. The workflow builds the universal app, tests the native services, launches it, drives its controls and records the desktop. The keyboard test uses the real global shortcut and public accessibility interfaces. It verifies the front panel’s title after selecting each of the 18 arrows. Its log distinguishes keyboard navigation, native control actions and service tests. [Workflow](../.github/workflows/check.yml) · [Keyboard checks](../Scripts/check-arrow-navigation.swift) · [Hover recorder](../Scripts/record-quiver.swift)
+Run the **Skippy checks** workflow or use a Mac with Xcode. The workflow builds the universal app, tests the native services, launches it, drives its controls and records the desktop. The keyboard test uses the real global shortcut and public accessibility interfaces. It verifies the front panel’s title after selecting each of the 18 arrows. The runner captures each arrow from its native window. It also relaunches with the Menu bar setting, moves the pointer from the real status item into its shelf and checks that leaving both releases the space. Its log distinguishes keyboard navigation, native control actions and service tests. [Workflow](../.github/workflows/check.yml) · [Keyboard checks](../Scripts/check-arrow-navigation.swift) · [Hover recorder](../Scripts/record-quiver.swift)
 
 | Interaction | Check |
 | --- | --- |
@@ -24,3 +24,28 @@ Run the **Skippy checks** workflow or use a Mac with Xcode. The workflow builds 
 | Desktop and devices | The Mac build runs on the macOS runner. The separate device job boots iPhone and iPad simulators and captures their home screens. The application target is macOS. |
 
 The feature inventory and hardware-dependent acceptance cases are in the [Skippy brief](../SKIPPY-BRIEF.md).
+
+## Tool acceptance cases
+
+| Arrow | What to verify |
+| --- | --- |
+| File Shelf | Open the sample text and image through Launch Services and read their filenames from the shelf. Native service tests cover file promises, paste, preview, conversion and ZIP contents. |
+| Clipboard | Capture disposable text from the system pasteboard, find it by query, copy it from history and compare the pasteboard. Concealed and paused fixtures must stay out of history. |
+| Extract text | Write a generated image containing “SKIPPY TEST” to the system clipboard. Run Extract text and read the recognized words back. |
+| Pick colour | Activate the native sampler and click a screen pixel. Verify that the clipboard contains a six-digit hex value and the next arrow can open. |
+| Timer | Start a countdown and stop it from the running app. |
+| Notes | Select everything in a populated note, type a replacement containing a slash, copy the note and compare the entire string. A separate persistence test reloads a note. |
+| QR tools | Type a payload and copy the generated QR image. A Vision test decodes the generated code and checks its payload. |
+| Search | Edit a query in the running app. Verify URL construction for spaces, literal plus signs, ampersands and Unicode. |
+| Apps | Open the launcher and find Finder in the running application list. |
+| Music | Check the local playback control. Load an Apple-provided AIFF through the native player and check its playback or output-unavailable state. |
+| Downloads | Create a disposable download and find it in the view. Test date ordering, the twelve-file limit and directory exclusion in a separate fixture. |
+| Stay awake | Start and release a real sleep-prevention session through its two control states. |
+| Recent actions | Read the activity list or its empty state. Store tests check recency, retention and ranking of repeatable conversions. |
+| Mac | Read the host's actual OS version from the live panel. |
+| Calendar | Verify the Connect action on a fresh account. Populated calendars need an account with consent. |
+| Calculator | Enter “(24 + 8) / 2”, copy the result, and compare the pasteboard to “16”. |
+| Screenshots | Drag a region with the system capture tool, copy the joined image and clear the sequence. A separate test checks two input sizes and the final dimensions. |
+| Draw on screen | Open the native overlay, draw a stroke, verify Undo becomes available, undo it and close the overlay. |
+
+Public demo videos and a hosted Mac cannot establish comparative performance on physical MacBook displays. Dock magnification, a physical camera cutout, third-party player accounts, populated calendars and the audible output of the runner remain separate acceptance cases.

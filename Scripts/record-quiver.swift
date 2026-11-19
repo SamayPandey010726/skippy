@@ -44,10 +44,10 @@ escape()
 Thread.sleep(forTimeInterval: 0.5)
 let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first
 let priorApp = NSWorkspace.shared.frontmostApplication
-if priorApp?.processIdentifier == pid { _ = finder?.activate(options: [.activateIgnoringOtherApps]) }
+if priorApp?.processIdentifier == pid_t(pid) { _ = finder?.activate(options: [.activateIgnoringOtherApps]) }
 Thread.sleep(forTimeInterval: 0.3)
 let baselineFocus = NSWorkspace.shared.frontmostApplication?.processIdentifier
-guard let baselineFocus, baselineFocus != pid else { throw RecordingError.focusChanged }
+guard let baselineFocus, baselineFocus != pid_t(pid) else { throw RecordingError.focusChanged }
 let screen = CGDisplayBounds(CGMainDisplayID())
 guard let mark = windows().first(where: { (26...42).contains($0.width) && (24...44).contains($0.height) }) else {
   print("Skippy windows:", windows()); throw RecordingError.missingWindow

@@ -241,7 +241,10 @@ private struct ClipboardShelfView: View {
       TextField("Search text, images, files, today…", text: $history.search)
         .textFieldStyle(.roundedBorder).font(.system(size: 10)).focused($searchFocused)
       List {
-        ForEach(history.filtered) { entry in row(entry).listRowSeparator(.hidden) }
+        ForEach(history.filtered) { entry in
+          ClipboardHistoryRow(entry: entry, history: history, skin: skin, addToParcel: addToParcel, processImage: processImage)
+            .listRowSeparator(.hidden)
+        }
         if history.filtered.isEmpty {
           Text("Nothing copied yet.").font(.system(size: 10)).padding(24).frame(maxWidth: .infinity)
             .listRowSeparator(.hidden)
@@ -253,7 +256,15 @@ private struct ClipboardShelfView: View {
       .onReceive(NotificationCenter.default.publisher(for: .parcelFocusClipboardSearch)) { _ in searchFocused = true }
   }
 
-  private func row(_ entry: ClipboardEntry) -> some View {
+}
+
+struct ClipboardHistoryRow: View {
+  let entry: ClipboardEntry
+  @ObservedObject var history: ClipboardHistoryStore
+  let skin: ParcelSkin
+  var addToParcel: (ClipboardEntry) -> Void
+  var processImage: (ClipboardEntry) -> Void
+  var body: some View {
     HStack(spacing: 8) {
       ZStack {
         Image(systemName: entry.kind.symbol).frame(width: 22).foregroundStyle(skin.palette.accent)
@@ -269,7 +280,9 @@ private struct ClipboardShelfView: View {
       .contentShape(Rectangle()).onTapGesture { history.copy(entry) }
       Spacer(minLength: 0)
       Button { history.copy(entry) } label: { Image(systemName: "doc.on.doc") }.buttonStyle(.plain)
+        .accessibilityLabel("Copy " + entry.title)
       Button { history.remove(entry.id) } label: { Image(systemName: "xmark") }.buttonStyle(.plain)
+        .accessibilityLabel("Remove " + entry.title)
     }
     .padding(8).frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))

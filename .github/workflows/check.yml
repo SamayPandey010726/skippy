@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Compiler and native tests
-        run: swift test
+        run: PARCEL_PREVIEW_DIRECTORY="$RUNNER_TEMP/skippy-layout-review" swift test
       - name: Compile and bundle Skippy
         if: ${{ !cancelled() }}
         run: |

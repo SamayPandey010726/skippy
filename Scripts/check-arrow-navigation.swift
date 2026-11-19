@@ -129,7 +129,12 @@ func verifyContent(_ name: String) {
     check("copy edited note") { press("Copy note") }
     check("note contains literal slash") { board.string(forType: .string) == "Skippy / focus" }
   case "Clipboard":
-    check("clipboard search field") { control(kAXTextFieldRole) != nil }
+    board.clearContents(); board.setString("Skippy clipboard fixture", forType: .string)
+    check("capture clipboard change") { contains("Skippy clipboard fixture") }
+    enter("clipboard fixture")
+    board.clearContents(); board.setString("temporary value", forType: .string)
+    check("recall a filtered clipboard entry") { press("Copy Skippy clipboard fixture") }
+    check("clipboard restores the selected contents") { board.string(forType: .string) == "Skippy clipboard fixture" }
   case "QR tools":
     enter("Skippy QA")
     check("copy generated QR") { press("Copy QR") }
@@ -189,11 +194,24 @@ let fixture = downloads.appendingPathComponent("Skippy QA.txt")
 try Data("Skippy test fixture".utf8).write(to: fixture, options: .withoutOverwriting)
 defer { try? FileManager.default.removeItem(at: fixture) }
 check("Accessibility can exercise UI controls") { AXIsProcessTrusted() }
+let runningApp = NSRunningApplication(processIdentifier: pid_t(pid))
+if !panels().isEmpty {
+  _ = runningApp?.activate(options: [.activateIgnoringOtherApps])
+  key(kVK_Escape)
+  check("clear a previously open tool") { panels().isEmpty }
+}
 key(kVK_ANSI_P, flags: [.maskControl, .maskAlternate, .maskCommand])
-check("global shortcut opens dashboard") { !panels().isEmpty }
+check("global shortcut opens dashboard") {
+  panels().contains { $0[kCGWindowName as String] as? String == "Skippy · Skippy" }
+}
 let arrows = ["File Shelf", "Clipboard", "Extract text", "Pick colour", "Timer", "Notes", "QR tools", "Search",
               "Apps", "Music", "Downloads", "Stay awake", "Recent actions", "Mac", "Calendar", "Calculator", "Screenshots", "Draw on screen"]
 for name in arrows {
+  if panels().isEmpty {
+    controlFailures.append("Tool dismissed unexpectedly before " + name)
+    key(kVK_ANSI_P, flags: [.maskControl, .maskAlternate, .maskCommand])
+    check("recover dashboard before " + name) { !panels().isEmpty }
+  }
   key(kVK_ANSI_K, flags: .maskCommand)
   Thread.sleep(forTimeInterval: 0.35)
   for character in name {

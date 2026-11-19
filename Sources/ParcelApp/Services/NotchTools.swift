@@ -1105,20 +1105,8 @@ struct NotchToolsView: View {
             }
           }
           ForEach(clipboard.filtered.prefix(80)) { entry in
-            HStack(spacing: 8) {
-              Image(systemName: entry.kind.symbol).font(.system(size: 10, weight: .bold))
-                .foregroundStyle(skin.palette.accent).frame(width: 26, height: 26)
-                .background(skin.palette.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
-              VStack(alignment: .leading, spacing: 1) {
-                Text(entry.title).lineLimit(1).font(.system(size: 10.5, weight: .medium))
-                Text(entry.detail).lineLimit(1).font(.system(size: 8)).foregroundStyle(skin.palette.secondary)
-              }
-              Spacer()
-              Image(systemName: "doc.on.doc").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 8).frame(height: 39)
-            .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .contentShape(Rectangle()).onTapGesture { clipboard.copy(entry) }
+            ClipboardHistoryRow(entry: entry, history: clipboard, skin: skin,
+                                addToParcel: shelf.addClipboardEntry, processImage: shelf.processClipboardImage)
           }
         }
       }
