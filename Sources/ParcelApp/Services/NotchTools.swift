@@ -183,7 +183,7 @@ struct NotchMacro: Codable, Identifiable {
   private func scheduleTimerNotification() {
     guard let end = timerEnd else { return }
     let content = UNMutableNotificationContent()
-    content.title = "Parcel timer"
+    content.title = "Skippy timer"
     content.body = "Time is up."
     content.sound = .default
     let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, end.timeIntervalSinceNow), repeats: false)

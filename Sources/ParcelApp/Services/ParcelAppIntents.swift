@@ -21,7 +21,7 @@ struct SummonParcelCourierIntent: AppIntent {
 }
 
 struct AddFilesToParcelIntent: AppIntent {
-  static let title: LocalizedStringResource = "Add Files to Parcel"
+  static let title: LocalizedStringResource = "Add Files to File Shelf"
   static let description = IntentDescription("Adds files to your parcel.")
   static var openAppWhenRun = false
 
@@ -37,7 +37,7 @@ struct AddFilesToParcelIntent: AppIntent {
     ParcelRuntime.store.ingest(urls, into: destination)
     let after = ParcelRuntime.store.boxes.first(where: { $0.id == destination })?.items.count ?? before
     let added = max(0, after - before)
-    return .result(dialog: "Added \(added) file\(added == 1 ? "" : "s") to Parcel.")
+    return .result(dialog: "Added \(added) file\(added == 1 ? "" : "s") to File Shelf.")
   }
 }
 
@@ -60,7 +60,7 @@ struct PackParcelIntent: AppIntent {
 
 struct SearchParcelsIntent: AppIntent {
   static let title: LocalizedStringResource = "Search Skippy"
-  static let description = IntentDescription("Opens Parcel and searches parcel names and file metadata.")
+  static let description = IntentDescription("Opens Skippy and searches parcel names and file metadata.")
   static var openAppWhenRun = true
 
   @Parameter(title: "Search") var query: String
@@ -69,7 +69,7 @@ struct SearchParcelsIntent: AppIntent {
     ParcelRuntime.store.searchText = query
     DropPopupController.shared.summon()
     DropPopupController.shared.showSearch()
-    return .result(dialog: "Searching Parcel for \(query).")
+    return .result(dialog: "Searching Skippy for \(query).")
   }
 }
 

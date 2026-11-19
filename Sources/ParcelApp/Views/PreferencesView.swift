@@ -5,6 +5,7 @@ import SwiftUI
 
 struct PreferencesView: View {
   @EnvironmentObject private var store: ParcelStore
+  @ObservedObject private var clipboardHistory = ClipboardHistoryStore.shared
   @ObservedObject private var quiver = SkippyQuiver.shared
   @State private var tab = 0
   @State private var licenceText = ""
@@ -226,6 +227,7 @@ struct PreferencesView: View {
         Slider(value: Binding(get: { Double(courier.interfaceScale) }, set: { courier.interfaceScale = CGFloat($0) }),
           in: 0.75...1.5, step: 0.05).accessibilityLabel("Universal interface size")
         SkinPickerRow()
+        Toggle("Keep local clipboard history", isOn: $clipboardHistory.captureEnabled)
         Picker("Attach quiver to", selection: $quiver.surface) {
           ForEach(QuiverSurface.allCases) { Text($0.rawValue).tag($0) }
         }
@@ -309,7 +311,7 @@ struct PreferencesView: View {
         get: { courier.shiftConvertAppearance }, set: { courier.shiftConvertAppearance = $0 })) {
         ForEach(QuickConvertAppearance.allCases) { Text($0.label).tag($0) }
       }.pickerStyle(.segmented).disabled(!courier.shiftConvertEnabled)
-      Text("Start dragging image, PDF, video, document, or spreadsheet files, then hold Shift. Drop onto a relevant output in the compact ribbon. The current format is hidden; every result is saved in Parcel.")
+      Text("Start dragging image, PDF, video, document, or spreadsheet files, then hold Shift. Drop onto a relevant output in the compact ribbon. The current format is hidden; every result is saved in Skippy.")
         .font(.system(size: 11)).foregroundStyle(Ink.secondary)
       Text("Right-click selected files or folders in Finder → Services → Send to Skippy. macOS controls which apps expose Services. If hidden, enable it in System Settings → Keyboard → Keyboard Shortcuts → Services.")
         .font(.system(size: 11)).foregroundStyle(Ink.secondary)
@@ -467,7 +469,7 @@ struct PreferencesView: View {
         }
       }
       Text(
-        "A valid signed licence is required before Parcel's shelf, clipboard and file tools become available."
+        "A valid signed licence is required before Skippy's shelf, clipboard and file tools become available."
       ).font(.system(size: 11)).foregroundStyle(Ink.secondary).lineSpacing(4)
     }
   }
@@ -478,7 +480,7 @@ struct PreferencesView: View {
         VStack(alignment: .leading, spacing: 7) {
           Text("Put down. Navigate.\nPick up.").font(.custom(Ink.serif, size: 24)).foregroundStyle(
             Ink.green)
-          Text("Parcel 1.0.0").font(.system(size: 11)).foregroundStyle(Ink.secondary)
+          Text("Skippy 1.0.0").font(.system(size: 11)).foregroundStyle(Ink.secondary)
         }
       }
       Text(

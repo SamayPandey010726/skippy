@@ -15,7 +15,7 @@ The grid supports five widget sizes, rearrangement, pinning, scrolling in whole 
 | Arrow | Capabilities |
 | --- | --- |
 | File Shelf | Temporarily collect files, folders, images, text and links. Add, drop, paste, copy, open and drag files between apps. Gather named collections, pin a destination, preview files, process copies and pack ZIP archives. |
-| Clipboard | Search local text, link, image and file history. Copy entries back, drag them out, shorten links on request and remove entries. |
+| Clipboard | Pause capture in Settings. Skippy skips clipboard items marked concealed, temporary or automatically generated. Search up to 200 local text, link, image and file entries. Copy entries back, drag them out, shorten links on request and remove entries. |
 | Extract text | Read an image, clipboard image or selected screen area with Vision. Inspect fonts reported for selectable text in a PDF. Summarisation depends on supported Apple Intelligence hardware, OS, SDK and availability. |
 | Pick colour | Use the system colour sampler and copy a hex value. |
 | Timer | Run a countdown and optionally keep the Mac awake during it. |
@@ -41,4 +41,4 @@ The project includes native unit and integration tests, macOS smoke checks, bund
 
 Hands-on acceptance still covers physical camera-notch and external-display hardware, third-party drag destinations, Dock icon magnification/auto-hide with Accessibility enabled, permission prompts on a clean account, Calendar with real events, media controls with a signed-in player, and longer energy and memory measurements. PDF inspection reports font metadata available to PDFKit. Identifying a font from pixels would need a separately validated recognition method. Automatic upload to Lens and a general feed of other apps' notifications would require a supported integration and explicit privacy design.
 
-The bundled artifact is an ad-hoc-signed developer build. Commercial distribution still requires the owner's final bundle/signing identity, notarization, licensing and device allowance validation, fulfilment, an update path, support and clean-install acceptance. The website's waitlist, prices, sender configuration and checkout are separate from the native developer build.
+The workflow packages an ad-hoc-signed universal developer build for Apple silicon and Intel. Commercial distribution still requires the owner's final bundle/signing identity, notarization, licensing and device allowance validation, fulfilment, an update path, support and clean-install acceptance. The website's waitlist, prices, sender configuration and checkout are separate from the native developer build.

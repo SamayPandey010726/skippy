@@ -3,6 +3,24 @@ import XCTest
 @testable import ParcelApp
 
 final class SkippyQuiverTests: XCTestCase {
+  @MainActor func testHistoryRespectsConcealedContentAndPause() {
+    let history = ClipboardHistoryStore(persist: false)
+    let board = NSPasteboard.withUniqueName()
+    defer { board.releaseGlobally() }
+    board.setString("private sample", forType: .string)
+    board.setData(Data(), forType: .init("org.nspasteboard.ConcealedType"))
+    history.capture(board)
+    XCTAssertTrue(history.entries.isEmpty)
+    board.clearContents()
+    board.setString("ordinary sample", forType: .string)
+    history.captureEnabled = false
+    history.capture(board)
+    XCTAssertTrue(history.entries.isEmpty)
+    history.captureEnabled = true
+    history.capture(board)
+    XCTAssertEqual(history.entries.first?.text, "ordinary sample")
+  }
+
   func testSnapTargetsUseTheChosenDisplaysCoordinates() {
     let screen = CGRect(x: -1440, y: 200, width: 1440, height: 900)
     let visible = screen.insetBy(dx: 0, dy: 28)
@@ -54,5 +72,11 @@ final class SkippyQuiverTests: XCTestCase {
     quiver.surface = .left
     XCTAssertEqual(defaults.string(forKey: "skippy.surface"), "Left edge")
     XCTAssertEqual(try XCTUnwrap(quiver.anchor).minX, screen.visibleFrame.minX, accuracy: 1)
+    quiver.surface = .notch
+    XCTAssertEqual(try XCTUnwrap(quiver.anchor).midX, screen.frame.midX, accuracy: 1)
+    quiver.surface = .menu
+    XCTAssertNotNil(quiver.strip.window)
+    quiver.hover(true)
+    XCTAssertNotNil(quiver.strip.subviews.first { $0.toolTip == "File Shelf" })
   }
 }

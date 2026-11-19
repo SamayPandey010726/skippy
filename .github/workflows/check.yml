@@ -12,7 +12,9 @@ jobs:
         run: swift test
       - name: Compile and bundle Skippy
         if: ${{ !cancelled() }}
-        run: bash Scripts/build-macos.sh
+        run: |
+          bash Scripts/build-macos.sh --universal
+          lipo -verify_arch arm64 x86_64 build/Skippy.app/Contents/MacOS/Skippy
       - name: Native smoke checks and launch
         if: ${{ !cancelled() }}
         run: |
