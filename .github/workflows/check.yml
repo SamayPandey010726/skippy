@@ -34,16 +34,22 @@ jobs:
       - name: Record the launched Mac application
         if: ${{ !cancelled() }}
         run: |
+          swiftc -parse-as-library -target "$(uname -m)-apple-macos15.0" Scripts/record-display.swift -o build/display-recorder
           swiftc -target "$(uname -m)-apple-macos14.0" Scripts/record-quiver.swift -o build/recorder
           build/recorder build/frames "$(pgrep -x Skippy | head -1)"
           mkdir -p build/recordings
           if ! command -v ffmpeg >/dev/null; then brew install ffmpeg; fi
-          ffmpeg -loglevel error -framerate 30 -i build/frames/frame-%04d.png -vf 'scale=960:-2' -pix_fmt yuv420p -movflags +faststart build/recordings/Skippy.mp4
-          ffmpeg -loglevel error -framerate 30 -i build/frames/frame-%04d.png -filter_complex 'fps=15,scale=600:-1,split[a][b];[a]palettegen[p];[b][p]paletteuse' build/recordings/Skippy.gif
+          ffmpeg -loglevel error -i build/frames/WindowServer.mp4 -c copy -movflags +faststart build/recordings/Skippy.mp4
+          ffmpeg -loglevel error -i build/recordings/Skippy.mp4 -filter_complex 'fps=15,scale=600:-1,split[a][b];[a]palettegen[p];[b][p]paletteuse' build/recordings/Skippy.gif
           cp build/frames/File-Shelf.png build/recordings/File-Shelf.png
       - name: Exercise all arrows through the running application
         if: ${{ !cancelled() }}
-        run: swift Scripts/check-arrow-navigation.swift "$(pgrep -x Skippy | head -1)"
+        run: |
+          pkill -x Skippy || true
+          while pgrep -x Skippy >/dev/null; do sleep 0.1; done
+          bash Scripts/apple-terminal.sh mac
+          sleep 2
+          swift Scripts/check-arrow-navigation.swift "$(pgrep -x Skippy | head -1)"
       - name: Check real menu-bar hover and pointer handoff
         if: ${{ !cancelled() }}
         run: |
@@ -56,8 +62,7 @@ jobs:
         if: failure()
         run: |
           mkdir -p build/diagnostics
-          last=$(ls build/frames/frame-*.png 2>/dev/null | tail -1)
-          if [[ -n "$last" ]]; then cp "$last" build/diagnostics/last-frame.png; fi
+          if [[ -f build/frames/File-Shelf.png ]]; then cp build/frames/File-Shelf.png build/diagnostics/; fi
       - name: Archive developer build
         if: ${{ !cancelled() }}
         run: codesign --verify --strict build/Skippy.app && ditto -c -k --keepParent build/Skippy.app build/Skippy-developer.zip

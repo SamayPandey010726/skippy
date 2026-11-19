@@ -200,6 +200,8 @@ if !panels().isEmpty {
   key(kVK_Escape)
   check("clear a previously open tool") { panels().isEmpty }
 }
+_ = runningApp?.activate(options: [])
+Thread.sleep(forTimeInterval: 0.20)
 key(kVK_ANSI_P, flags: [.maskControl, .maskAlternate, .maskCommand])
 check("global shortcut opens dashboard") {
   panels().contains { $0[kCGWindowName as String] as? String == "Skippy · Skippy" }

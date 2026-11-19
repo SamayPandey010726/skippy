@@ -697,12 +697,16 @@ struct NotchToolsView: View {
           Text(tools.status).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
         }
         Spacer()
-        Button(action: shelf.chooseArrow) {
-          Label("Find an arrow", systemImage: "magnifyingglass")
-          Text(shortcuts.binding(for: .chooseArrow).displayName).monospaced()
+        if shelf.choosingArrow {
+          Text("↑ ↓  Select     ↩  Open     Esc  Back").font(.system(size: 11)).foregroundStyle(.secondary)
+        } else {
+          Button(action: shelf.chooseArrow) {
+            Label("Find an arrow", systemImage: "magnifyingglass")
+            Text(shortcuts.binding(for: .chooseArrow).displayName).monospaced()
+          }
+          .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(.secondary)
+          .accessibilityLabel("Find an arrow")
         }
-        .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(.secondary)
-        .accessibilityLabel("Find an arrow")
 
       }
     }
@@ -736,14 +740,16 @@ struct NotchToolsView: View {
       NotchIconButton(symbol: "xmark", help: "Close Skippy", action: shelf.dismiss)
       ZStack {
         Circle().fill(skin.palette.accent.opacity(0.18))
-        Image(systemName: shelf.activeModule.symbol).font(.system(size: 10, weight: .bold)).foregroundStyle(skin.palette.accent)
+        Image(systemName: shelf.choosingArrow ? "magnifyingglass" : shelf.activeModule.symbol).font(.system(size: 10, weight: .bold)).foregroundStyle(skin.palette.accent)
       }.frame(width: 26, height: 26)
       VStack(alignment: .leading, spacing: 0) {
-        Text(shelf.activeModule.title).font(.system(size: 16, weight: .semibold))
-        Text(headerSubtitle).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+        Text(shelf.choosingArrow ? "Arrows" : shelf.activeModule.title).font(.system(size: 16, weight: .semibold))
+        Text(shelf.choosingArrow ? "\(NotchModule.allCases.count - 1) tools" : headerSubtitle).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
       }
       Spacer()
-      if shelf.activeModule == .dashboard {
+      if shelf.choosingArrow {
+        NotchIconButton(symbol: "chevron.backward", help: "Back to tool", action: shelf.cancelChoosingArrow)
+      } else if shelf.activeModule == .dashboard {
         NotchIconButton(symbol: widgets.editing ? "checkmark" : "slider.horizontal.3", tint: skin.palette.accent,
           selected: widgets.editing, help: widgets.editing ? "Finish arranging" : "Arrange widgets") {
           withAnimation(Motion.layoutRelayout) { widgets.editing.toggle() }

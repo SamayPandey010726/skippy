@@ -28,13 +28,17 @@ final class Backdrop: NSView {
       NSColor(calibratedRed: 0.80, green: 0.83, blue: 0.68, alpha: 1)])?.draw(in: bounds, angle: 35)
   }
 }
-_ = NSApplication.shared
+let recorderApp = NSApplication.shared
+recorderApp.setActivationPolicy(.accessory)
+recorderApp.finishLaunching()
 let background = NSWindow(contentRect: NSScreen.screens[0].frame, styleMask: .borderless, backing: .buffered, defer: false)
 background.contentView = Backdrop()
 background.ignoresMouseEvents = true
-background.level = .normal
+background.level = .floating
+background.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
 background.orderFrontRegardless()
 background.displayIfNeeded()
+RunLoop.main.run(until: Date().addingTimeInterval(0.15))
 func escape() {
   for down in [true, false] {
     CGEvent(keyboardEventSource: nil, virtualKey: 53, keyDown: down)?.post(tap: .cghidEventTap)
@@ -42,12 +46,22 @@ func escape() {
 }
 escape()
 Thread.sleep(forTimeInterval: 0.5)
-let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first
-let priorApp = NSWorkspace.shared.frontmostApplication
-if priorApp?.processIdentifier == pid_t(pid) { _ = finder?.activate(options: [.activateIgnoringOtherApps]) }
-Thread.sleep(forTimeInterval: 0.3)
+// Launch a real editor so that a passive preview has a distinct foreground process to preserve.
+let sample = out.appendingPathComponent("Focus check.txt")
+try "Skippy focus check".write(to: sample, atomically: true, encoding: .utf8)
+let openEditor = Process()
+openEditor.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+openEditor.arguments = ["-a", "TextEdit", sample.path]
+try openEditor.run(); openEditor.waitUntilExit()
+for _ in 0..<60 {
+  if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.TextEdit" { break }
+  RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+}
 let baselineFocus = NSWorkspace.shared.frontmostApplication?.processIdentifier
-guard let baselineFocus, baselineFocus != pid_t(pid) else { throw RecordingError.focusChanged }
+guard let baselineFocus, NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.TextEdit" else {
+  print("Could not establish editor focus", NSWorkspace.shared.frontmostApplication?.localizedName ?? "none"); fflush(stdout)
+  throw RecordingError.focusChanged
+}
 let screen = CGDisplayBounds(CGMainDisplayID())
 guard let mark = windows().first(where: { (26...42).contains($0.width) && (24...44).contains($0.height) }) else {
   print("Skippy windows:", windows()); throw RecordingError.missingWindow
@@ -56,56 +70,61 @@ let center = CGPoint(x: mark.midX, y: mark.midY)
 let width = min(screen.width, 700), height = min(screen.height, 470)
 let region = CGRect(x: min(max(0, mark.midX - width * 0.62), screen.maxX - width),
   y: min(max(0, mark.midY - 52), screen.maxY - height), width: width, height: height).integral
-var frame = 0
-func capture(_ point: CGPoint) throws {
-  guard let image = CGWindowListCreateImage(region, .optionOnScreenOnly, kCGNullWindowID, [.bestResolution]) else { throw RecordingError.captureFailed }
-  let rep = NSBitmapImageRep(cgImage: image)
-  // WindowServer omits the hardware cursor. Composite the system cursor at the posted event location.
-  let bitmap = NSImage(size: region.size)
-  bitmap.lockFocus()
-  NSImage(cgImage: image, size: region.size).draw(in: CGRect(origin: .zero, size: region.size))
-  let cursor = NSCursor.arrow
-  let cp = CGPoint(x: point.x - region.minX - cursor.hotSpot.x,
-    y: region.maxY - point.y - cursor.image.size.height + cursor.hotSpot.y)
-  cursor.image.draw(at: cp, from: .zero, operation: .sourceOver, fraction: 1)
-  bitmap.unlockFocus()
-  let data = bitmap.tiffRepresentation.flatMap { NSBitmapImageRep(data: $0) } ?? rep
-  try data.representation(using: .png, properties: [:])!.write(to: out.appendingPathComponent(String(format: "frame-%04d.png", frame)))
-  frame += 1
+let live = Process()
+let stop = Pipe()
+live.standardInput = stop
+live.executableURL = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent().appendingPathComponent("display-recorder")
+live.arguments = [out.path] + [region.minX, region.minY, region.width, region.height].map { String(Double($0)) }
+try live.run()
+for _ in 0..<100 {
+  if FileManager.default.fileExists(atPath: out.appendingPathComponent("capture.ready").path) { break }
+  if !live.isRunning { throw RecordingError.captureFailed }
+  Thread.sleep(forTimeInterval: 0.05)
 }
-func pause(_ seconds: Double, at point: CGPoint) throws {
-  let count = max(1, Int((seconds * 30).rounded()))
-  for _ in 0..<count { let start = Date(); try capture(point); Thread.sleep(forTimeInterval: max(0, (1.0 / 30) - Date().timeIntervalSince(start))) }
+guard FileManager.default.fileExists(atPath: out.appendingPathComponent("capture.ready").path) else { throw RecordingError.captureFailed }
+print("ScreenCaptureKit recording with Reduce Motion =", NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+func saveShelfImage() throws {
+  guard let image = CGWindowListCreateImage(region, .optionOnScreenOnly, kCGNullWindowID, [.bestResolution]),
+        let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else {
+    throw RecordingError.captureFailed
+  }
+  try png.write(to: out.appendingPathComponent("File-Shelf.png"))
 }
+func pause(_ seconds: Double) { Thread.sleep(forTimeInterval: seconds) }
 func glide(_ from: CGPoint, _ to: CGPoint) throws {
   for i in 1...15 {
     let t = Double(i) / 15
     let p = CGPoint(x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t)
-    pointer(p); try pause(1.0 / 30, at: p)
+    pointer(p); pause(1.0 / 30)
   }
 }
 let away = CGPoint(x: center.x - 140, y: center.y + 65)
-pointer(away); try pause(0.65, at: away)
-try glide(away, center); try pause(0.7, at: center)
+pointer(away); pause(0.65)
+try glide(away, center); pause(0.7)
 guard let strip = windows().first(where: { $0.width > 75 && $0.height <= 44 }) else {
   print("After hover:", windows()); throw RecordingError.hoverFailed
 }
 let direction: CGFloat = strip.midX < center.x ? -1 : 1
 let shelf = CGPoint(x: center.x + 31 * direction, y: center.y)
 try glide(center, shelf)
-try pause(0.85, at: shelf)
-let previewFrame = frame - 1
-try FileManager.default.copyItem(at: out.appendingPathComponent(String(format: "frame-%04d.png", previewFrame)), to: out.appendingPathComponent("File-Shelf.png"))
+pause(0.85)
+try saveShelfImage()
 guard windows().contains(where: { $0.width >= 300 && $0.height >= 160 }) else { print("Preview missing", windows(), "mark", mark, "strip", strip, "pointer", shelf); fflush(stdout); throw RecordingError.panelFailed }
-guard NSWorkspace.shared.frontmostApplication?.processIdentifier == baselineFocus else { throw RecordingError.focusChanged }
+guard NSWorkspace.shared.frontmostApplication?.processIdentifier == baselineFocus else {
+  print("Hover changed focus to", NSWorkspace.shared.frontmostApplication?.localizedName ?? "none"); fflush(stdout)
+  throw RecordingError.focusChanged
+}
 print("PASS hovering preserved foreground application")
 let notes = CGPoint(x: center.x + 93 * direction, y: center.y)
 try glide(shelf, notes)
-try pause(0.55, at: notes)
-pointer(notes, .leftMouseDown); pointer(notes, .leftMouseUp); try pause(0.65, at: notes)
+pause(0.55)
+pointer(notes, .leftMouseDown); pointer(notes, .leftMouseUp); pause(0.65)
 try glide(notes, center)
-pointer(center, .leftMouseDown); pointer(center, .leftMouseUp); try pause(1.6, at: center)
+pointer(center, .leftMouseDown); pointer(center, .leftMouseUp); pause(1.6)
 escape()
-try glide(center, away); try pause(2.45, at: away)
+try glide(center, away); pause(2.45)
 guard windows().contains(where: { $0.width == mark.width && $0.height == mark.height }) else { throw RecordingError.foldFailed }
-print("Recorded", frame, "frames from the running Mac app. Collapsed, unfolded, opened tools and folded.")
+try stop.fileHandleForWriting.close()
+live.waitUntilExit()
+guard live.terminationStatus == 0 else { throw RecordingError.captureFailed }
+print("Recorded the running Mac app with ScreenCaptureKit. Collapsed, unfolded, opened tools and folded.")

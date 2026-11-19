@@ -1033,10 +1033,10 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       switch command {
       case .chooseArrow: break
       case .nextFile:
-        if activeModule != .dashboard { showModule(.dashboard) }
+        guard activeModule == .dashboard else { return false }
         NotificationCenter.default.post(name: .parcelsNextWidgetPage, object: nil)
       case .previousFile:
-        if activeModule != .dashboard { showModule(.dashboard) }
+        guard activeModule == .dashboard else { return false }
         NotificationCenter.default.post(name: .parcelsPreviousWidgetPage, object: nil)
       case .search: showModule(.search)
       case .filters:
@@ -1058,7 +1058,9 @@ private final class CourierHostingView: NSHostingView<AnyView> {
         presentMediaEditor()
       case .ocr: showModule(.extract)
       case .settings: AppController.shared.openPreferences()
-      case .open: showModule(.parcel)
+      case .open:
+        guard activeModule == .dashboard || activeModule == .parcel else { return false }
+        showModule(.parcel)
       case .close: dismiss()
       }
       return true

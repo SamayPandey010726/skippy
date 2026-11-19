@@ -46,6 +46,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
   private var dragging = false
   private var progress: CGFloat = 0
   private var motion: Timer?
+  private var pointerMonitor: Any?
   private var previewWork: DispatchWorkItem?
   private weak var previewTarget: NSButton?
   private var arrowModules: [NSButton: NotchModule] = [:]
@@ -100,6 +101,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
 
   private func attach() {
     foldWork?.cancel(); previewWork?.cancel(); motion?.invalidate()
+    if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor); self.pointerMonitor = nil }
     unfolded = false; progress = 0
     shelf.dismiss()
     strip.removeFromSuperview()
@@ -155,6 +157,14 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
   private func setUnfolded(_ open: Bool) {
     guard open != unfolded else { return }
     unfolded = open
+    if open {
+      // A status item can receive pointer motion through the menu-bar hosting process.
+      pointerMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
+        MainActor.assumeIsolated { self?.trackArrow() }
+      }
+    } else if let pointerMonitor {
+      NSEvent.removeMonitor(pointerMonitor); self.pointerMonitor = nil
+    }
     motion?.invalidate()
     let target: CGFloat = open ? 1 : 0
     let start = progress
@@ -170,7 +180,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
         guard let self else { timer.invalidate(); return }
         let t = min(1, (ProcessInfo.processInfo.systemUptime - began) / duration)
         if t == 1 {
-          self.progress = target; self.render(); timer.invalidate(); self.motion = nil
+          self.progress = target; self.render(); self.trackArrow(); timer.invalidate(); self.motion = nil
           if !open && self.surface == .dock { self.floating?.orderOut(nil) }
         } else {
           let eased = t * t * (3 - 2 * t)
@@ -185,12 +195,12 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
 
   private var stripContainsPointer: Bool {
     guard let window = strip.window, window.isVisible else { return false }
-    return strip.bounds.contains(strip.convert(window.mouseLocationOutsideOfEventStream, from: nil))
+    return strip.bounds.contains(strip.convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil))
   }
 
   private func trackArrow() {
     guard unfolded, let window = strip.window else { return }
-    let point = strip.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+    let point = strip.convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
     let button = icons.first { !$0.isHidden && $0.isEnabled && $0.frame.contains(point) }
     guard previewTarget !== button else { return }
     previewWork?.cancel()
