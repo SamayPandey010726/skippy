@@ -15,6 +15,19 @@ func key(_ code: Int, flags: CGEventFlags = [], character: Character? = nil) {
     event.post(tap: .cghidEventTap)
   }
 }
+func typeText(_ value: String) {
+  let codes = Dictionary(uniqueKeysWithValues: zip(Array("abcdefghijklmnopqrstuvwxyz "), [
+    kVK_ANSI_A, kVK_ANSI_B, kVK_ANSI_C, kVK_ANSI_D, kVK_ANSI_E, kVK_ANSI_F, kVK_ANSI_G, kVK_ANSI_H,
+    kVK_ANSI_I, kVK_ANSI_J, kVK_ANSI_K, kVK_ANSI_L, kVK_ANSI_M, kVK_ANSI_N, kVK_ANSI_O, kVK_ANSI_P,
+    kVK_ANSI_Q, kVK_ANSI_R, kVK_ANSI_S, kVK_ANSI_T, kVK_ANSI_U, kVK_ANSI_V, kVK_ANSI_W, kVK_ANSI_X,
+    kVK_ANSI_Y, kVK_ANSI_Z, kVK_Space
+  ]))
+  for c in value {
+    let code = codes[Character(String(c).lowercased())] ?? (c == "/" ? kVK_ANSI_Slash : kVK_ANSI_A)
+    key(code, flags: c.isUppercase ? .maskShift : [], character: c)
+    Thread.sleep(forTimeInterval: 0.02)
+  }
+}
 func panels() -> [[String: Any]] {
   let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
   return windows.filter { info in
@@ -81,7 +94,7 @@ func enter(_ string: String, role: String = kAXTextFieldRole) {
   Thread.sleep(forTimeInterval: 0.12)
   key(kVK_ANSI_A, flags: .maskCommand)
   Thread.sleep(forTimeInterval: 0.06)
-  for c in string { key(c == "/" ? kVK_ANSI_Slash : kVK_ANSI_A, character: c); Thread.sleep(forTimeInterval: 0.01) }
+  typeText(string)
   Thread.sleep(forTimeInterval: 0.2)
 }
 func mouse(_ type: CGEventType, _ point: CGPoint) {
@@ -217,11 +230,11 @@ for name in arrows {
     check("recover dashboard before " + name) { !panels().isEmpty }
   }
   key(kVK_ANSI_K, flags: .maskCommand)
-  Thread.sleep(forTimeInterval: 0.35)
-  for character in name {
-    key(kVK_ANSI_A, character: character)
-    Thread.sleep(forTimeInterval: 0.025)
+  check("finder accepts keyboard focus") {
+    guard let value = attribute(application, kAXFocusedUIElementAttribute), CFGetTypeID(value) == AXUIElementGetTypeID() else { return false }
+    return labels(value as! AXUIElement).contains("Find an arrow")
   }
+  typeText(name.lowercased())
   key(kVK_Return)
   check("open " + name) { panels().contains { $0[kCGWindowName as String] as? String == "Skippy · " + name } }
   Thread.sleep(forTimeInterval: 0.18)

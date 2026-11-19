@@ -1672,18 +1672,17 @@ private struct ArrowFinder: View {
   @ObservedObject var shelf: DropPopupController
   @State private var query = ""
   @State private var index = 0
-  @FocusState private var focused: Bool
   private var matches: [NotchModule] {
     NotchModule.allCases.filter { $0 != .dashboard && (query.isEmpty || $0.title.localizedCaseInsensitiveContains(query)) }
   }
   var body: some View {
     VStack(spacing: 8) {
-      TextField("Find an arrow", text: $query)
-        .textFieldStyle(.roundedBorder).focused($focused)
-        .onSubmit { if matches.indices.contains(index) { select(matches[index]) } }
-        .onKeyPress(.downArrow) { index = min(index + 1, max(0, matches.count - 1)); return .handled }
-        .onKeyPress(.upArrow) { index = max(0, index - 1); return .handled }
-        .onExitCommand { shelf.cancelChoosingArrow() }
+      ArrowSearchField(query: $query, move: { step in
+        index = min(max(0, index + step), max(0, matches.count - 1))
+      }, submit: {
+        if matches.indices.contains(index) { select(matches[index]) }
+      }, cancel: shelf.cancelChoosingArrow)
+      .frame(height: 28)
       if matches.isEmpty {
         Text("No matching arrows").foregroundStyle(.secondary)
         Spacer()
@@ -1711,10 +1710,58 @@ private struct ArrowFinder: View {
       }
     }
     .onChange(of: query) { _, _ in index = 0 }
-    .onAppear { focused = true }
   }
   private func select(_ module: NotchModule) {
     shelf.showModule(module)
     shelf.focusForKeyboard()
+  }
+}
+
+private struct ArrowSearchField: NSViewRepresentable {
+  @Binding var query: String
+  var move: (Int) -> Void
+  var submit: () -> Void
+  var cancel: () -> Void
+
+  final class Field: NSSearchField {
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      guard window != nil else { return }
+      DispatchQueue.main.async { [weak self] in
+        guard let self, let window = self.window else { return }
+        window.makeFirstResponder(self)
+      }
+    }
+  }
+
+  final class Coordinator: NSObject, NSSearchFieldDelegate {
+    var parent: ArrowSearchField
+    init(_ parent: ArrowSearchField) { self.parent = parent }
+    func controlTextDidChange(_ notification: Notification) {
+      guard let field = notification.object as? NSSearchField else { return }
+      parent.query = field.stringValue
+    }
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy command: Selector) -> Bool {
+      switch command {
+      case #selector(NSResponder.moveDown(_:)): parent.move(1)
+      case #selector(NSResponder.moveUp(_:)): parent.move(-1)
+      case #selector(NSResponder.insertNewline(_:)): parent.submit()
+      case #selector(NSResponder.cancelOperation(_:)): parent.cancel()
+      default: return false
+      }
+      return true
+    }
+  }
+  func makeCoordinator() -> Coordinator { Coordinator(self) }
+  func makeNSView(context: Context) -> Field {
+    let field = Field()
+    field.placeholderString = "Find an arrow"
+    field.setAccessibilityLabel("Find an arrow")
+    field.delegate = context.coordinator
+    return field
+  }
+  func updateNSView(_ field: Field, context: Context) {
+    context.coordinator.parent = self
+    if field.stringValue != query { field.stringValue = query }
   }
 }

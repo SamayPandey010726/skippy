@@ -8,6 +8,10 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - name: Enable normal system motion on the disposable test desktop
+        run: |
+          defaults write com.apple.universalaccess reduceMotion -bool false
+          defaults read com.apple.universalaccess reduceMotion
       - name: Compiler and native tests
         run: PARCEL_PREVIEW_DIRECTORY="$RUNNER_TEMP/skippy-layout-review" swift test
       - name: Compile and bundle Skippy
