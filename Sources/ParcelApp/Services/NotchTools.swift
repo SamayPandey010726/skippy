@@ -1110,7 +1110,7 @@ struct NotchToolsView: View {
                                             : "Try a different search.")
             }
           }
-          ForEach(clipboard.filtered.prefix(80)) { entry in
+          ForEach(clipboard.filtered) { entry in
             ClipboardHistoryRow(entry: entry, history: clipboard, skin: skin,
                                 addToParcel: shelf.addClipboardEntry, processImage: shelf.processClipboardImage)
           }

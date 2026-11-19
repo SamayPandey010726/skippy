@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import Combine
 import ParcelCore
 import SwiftUI
@@ -174,8 +175,12 @@ import SwiftUI
 }
 
 enum FinderSelection {
+  static func hasAccess(request: Bool) -> Bool {
+    let finder = NSAppleEventDescriptor(bundleIdentifier: "com.apple.finder")
+    return AEDeterminePermissionToAutomateTarget(finder.aeDesc, typeWildCard, typeWildCard, request) == noErr
+  }
   static func urls() -> [URL] {
-    guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.finder" else { return [] }
+    guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.finder", hasAccess(request: false) else { return [] }
     let source = """
       tell application "Finder"
         set selectedPaths to ""
@@ -215,8 +220,7 @@ enum SelectionCapture {
   static func capture(_ completion: @escaping @MainActor (Bool) -> Void) -> Bool {
     guard let application = NSWorkspace.shared.frontmostApplication,
       application.bundleIdentifier != Bundle.main.bundleIdentifier else { return false }
-    let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-    guard AXIsProcessTrustedWithOptions(options) else { return false }
+    guard AXIsProcessTrusted() else { return false }
     let board = NSPasteboard.general
     let snapshot = Snapshot(board)
     let change = board.changeCount

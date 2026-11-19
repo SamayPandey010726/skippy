@@ -8,6 +8,7 @@ struct PreferencesView: View {
   @ObservedObject private var clipboardHistory = ClipboardHistoryStore.shared
   @ObservedObject private var quiver = SkippyQuiver.shared
   @State private var tab = 0
+  @State private var captureAccessMessage: String?
   @State private var licenceText = ""
   @State private var message: String?
   @StateObject private var skins = SkinStore.shared
@@ -90,7 +91,7 @@ struct PreferencesView: View {
         HStack {
           VStack(alignment: .leading, spacing: 3) {
             Text("Open Skippy anywhere").font(.system(size: 13, weight: .semibold))
-            Text("In Finder or another app, this also imports the current selection.")
+            Text("With selection access, this also imports highlighted files or text.")
               .font(.system(size: 10)).foregroundStyle(Ink.secondary)
           }
           Spacer()
@@ -313,6 +314,18 @@ struct PreferencesView: View {
       }.pickerStyle(.segmented).disabled(!courier.shiftConvertEnabled)
       Text("Start dragging image, PDF, video, document, or spreadsheet files, then hold Shift. Drop onto a relevant output in the compact ribbon. The current format is hidden; every result is saved in Skippy.")
         .font(.system(size: 11)).foregroundStyle(Ink.secondary)
+      HStack {
+        Button("Enable Finder selection…") {
+          captureAccessMessage = FinderSelection.hasAccess(request: true)
+            ? "Finder selection is enabled." : "Allow Finder access in System Settings → Privacy & Security → Automation."
+        }
+        Button("Enable selection in other apps…") {
+          let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+          captureAccessMessage = AXIsProcessTrustedWithOptions(options)
+            ? "Selection capture is enabled." : "Allow Skippy in System Settings → Privacy & Security → Accessibility."
+        }
+      }.font(.caption)
+      if let captureAccessMessage { Text(captureAccessMessage).font(.caption).foregroundStyle(.secondary) }
       Text("Right-click selected files or folders in Finder → Services → Send to Skippy. macOS controls which apps expose Services. If hidden, enable it in System Settings → Keyboard → Keyboard Shortcuts → Services.")
         .font(.system(size: 11)).foregroundStyle(Ink.secondary)
       Divider()

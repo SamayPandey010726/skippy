@@ -209,6 +209,8 @@ check("global shortcut opens dashboard") {
 let arrows = ["File Shelf", "Clipboard", "Extract text", "Pick colour", "Timer", "Notes", "QR tools", "Search",
               "Apps", "Music", "Downloads", "Stay awake", "Recent actions", "Mac", "Calendar", "Calculator", "Screenshots", "Draw on screen"]
 for name in arrows {
+  // A system sampler or capture tool may still be restoring the prior panel.
+  for _ in 0..<12 where panels().isEmpty { Thread.sleep(forTimeInterval: 0.08) }
   if panels().isEmpty {
     controlFailures.append("Tool dismissed unexpectedly before " + name)
     key(kVK_ANSI_P, flags: [.maskControl, .maskAlternate, .maskCommand])
