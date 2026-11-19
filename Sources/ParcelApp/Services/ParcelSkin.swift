@@ -24,6 +24,20 @@ enum ParcelSkin: String, Codable, CaseIterable, Identifiable {
     case .moss: return "Hand-painted natural materials, earthy warmth."
     }
   }
+  var satchelBody: Color {
+    switch self {
+    case .kraft: return Color(red: 0.68, green: 0.47, blue: 0.28)
+    case .night: return Color(red: 0.22, green: 0.29, blue: 0.35)
+    case .moss: return Color(red: 0.37, green: 0.47, blue: 0.29)
+    }
+  }
+  var satchelFlap: Color {
+    switch self {
+    case .kraft: return Color(red: 0.89, green: 0.76, blue: 0.56)
+    case .night: return Color(red: 0.36, green: 0.45, blue: 0.50)
+    case .moss: return Color(red: 0.72, green: 0.74, blue: 0.52)
+    }
+  }
   /// The shelf palette for this skin.
   var palette: SkinPalette {
     switch self {
@@ -35,7 +49,7 @@ enum ParcelSkin: String, Codable, CaseIterable, Identifiable {
         accent: Color(red: 0.25, green: 0.37, blue: 0.35),
         accentSoft: Color(red: 0.36, green: 0.48, blue: 0.43),
         text: Color(red: 0.16, green: 0.23, blue: 0.24),
-        secondary: Color(red: 0.49, green: 0.52, blue: 0.43),
+        secondary: Color(red: 0.37, green: 0.42, blue: 0.35),
         line: Color(red: 0.87, green: 0.86, blue: 0.79))
     case .night:
       return SkinPalette(
@@ -45,7 +59,7 @@ enum ParcelSkin: String, Codable, CaseIterable, Identifiable {
         accent: Color(red: 0.65, green: 0.80, blue: 0.72),
         accentSoft: Color(red: 0.50, green: 0.65, blue: 0.58),
         text: Color(red: 0.93, green: 0.94, blue: 0.92),
-        secondary: Color(red: 0.62, green: 0.64, blue: 0.60),
+        secondary: Color(red: 0.72, green: 0.75, blue: 0.70),
         line: Color(red: 0.28, green: 0.29, blue: 0.34))
     case .moss:
       return SkinPalette(
@@ -55,7 +69,7 @@ enum ParcelSkin: String, Codable, CaseIterable, Identifiable {
         accent: Color(red: 0.30, green: 0.42, blue: 0.28),
         accentSoft: Color(red: 0.42, green: 0.55, blue: 0.38),
         text: Color(red: 0.20, green: 0.26, blue: 0.20),
-        secondary: Color(red: 0.48, green: 0.52, blue: 0.42),
+        secondary: Color(red: 0.36, green: 0.40, blue: 0.32),
         line: Color(red: 0.82, green: 0.82, blue: 0.72))
     }
   }
@@ -83,6 +97,6 @@ final class SkinStore: ObservableObject {
   }
   private init() {
     let raw = UserDefaults.standard.string(forKey: "parcel-skin")
-    skin = ParcelSkin(rawValue: raw ?? "") ?? .kraft
+    skin = ParcelSkin(rawValue: raw ?? "") ?? .night
   }
 }

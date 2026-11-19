@@ -14,7 +14,7 @@ The prior research checked Dropover's official product/actions and App Store rev
 
 The FilePane alternatives discussion described friction around conversions/file handling, preserving originals and repeated save choices. This became prepared-copy state, explicit original/prepared comparison, and remembering the selected save destination. A single discussion is qualitative evidence, not a market-size estimate.
 
-Pricing remains a hypothesis: $20 once with a 14-day full-workflow trial. Dropover's cheaper price is real competitive pressure. The premium must be earned by useful repeat work and excellent interaction; a cute animation alone is not proof of willingness to pay. No competitor rating or adjacent revenue figure is projected into Parcel sales.
+Launch pricing is $2.49 for one Mac, $4.99 for two Macs and $9.99 for five Macs, with no subscription or automatic trial. These low one-time prices are still a market hypothesis; useful repeat work and excellent interaction must earn the purchase. No competitor rating or adjacent revenue figure is projected into Parcel sales.
 
 ## Primary product and public discussion links
 
@@ -30,4 +30,4 @@ These links document the research basis; live listings and prices can change. Th
 
 ## What to learn from a real beta
 
-Observe whether people repeatedly collect/prepare/send real work, whether the folder makes those steps clearer, and where source/destination compatibility fails. Record trial-to-paid conversion and returns through the chosen merchant platform. Use that evidence to prioritize one additional utility at a time. The app currently contains no analytics SDK or automatic telemetry.
+Observe whether people repeatedly collect/prepare/send real work, whether the shelf makes those steps clearer, and where source/destination compatibility fails. Record waitlist-to-paid conversion and returns through the chosen merchant platform. Use that evidence to prioritize one additional utility at a time. The app currently contains no analytics SDK or automatic telemetry.

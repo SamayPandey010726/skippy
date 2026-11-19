@@ -2,34 +2,44 @@ import AppKit
 import SwiftUI
 
 enum Ink {
-  static let paper = Color(red: 0.953, green: 0.949, blue: 0.918)
-  static let cream = Color(red: 0.925, green: 0.929, blue: 0.897)
-  static let canvas = Color(red: 0.996, green: 0.991, blue: 0.971)
-  static let green = Color(red: 0.25, green: 0.37, blue: 0.35)
-  static let moss = Color(red: 0.36, green: 0.48, blue: 0.43)
-  static let paleGreen = Color(red: 0.87, green: 0.90, blue: 0.87)
-  static let text = Color(red: 0.16, green: 0.23, blue: 0.24)
-  static let secondary = Color(red: 0.49, green: 0.52, blue: 0.43)
-  static let line = Color(red: 0.87, green: 0.86, blue: 0.79)
+  private static var palette: SkinPalette {
+    (ParcelSkin(rawValue: UserDefaults.standard.string(forKey: "parcel-skin") ?? "") ?? .kraft).palette
+  }
+  static var paper: Color { palette.paper }
+  static var cream: Color { palette.cream }
+  static var canvas: Color { palette.canvas }
+  static var green: Color { palette.accent }
+  static var moss: Color { palette.accentSoft }
+  static var paleGreen: Color { palette.accent.opacity(0.12) }
+  static var text: Color { palette.text }
+  static var secondary: Color {
+    NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? palette.text : palette.secondary
+  }
+  static var line: Color {
+    NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? palette.secondary : palette.line
+  }
   static let peach = Color(red: 0.89, green: 0.60, blue: 0.44)
   static let serif = "Avenir Next"
 }
 struct MossButtonStyle: ButtonStyle {
+  @Environment(\.isEnabled) private var isEnabled
   var secondary = false
   func makeBody(configuration: Configuration) -> some View {
     configuration.label.font(.system(size: 13, weight: .semibold)).padding(.horizontal, 17).padding(
       .vertical, 11
     )
-    .foregroundStyle(secondary ? Ink.green : .white)
+    .foregroundStyle(secondary ? Ink.green : Ink.paper)
     .background(secondary ? Ink.paleGreen : Ink.green, in: RoundedRectangle(cornerRadius: 11))
     .overlay(
       RoundedRectangle(cornerRadius: 11).stroke(secondary ? Ink.line : Ink.green, lineWidth: 1)
     )
     .scaleEffect(configuration.isPressed ? 0.97 : 1)
+    .opacity(isEnabled ? 1 : 0.45)
     .animation(Motion.pressSquish, value: configuration.isPressed)
   }
 }
 struct QuietButtonStyle: ButtonStyle {
+  @Environment(\.isEnabled) private var isEnabled
   func makeBody(configuration: Configuration) -> some View {
     configuration.label.font(.system(size: 12, weight: .medium)).foregroundStyle(Ink.secondary)
       .padding(.horizontal, 10).padding(.vertical, 7)
@@ -38,6 +48,7 @@ struct QuietButtonStyle: ButtonStyle {
       )
       // Press squish: responds on mouse-down, not mouse-up.
       .scaleEffect(configuration.isPressed ? 0.95 : 1)
+      .opacity(isEnabled ? 1 : 0.45)
       .animation(Motion.pressSquish, value: configuration.isPressed)
   }
 }
@@ -79,7 +90,7 @@ struct TinyLeaf: Shape {
 struct BrandMark: View {
   var body: some View {
     HStack(spacing: 9) {
-      Image(systemName: "folder.fill").font(.system(size: 19)).foregroundStyle(Ink.green)
+      Image(systemName: "bag.fill").font(.system(size: 19)).foregroundStyle(Ink.green)
       Text("parcel").font(.custom(Ink.serif, size: 27)).tracking(-1).foregroundStyle(Ink.green)
     }
   }

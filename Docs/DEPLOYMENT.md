@@ -42,27 +42,30 @@ python3 Scripts/license-tool.py issue \
   --private "$HOME/.config/parcel/merchant.private" \
   --customer "Customer name" \
   --license-id "your-provider-order-id" \
+  --plan two \
   --machine-id "PASTE_CUSTOMER_MAC_ID" > customer-licence.txt
 ```
 
 Deliver the complete token from that file to the buyer. They paste it into Parcel → Preferences → Your licence. The token is verified offline with CryptoKit and stored in Keychain. Default tokens are perpetual; `--expiry` exists for controlled test/support use.
 
-**Machine-locked keys (unshareable).** Ask the buyer for their Mac ID from Parcel → Preferences → Your licence → "This Mac's ID", and pass it as `--machine-id` when issuing. The app only accepts that key on the matching Mac, so one key cannot unlock two people's machines. Omit `--machine-id` only for legacy portable keys.
+**Machine-locked keys.** Ask the buyer for each Mac ID from Parcel → Preferences → Your licence → "This Mac's ID". Choose `--plan single`, `two` or `five`, and repeat `--machine-id` for every authorised Mac. The issuer rejects missing IDs, duplicates and counts above the purchased plan.
 
 No merchant fulfilment service has been deployed. A manual early launch can issue keys after verified orders. For automation, call the same issuance function from a merchant-side handler only after verifying the payment provider's webhook signature, product and paid status, then make issuance idempotent using the provider order ID. Delivery/receipt configuration belongs to the chosen merchant platform. Do not trust a browser success redirect as proof of payment.
 
-Machine-locking is enforced offline by the app (one key, one Mac). There is no activation server counting installs; decide the actual update entitlement and refund/support terms before publishing them. The code does not silently claim an online enforcement system it does not have.
+Machine-locking is enforced offline by the app. Each signed key names its one-, two- or five-Mac plan and the allowed Mac IDs. There is no activation server counting installs; adding a Mac requires the merchant to reissue the key with the new ID while staying within the purchased limit.
 
 ## App Store distribution
 
-On the App Store you need no licence keys at all: Apple ties the purchase to the buyer's Apple ID, and the app unlocks itself when it finds a valid App Store receipt (`LicenseStatus.appStore`). Build with:
+The current build uses the same signed licence gate on every distribution channel. It deliberately does not trust receipt-file presence as purchase proof. Build the App Store package with:
 
 ```bash
 export PARCEL_BUNDLE_ID="com.yourcompany.yourproduct"
+export PARCEL_LICENSE_PUBLIC_KEY="BASE64_PUBLIC_KEY_FROM_KEYGEN"
+export PARCEL_CHECKOUT_URL="https://your-real-checkout-url"
 bash Scripts/build-macos.sh --appstore
 ```
 
-This turns off development mode without requiring a licence public key or checkout URL. Final submission goes through Xcode (Product → Archive) with your Apple Distribution certificate and App Store provisioning profile, and the App Sandbox entitlement must be enabled before review — the bundled `Config/Parcel.entitlements` targets direct Developer ID distribution with sandbox disabled, so do not submit that configuration unchanged.
+This turns off development mode and embeds the same public verification key used by direct downloads. Final submission goes through Xcode (Product → Archive) with your Apple Distribution certificate and App Store provisioning profile, and the App Sandbox entitlement must be enabled before review — the bundled `Config/Parcel.entitlements` targets direct Developer ID distribution with sandbox disabled, so do not submit that configuration unchanged.
 
 ## Production bundle
 
@@ -93,11 +96,11 @@ bash Scripts/notarize-macos.sh
 
 This submits the production app archive, waits for acceptance, staples the ticket, validates it, runs Gatekeeper assessment and produces `build/Parcel-macOS.zip` and `build/Parcel.dmg`. The DMG includes an Applications shortcut. The script prints SHA-256 hashes. No upload to a public download host is performed automatically.
 
-Install the notarized app on a clean second Mac from the hosted artifact. Check Gatekeeper, resource lookup, icon, trial, activation, floating hotkey, dragging, image preparation, AirDrop and sharing. Test both Apple Silicon and Intel if claiming support for both. Keep the app out of an App Translocation location by installing into Applications for final checks.
+Install the notarized app on a clean second Mac from the hosted artifact. Check Gatekeeper, resource lookup, icon, the locked activation screen, valid and invalid licences, floating hotkey, dragging, image preparation, AirDrop and sharing. Test both Apple Silicon and Intel if claiming support for both. Keep the app out of an App Translocation location by installing into Applications for final checks.
 
 ## Launch operations
 
-Host the notarized artifacts, connect the actual $20 product to the checkout link and deliver licences. Supply clear install/activation instructions and a support address. Verify one real paid-and-refunded test order through the chosen provider before public launch; do not infer payment readiness from the app opening a URL.
+Host the notarized artifacts, connect the $2.49 / $4.99 / $9.99 products to the checkout link and deliver the matching one-, two- or five-Mac licence. Supply clear install/activation instructions and a support address. Verify one real paid-and-refunded test order through the chosen provider before public launch; do not infer payment readiness from the app opening a URL.
 
 This source does not include an automatic updater. Initial updates are signed/notarized replacements distributed through your download page. A future Sparkle integration requires feed hosting, signatures, update entitlement decisions and its own acceptance checks.
 

@@ -13,10 +13,9 @@ bundle_id="${PARCEL_BUNDLE_ID:-com.yourcompany.parcel}"
 version="${PARCEL_VERSION:-1.0.0}"
 build_number="${PARCEL_BUILD_NUMBER:-1}"
 identity="${PARCEL_SIGN_IDENTITY:--}"
-if $production; then
+if $production || $appstore; then
     [[ "$bundle_id" != com.yourcompany.parcel ]] || { echo 'Set PARCEL_BUNDLE_ID to your identifier.' >&2;exit 1; }
     [[ -n "${PARCEL_LICENSE_PUBLIC_KEY:-}" && -n "${PARCEL_CHECKOUT_URL:-}" ]] || { echo 'Production needs a licence public key and HTTPS checkout URL.' >&2;exit 1; }
-    [[ "$identity" != - ]] || { echo 'Production needs PARCEL_SIGN_IDENTITY (Developer ID Application).' >&2;exit 1; }
     python3 - <<'PY'
 import base64,os,urllib.parse
 key=base64.b64decode(os.environ['PARCEL_LICENSE_PUBLIC_KEY'],validate=True)
@@ -24,9 +23,10 @@ assert len(key)==32,'The Ed25519 public key must be 32 bytes.'
 u=urllib.parse.urlparse(os.environ['PARCEL_CHECKOUT_URL']);assert u.scheme=='https' and u.netloc,'Use an HTTPS checkout URL.'
 PY
 fi
+if $production; then
+    [[ "$identity" != - ]] || { echo 'Production needs PARCEL_SIGN_IDENTITY (Developer ID Application).' >&2;exit 1; }
+fi
 if $appstore; then
-    # App Store builds need no licence key infrastructure: Apple ties the
-    # purchase to the buyer's Apple ID and the app validates its receipt.
     [[ "$bundle_id" != com.yourcompany.parcel ]] || { echo 'Set PARCEL_BUNDLE_ID to your App Store identifier.' >&2;exit 1; }
 fi
 mkdir -p build
@@ -34,10 +34,13 @@ architectures=("$(uname -m)")
 if $universal; then architectures=(arm64 x86_64); fi
 binaries=()
 resource_bin=''
+swift_options=()
+if [[ "${PARCEL_SWIFT_DISABLE_SANDBOX:-0}" == 1 ]]; then swift_options+=(--disable-sandbox); fi
+if [[ -n "${PARCEL_SWIFT_DEBUG_INFO:-}" ]]; then swift_options+=(-debug-info-format "$PARCEL_SWIFT_DEBUG_INFO"); fi
 for arch in "${architectures[@]}"; do
     scratch=".build/bundle-$arch"
-    swift build --scratch-path "$scratch" -c release --product Parcel --arch "$arch"
-    bin="$(swift build --scratch-path "$scratch" -c release --arch "$arch" --show-bin-path)"
+    swift build ${swift_options[@]+"${swift_options[@]}"} --scratch-path "$scratch" -c release --product Parcel --arch "$arch"
+    bin="$(swift build ${swift_options[@]+"${swift_options[@]}"} --scratch-path "$scratch" -c release --arch "$arch" --show-bin-path)"
     binaries+=("$bin/Parcel")
     resource_bin="$bin"
 done
@@ -52,7 +55,7 @@ plutil -replace CFBundleVersion -string "$build_number" "$app/Contents/Info.plis
 if $production || $appstore; then
     plutil -replace ParcelDevelopmentMode -bool NO "$app/Contents/Info.plist"
 fi
-if $production; then
+if $production || $appstore; then
     plutil -replace ParcelLicensePublicKey -string "$PARCEL_LICENSE_PUBLIC_KEY" "$app/Contents/Info.plist"
     plutil -replace ParcelCheckoutURL -string "$PARCEL_CHECKOUT_URL" "$app/Contents/Info.plist"
 fi
@@ -62,7 +65,45 @@ done
 cp Sources/ParcelApp/Resources/PrivacyInfo.xcprivacy "$app/Contents/Resources/"
 cp Sources/ParcelApp/Resources/Acknowledgements.txt "$app/Contents/Resources/"
 cp Sources/ParcelApp/Resources/paper-seal.wav "$app/Contents/Resources/"
-iconutil -c icns Assets/AppIcon.iconset -o "$app/Contents/Resources/AppIcon.icns"
+
+# SwiftPM compiles App Intents but does not package their discoverability
+# metadata into a hand-assembled .app. Mirror Xcode's metadata extraction so
+# Shortcuts, Siri and Spotlight can discover Parcel's actions after install.
+primary_arch="${architectures[0]}"
+intent_objects="$PWD/.build/bundle-$primary_arch/out/Intermediates.noindex/Parcel.build/Release/Parcel-p.build/Objects-normal/$primary_arch"
+intent_sources="$intent_objects/Parcel.SwiftFileList"
+intent_values="$intent_objects/Parcel-primary.swiftconstvalues"
+if [[ -f "$intent_sources" && -f "$intent_values" ]]; then
+    intent_staging="$(mktemp -d "${TMPDIR:-/tmp}/Parcel-appintents.XXXXXX")"
+    printf '%s\n' "$intent_values" > "$intent_staging/const-values.txt"
+    xcrun appintentsmetadataprocessor \
+        --output "$intent_staging" \
+        --toolchain-dir "$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain" \
+        --module-name Parcel \
+        --sdk-root "$(xcrun --sdk macosx --show-sdk-path)" \
+        --xcode-version "$(xcodebuild -version | awk '/Build version/{print $3}')" \
+        --platform-family macOS \
+        --deployment-target 14.0 \
+        --target-triple "$primary_arch-apple-macos14.0" \
+        --source-file-list "$intent_sources" \
+        --swift-const-vals-list "$intent_staging/const-values.txt" \
+        --force
+    if [[ -d "$intent_staging/Metadata.appintents" ]]; then
+        cp -R "$intent_staging/Metadata.appintents" "$app/Contents/Resources/"
+    elif $production || $appstore; then
+        echo 'App Intents metadata extraction produced no output; refusing the distribution build.' >&2
+        exit 1
+    else
+        echo 'App Intents metadata was not emitted for this local development build.' >&2
+    fi
+    rm -rf -- "$intent_staging"
+else
+    echo 'Missing App Intents compiler metadata; refusing to ship undiscoverable shortcuts.' >&2
+    exit 1
+fi
+if ! iconutil -c icns Assets/AppIcon.iconset -o "$app/Contents/Resources/AppIcon.icns"; then
+    python3 Scripts/pack-icon.py Assets/AppIcon.iconset "$app/Contents/Resources/AppIcon.icns"
+fi
 if $production; then
     # Resources contain no nested executable frameworks. ZIPFoundation is linked statically.
     codesign --force --options runtime --timestamp --sign "$identity" --entitlements Config/Parcel.entitlements "$app"

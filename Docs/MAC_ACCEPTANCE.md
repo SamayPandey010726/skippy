@@ -6,7 +6,8 @@ All rows below are pending native execution. Run on a clean macOS 14 installatio
 |---|---|---|
 | Build | README commands, then production universal build | No compiler errors; icon/resources/privacy manifest included; both architectures present |
 | Install | Notarized hosted ZIP/DMG on a second Mac | Gatekeeper accepts; install to Applications; no missing resources |
-| Onboarding | Fresh user profile, then relaunch | Clear useful welcome; dismissed state retained |
+| Onboarding | Fresh user profile, open the hub, complete/replay all five steps, then relaunch | Guided drag, browse, preview/prepare/pack and shortcut setup; progress and dismissal retained |
+| Global shortcut | With another app active, press `⌃⌥⌘P`; then record a different chord in Settings and repeat | Courier toggles globally; valid changes apply immediately; conflicts preserve the previous working shortcut |
 | Intake | Drag 1 and 100 mixed files; add folder; paste screenshot, text, link | Correct count/content; no silent changes to originals; links are readable text, not fetched pages |
 | Promises | Photos/Safari/Mail or another actual promise-producing app | All promised files resolve to the intended box; progress ends; failure is explicit; never seal incomplete intake |
 | Duplicate input | Re-add same local file; different files with same name/case/NFC | Same source reference not duplicated; different contents both survive output with numbered names |
@@ -26,7 +27,7 @@ All rows below are pending native execution. Run on a clean macOS 14 installatio
 | Floating panel | Hotkey, menu bar, full-screen/Spaces, other app foreground | Useful panel stays available; no duplicate hotkey toggle; close/reopen works |
 | Startup files | Open With from Finder while app closed | File appears once after startup; workbench opens |
 | Settings | Packaging changes, sound off/on, login item allow/deny | Valid ZIP invalidation; no recipe race while working; quiet default; error if login registration fails |
-| Licence | Production trial, expiry, valid key, modified key, wrong product/key | Keychain persists; paid features obey state; collection remains readable after expiry |
+| Licence | Locked launch, valid 1/2/5-Mac key, modified key, wrong Mac/product/key | Keychain persists; no shelf, monitor, shortcut or file action starts before activation |
 | Recovery | Corrupt/newer JSON; backup-and-reset action | No silent overwrite; backup produced; cleanup disabled while references unknown |
 | Cleanup | Referenced child/parent folder and stale unreferenced app copies | References protected; only eligible app-owned copies removed; sources/exported copies untouched |
 | Accessibility | Reduce Motion, VoiceOver, keyboard navigation, larger text | State understandable without motion; named actionable controls; usable focus and contrast |

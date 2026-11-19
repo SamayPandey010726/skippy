@@ -21,19 +21,19 @@ enum Motion {
   }
   /// Icon bounce, button tap.
   static var snappyTap: Animation? {
-    reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.45)
+    reduceMotion ? nil : .spring(response: 0.18, dampingFraction: 0.6)
   }
   /// Drag spring-back, drop bounce.
   static var playfulSettle: Animation? {
-    reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.5)
+    reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.62)
   }
   /// Shelf summon / reveal (open with personality).
   static var uiReveal: Animation? {
-    reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.75)
+    reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.82)
   }
   /// Grid/list switch, reorder.
   static var layoutRelayout: Animation? {
-    reduceMotion ? nil : .spring(response: 0.45, dampingFraction: 0.8)
+    reduceMotion ? nil : .spring(response: 0.26, dampingFraction: 0.86)
   }
   /// Numeric settle, no wobble.
   static var counterRollUp: Animation? {
@@ -45,10 +45,34 @@ enum Motion {
   }
   /// Hover lift: object rises toward the pointer.
   static var hoverLift: Animation? {
-    reduceMotion ? nil : .easeOut(duration: 0.18)
+    reduceMotion ? nil : .easeOut(duration: 0.09)
   }
-  /// Press squish: deliberately slow, builds toward an action.
+  /// Press feedback.
   static var pressSquish: Animation? {
-    reduceMotion ? nil : .easeInOut(duration: 0.45)
+    reduceMotion ? nil : .spring(response: 0.18, dampingFraction: 0.85)
+  }
+  static var pendulum: Animation? {
+    reduceMotion ? nil : .interpolatingSpring(stiffness: 70, damping: 7)
+  }
+  static var bagOpen: Animation? {
+    reduceMotion ? nil : .spring(response: 0.16, dampingFraction: 0.88)
+  }
+  static var fanOpen: Animation? {
+    reduceMotion ? nil : .interpolatingSpring(stiffness: 150, damping: 20)
+  }
+  static var dialDetent: Animation? {
+    reduceMotion ? nil : .interpolatingSpring(mass: 0.85, stiffness: 120, damping: 13)
+  }
+  static var folderFlap: Animation? {
+    reduceMotion ? nil : .easeInOut(duration: 0.16)
+  }
+  static var fileCatch: Animation? {
+    reduceMotion ? nil : .timingCurve(0.45, 0, 0.15, 1, duration: 0.42)
+  }
+  static var catchSettle: Animation? {
+    reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85)
+  }
+  static var ribbonTie: Animation? {
+    reduceMotion ? nil : .timingCurve(0.45, 0, 0.15, 1, duration: 0.72)
   }
 }

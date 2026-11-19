@@ -7,6 +7,8 @@ struct ItemListView: View {
   @EnvironmentObject private var store: ParcelStore
   @State private var renaming: ParcelItem?
   @State private var comparing: ParcelItem?
+  @StateObject private var skins = SkinStore.shared
+  @FocusState private var listFocused: Bool
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       HStack {
@@ -74,7 +76,29 @@ struct ItemListView: View {
           }
         }
       }
-    }.sheet(item: $renaming) { item in
+    }
+    .focusable().focused($listFocused).focusEffectDisabled()
+    .onMoveCommand { direction in
+      let step: Int
+      switch direction {
+      case .up: step = -1
+      case .down: step = 1
+      default: return
+      }
+      let items = store.filteredItems
+      guard !items.isEmpty else { return }
+      let current = items.firstIndex { store.selectedItems.contains($0.id) }
+      let next = current.map { min(max($0 + step, 0), items.count - 1) } ?? (step > 0 ? 0 : items.count - 1)
+      store.selectedItems = [items[next].id]
+    }
+    .onKeyPress(.space) {
+      let urls = store.filteredItems.filter { store.selectedItems.contains($0.id) }.map(\.effectiveURL)
+      guard !urls.isEmpty else { return .ignored }
+      QuickLookController.shared.show(urls)
+      return .handled
+    }
+    .onExitCommand { store.selectedItems = []; listFocused = false }
+    .sheet(item: $renaming) { item in
       RenameSheet(
         title: "Rename in this parcel", initial: item.displayName,
         caption: "This name is used when you drag the item out or pack it."
@@ -93,8 +117,8 @@ struct ItemListView: View {
         RoundedRectangle(cornerRadius: 8).fill(Ink.cream)
         FileThumbnail(url: item.effectiveURL, size: 39)
         DragOutSurface(
-          urls: available && store.canExport ? [item.effectiveURL] : [], enabled: !store.busy,
-          tap: { store.toggleSelection(item.id) })
+          urls: available && store.canExport ? [item.effectiveURL] : [], outgoingText: item.inlineText, enabled: !store.busy,
+          tap: { store.toggleSelection(item.id); listFocused = true })
       }.frame(width: 49, height: 49)
       VStack(alignment: .leading, spacing: 5) {
         Text(item.effectiveName).font(.system(size: 12, weight: .medium)).lineLimit(1)
@@ -111,7 +135,7 @@ struct ItemListView: View {
           }
         }.font(.system(size: 10))
       }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-      .onTapGesture { store.toggleSelection(item.id) }
+      .onTapGesture { store.toggleSelection(item.id); listFocused = true }
       if item.isPinned {
         Image(systemName: "pin.fill").font(.system(size: 10)).foregroundStyle(Ink.moss).help(
           "Pinned — kept when the shelf self-cleans")
@@ -128,12 +152,14 @@ struct ItemListView: View {
       } label: {
         Image(systemName: "eye").font(.system(size: 12))
       }.buttonStyle(.plain).foregroundStyle(Ink.secondary).disabled(!available).help("Quick Look")
+        .accessibilityLabel("Quick Look \(item.displayName)")
       Button {
         store.remove([item.id])
       } label: {
         Image(systemName: "xmark").font(.system(size: 9))
       }.buttonStyle(.plain).foregroundStyle(Ink.secondary).disabled(store.busy).help(
         "Remove from parcel; keep original")
+        .accessibilityLabel("Remove \(item.displayName) from parcel")
     }.padding(.horizontal, 13).padding(.vertical, 9)
       .background(
         store.selectedItems.contains(item.id) ? Ink.paleGreen.opacity(0.6) : Ink.canvas,
@@ -156,6 +182,17 @@ struct ItemListView: View {
       .contextMenu {
         Button("Preview") { QuickLookController.shared.show([item.effectiveURL]) }.disabled(
           !available)
+        Button("Copy item") {
+          guard let boxID = store.selectedBox else { return }
+          do { _ = try store.copyShelfFiles(in: boxID, itemID: item.id) }
+          catch { store.error = error.localizedDescription }
+        }.disabled(store.busy || !store.canExport)
+        Button("Copy all parcel items") {
+          guard let boxID = store.selectedBox else { return }
+          do { _ = try store.copyShelfFiles(in: boxID) }
+          catch { store.error = error.localizedDescription }
+        }.disabled(store.busy || !store.canExport)
+        Button("Pack parcel") { store.seal() }.disabled(store.busy || store.items.isEmpty || !store.canExport)
         Button("Rename in parcel…") { renaming = item }.disabled(store.busy)
         Button("Show original in Finder") {
           NSWorkspace.shared.activateFileViewerSelecting([item.sourceURL])
@@ -164,6 +201,28 @@ struct ItemListView: View {
         if item.preparedPath != nil { Button("Compare copies…") { comparing = item } }
         if TextRecognition.isProbablyText(url: item.effectiveURL) {
           Button("Copy Contents") { store.copyTextContents(of: item) }.disabled(store.busy)
+        }
+        if ImagePipeline.canPrepare(item.effectiveURL) {
+          Button("Process image…") {
+            store.selectedItems = [item.id]
+            store.showTransform = true
+          }.disabled(store.busy)
+          Button("Copy Text with OCR") { store.extractTextFromImages(itemIDs: [item.id]) }
+            .disabled(store.busy || store.extractingText)
+        }
+        if VideoPipeline.canPrepare(item.effectiveURL) {
+          Button("Process video…") {
+            store.selectedItems = [item.id]
+            store.showVideoPrepare = true
+          }.disabled(store.busy)
+        }
+        let transforms = DocumentTransformPipeline.available(for: [item.effectiveURL])
+        if !transforms.isEmpty {
+          Menu("Transform") {
+            ForEach(transforms) { transform in
+              Button(transform.label) { store.transformDocuments(transform, itemIDs: [item.id]) }
+            }
+          }.disabled(store.busy || !store.canExport)
         }
         Button(item.isPinned ? "Unpin" : "Pin") { store.togglePin(item.id) }.disabled(store.busy)
         Divider()

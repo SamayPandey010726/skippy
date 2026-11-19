@@ -1,5 +1,6 @@
 import Foundation
 import Vision
+import CoreGraphics
 
 /// On-device text recognition for images in a parcel.
 /// Dropover ships OCR as a built-in file action; Parcel matches it here —
@@ -13,6 +14,20 @@ enum TextRecognition {
     let handler = VNImageRequestHandler(url: url, options: [:])
     do {
       try handler.perform([request])
+    } catch {
+      return nil
+    }
+    let lines = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+    let text = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    return text.isEmpty ? nil : text
+  }
+
+  static func recognizeText(in image: CGImage) async -> String? {
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = .accurate
+    request.usesLanguageCorrection = true
+    do {
+      try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
     } catch {
       return nil
     }

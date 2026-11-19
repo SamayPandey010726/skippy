@@ -54,7 +54,7 @@ Only app-owned Prepared, Received and Exports directories are candidates for cac
 
 ## Commercial scaffolding
 
-The developer bundle defaults to licensing disabled so it can be reviewed. Production mode requires a company bundle identifier, HTTPS checkout URL, Ed25519 public key and Developer ID signing identity. A local Keychain trial record supplies 14 days of preparation/packaging/sharing. Saved references remain readable after expiry.
+The developer bundle defaults to licensing disabled so it can be reviewed. Production mode requires a company bundle identifier, HTTPS checkout URL, Ed25519 public key and Developer ID signing identity. Production launches into a locked activation window; shelf, clipboard, watched-folder, shortcut, indexing and file services start only after a signed one-, two- or five-Mac licence is verified.
 
 An offline licence is a base64url JSON payload plus Ed25519 signature. Only the public key is in the app. The merchant-side CLI generates/holds the private key and issues the token after verified payment. This handoff contains no deployed payment webhook or mail sender. There is no online device-count enforcement, server revocation or tamper-proof DRM claim. Those are explicit business tradeoffs for a small perpetual utility.
 
@@ -64,4 +64,4 @@ Hosted sharing, external cloud-provider integrations, whole-disk search, OCR, co
 
 ## Verification boundary
 
-Portable Swift compilation/tests, independent ZIP extraction, issuer tests and browser preview checks ran here. Native UI/type checking, actual ImageIO results, cross-app file promises, login items, Keychain trial behaviour and notarization require a Mac. The included CI and native smoke source cover part of that work; the acceptance matrix covers the interactions that need human/native testing. Shipping is conditional on those checks passing.
+Portable Swift compilation/tests, independent ZIP extraction, issuer tests and browser preview checks ran here. Native UI/type checking, actual ImageIO results, cross-app file promises, login items, Keychain persistence and notarization require a Mac. The included CI and native smoke source cover part of that work; the acceptance matrix covers the interactions that need human/native testing. Shipping is conditional on those checks passing.

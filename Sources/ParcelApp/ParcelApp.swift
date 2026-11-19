@@ -3,100 +3,72 @@ import SwiftUI
 
 extension Notification.Name {
   static let parcelFocusSearch = Notification.Name("parcel-focus-search")
+  static let parcelFocusCourierSearch = Notification.Name("parcel-focus-courier-search")
+  static let parcelShowCourierFilters = Notification.Name("parcel-show-courier-filters")
+  static let parcelFocusClipboardSearch = Notification.Name("parcel-focus-clipboard-search")
 }
 
 @main @MainActor struct ParcelApp: App {
   @NSApplicationDelegateAdaptor(ParcelAppDelegate.self) private var delegate
-  @StateObject private var store = ParcelStore()
+  @StateObject private var store = ParcelRuntime.store
+
+  init() { ParcelShortcuts.updateAppShortcutParameters() }
+
   var body: some Scene {
-    Window("Parcel", id: "workbench") {
-      WorkbenchView().environmentObject(store).frame(minWidth: 720, minHeight: 520)
-        .onAppear {
-          ParcelRuntime.store = store
-          AppController.shared.install(store: store)
-          store.checkCacheOnStartup()
-        }
-    }
-    .windowStyle(.hiddenTitleBar).defaultSize(width: 1160, height: 820)
+    MenuBarExtra("Parcels", systemImage: "square.grid.2x2.fill", isInserted: .constant(false)) { EmptyView() }
     .commands {
+      CommandGroup(replacing: .appSettings) {
+        Button("Settings…") { AppController.shared.openPreferences() }.keyboardShortcut(",")
+      }
       CommandGroup(replacing: .newItem) {
-        Button("New parcel") { store.newBox() }.keyboardShortcut("n").disabled(store.busy)
-        Button("Add files…") { store.addFilesPanel() }.keyboardShortcut("o").disabled(store.busy)
-        Button("Paste into parcel") { store.paste() }.keyboardShortcut(
-          "v", modifiers: [.command, .shift]
-        ).disabled(store.busy)
+        Button("Add files…") { store.addFilesPanel() }.keyboardShortcut("o").disabled(store.busy || !store.license.canUseApp)
+        Button("Paste into parcel") { store.paste() }
+          .keyboardShortcut("v", modifiers: [.command, .shift]).disabled(store.busy || !store.license.canUseApp)
       }
       CommandMenu("Go") {
         Button("Focus search") {
           NotificationCenter.default.post(name: .parcelFocusSearch, object: nil)
-        }.keyboardShortcut("f", modifiers: [.command])
+        }.keyboardShortcut("f").disabled(!store.license.canUseApp)
       }
       CommandMenu("Parcel") {
-        Button("Pack \(store.packaging.format.label)") { store.seal() }.keyboardShortcut(
-          "p", modifiers: [.command, .shift]
-        )
-        .disabled(store.busy || store.items.isEmpty || !store.canExport)
-        Button("Prepare images…") { store.showPrepare = true }.keyboardShortcut("e").disabled(
-          store.imageItems.isEmpty || store.busy || !store.canExport)
-        Button("Copy contents list") { store.copyManifest() }.keyboardShortcut(
-          "c", modifiers: [.command, .shift])
-        Button("Copy local file link") { store.copyArchiveLink() }.disabled(
-          !store.ready || store.busy || !store.canExport)
-        Button("Show drop popup") { AppController.shared.toggleDropPopup() }.keyboardShortcut(
-          "p", modifiers: [.control, .option])
+        Button("Pack \(store.packaging.format.label)") { store.seal() }
+          .keyboardShortcut("p", modifiers: [.command, .shift])
+          .disabled(store.busy || store.items.isEmpty || !store.canExport)
+        Button("Prepare images…") {
+          if AppController.shared.isWorkbenchVisible { store.showPrepare = true }
+          else { DropPopupController.shared.presentMediaEditor() }
+        }.keyboardShortcut("e")
+          .disabled(store.imageItems.isEmpty || store.busy || !store.canExport)
+        Button("Prepare videos…") {
+          if AppController.shared.isWorkbenchVisible { store.showVideoPrepare = true }
+          else { DropPopupController.shared.presentMediaEditor() }
+        }
+          .disabled(store.videoItems.isEmpty || store.busy || !store.canExport)
+        Button("Transform PDF or image…") {
+          if AppController.shared.isWorkbenchVisible { store.showTransform = true }
+          else { DropPopupController.shared.presentMediaEditor() }
+        }.keyboardShortcut("t", modifiers: [.command, .shift])
+          .disabled(store.availableTransforms.isEmpty || store.busy || !store.canExport)
+        Button("Copy image text with OCR") { store.extractTextFromImages() }
+          .keyboardShortcut("o", modifiers: [.command, .shift])
+          .disabled(store.imageItems.isEmpty || store.busy || store.extractingText || !store.canExport)
+        Button("Copy contents list") { store.copyManifest() }
+          .keyboardShortcut("c", modifiers: [.command, .shift]).disabled(!store.canExport)
+        Button("Copy local file link") { store.copyArchiveLink() }
+          .disabled(!store.ready || store.busy || !store.canExport)
+        Button("Open Parcels") { AppController.shared.toggleDropPopup() }
         Divider()
-        Button("Share via WhatsApp") { store.shareViaWhatsApp() }.disabled(
-          store.busy || !store.canExport)
+        Button("Share via WhatsApp") { store.shareViaWhatsApp() }.disabled(store.busy || !store.canExport)
         Divider()
         Button("Select all pieces") { store.selectAll() }.keyboardShortcut("a")
-        Button("Pin/unpin selected pieces") { store.togglePinSelected() }.keyboardShortcut(
-          "p", modifiers: [.command, .option]
-        ).disabled(store.selectedItems.isEmpty || store.busy)
-        Button("Remove selected pieces") { store.remove(store.selectedItems) }.keyboardShortcut(
-          .delete, modifiers: [.command]
-        ).disabled(store.selectedItems.isEmpty || store.busy)
+          .disabled(!store.canExport)
+        Button("Pin/unpin selected pieces") { store.togglePinSelected() }
+          .keyboardShortcut("p", modifiers: [.command, .option])
+          .disabled(store.selectedItems.isEmpty || store.busy || !store.canExport)
+        Button("Remove selected pieces") { store.remove(store.selectedItems) }
+          .keyboardShortcut(.delete, modifiers: [.command])
+          .disabled(store.selectedItems.isEmpty || store.busy || !store.canExport)
       }
     }
-    MenuBarExtra("Parcel", systemImage: "folder") {
-      Button("Open Parcel") { AppController.shared.openWorkbench() }
-      Button("Drop popup    ⌃⌥P") { AppController.shared.toggleDropPopup() }
-      Button("Add files…") { store.addFilesPanel() }.disabled(store.busy)
-      Button("Paste into parcel") { store.paste() }.disabled(store.busy)
-      Divider()
-      // Packed parcels, fanned out: peek inside and open anything directly,
-      // without opening the app window. Also on the Dock icon menu.
-      if !store.recentParcels.isEmpty {
-        Text("Packed parcels — open anything directly")
-        ForEach(store.recentParcels.prefix(6)) { box in
-          Menu(box.name) {
-            ForEach(box.items.prefix(15)) { item in
-              Button(item.displayName) {
-                NSWorkspace.shared.open(item.effectiveURL)
-              }
-            }
-            if box.items.count > 15 {
-              Text("\(box.items.count - 15) more inside the app").font(.system(size: 11))
-            }
-            Divider()
-            Button("Show packed file in Finder") {
-              if let path = box.lastArchivePath {
-                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
-              }
-            }
-          }
-        }
-        Divider()
-      }
-      ForEach(store.boxes.prefix(8)) { box in
-        Button(box.name) {
-          store.selectBox(box.id)
-          AppController.shared.openWorkbench()
-        }.disabled(store.busy)
-      }
-      Divider()
-      SettingsLink()
-      Button("Quit Parcel") { NSApp.terminate(nil) }
-    }
-    Settings { PreferencesView().environmentObject(store).frame(width: 550, height: 540) }
   }
 }

@@ -7,6 +7,8 @@ import UniformTypeIdentifiers
 enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
 @MainActor final class ParcelStore: ObservableObject {
   @Published var boxes: [ParcelBox] = []
+  @Published private(set) var trashedBoxes: [TrashedParcel] = []
+  @Published var showBin = false
   @Published var selectedBox: UUID?
   @Published var selectedItems: Set<UUID> = []
   @Published var phase: ParcelPhase = .open
@@ -19,6 +21,9 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
   @Published var showRenameBox = false
   @Published var showWelcome = false
   @Published var recipe = ImageRecipe()
+  @Published var videoRecipe = VideoRecipe()
+  @Published var showVideoPrepare = false
+  @Published var showTransform = false
   @Published var packaging = PackagingOptions.load()
   @Published var archiveURL: URL?
   @Published var lastManifest = ""
@@ -32,29 +37,50 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
   private var libraryWritable = true
   private var receivingCount = 0
   private var cleanupChecked = false
+  private var persistsLibrary = true
+  private var binTimer: Timer?
+  private var retainedBoxes: [ParcelBox] { boxes + trashedBoxes.map(\.box) }
   var busy: Bool { phase == .packing || phase == .preparing }
   var current: ParcelBox? { boxes.first { $0.id == selectedBox } }
   var items: [ParcelItem] { current?.items ?? [] }
   @Published var searchText = ""
-  var isSearching: Bool { !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-  /// Parcels whose name matches, or that contain a matching file.
+  @Published var fileTypeFilter = FileSearchType.any
+  @Published var fileSizeFilter = FileSearchSize.any
+  @Published var fileAddedFilter = FileSearchAdded.anytime
+  var isSearching: Bool {
+    !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || fileTypeFilter != .any || fileSizeFilter != .any || fileAddedFilter != .anytime
+  }
+  var fileQuery: ParcelFileQuery { ParcelFileQuery(searchText, type: fileTypeFilter, size: fileSizeFilter, added: fileAddedFilter) }
+  var rankedBoxes: [ParcelBox] { ShelfRanking.destinations(boxes, limit: boxes.count) }
   var filteredBoxes: [ParcelBox] {
-    guard isSearching else { return boxes }
-    let q = searchText.lowercased()
-    return boxes.filter { box in
-      box.name.lowercased().contains(q)
-        || box.items.contains {
-          $0.displayName.lowercased().contains(q) || $0.effectiveName.lowercased().contains(q)
-        }
+    let ranked = rankedBoxes
+    guard isSearching else { return ranked }
+    let query = fileQuery
+    return ranked.filter { box in
+      (!searchText.isEmpty && fileTypeFilter == .any && fileSizeFilter == .any && fileAddedFilter == .anytime && box.name.localizedCaseInsensitiveContains(searchText))
+        || box.items.contains(where: query.matches)
     }
   }
-  /// Files in the current parcel matching the search.
-  var filteredItems: [ParcelItem] {
-    guard isSearching else { return items }
-    let q = searchText.lowercased()
-    return items.filter {
-      $0.displayName.lowercased().contains(q) || $0.effectiveName.lowercased().contains(q)
+  func filteredItems(in box: ParcelBox) -> [ParcelItem] {
+    guard isSearching else { return box.items }
+    let query = fileQuery
+    return box.items.filter(query.matches)
+  }
+  func compactItems(_ items: [ParcelItem]) -> [ParcelItem] {
+    var seen: Set<UUID> = []
+    return items.filter { item in
+      guard let stackID = item.stackID else { return true }
+      return seen.insert(stackID).inserted
     }
+  }
+  func stackMembers(of item: ParcelItem, in box: ParcelBox) -> [ParcelItem] {
+    guard let stackID = item.stackID else { return [item] }
+    return box.items.filter { $0.stackID == stackID }
+  }
+  func stackCount(of item: ParcelItem, in box: ParcelBox) -> Int { stackMembers(of: item, in: box).count }
+  var filteredItems: [ParcelItem] { current.map(filteredItems(in:)) ?? [] }
+  func clearFileSearch() {
+    searchText = ""; fileTypeFilter = .any; fileSizeFilter = .any; fileAddedFilter = .anytime
   }
   var workingItems: [ParcelItem] {
     selectedItems.isEmpty ? items : items.filter { selectedItems.contains($0.id) }
@@ -62,33 +88,38 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
   var imageItems: [ParcelItem] {
     workingItems.filter { ImagePipeline.canPrepare($0.sourceURL) && !$0.isDirectory }
   }
+  var videoItems: [ParcelItem] { workingItems.filter { !$0.isDirectory && VideoPipeline.canPrepare($0.sourceURL) } }
+  var transformItems: [ParcelItem] {
+    workingItems.filter { !$0.isDirectory && DocumentTransformPipeline.canTransform($0.effectiveURL) }
+  }
+  var availableTransforms: [DocumentTransformKind] {
+    DocumentTransformPipeline.available(for: transformItems.map(\.effectiveURL))
+  }
   var canExport: Bool { license.canUseApp }
   var ready: Bool {
     phase == .ready && archiveURL.map { FileManager.default.fileExists(atPath: $0.path) } == true
   }
 
-  init() {
+  init(persist: Bool = true) {
+    persistsLibrary = persist
+    if !persist {
+      let box = ParcelBox(name: "My first parcel")
+      boxes = [box]
+      selectedBox = box.id
+      return
+    }
     do {
       try StoragePaths.createDirectories()
       if FileManager.default.fileExists(atPath: StoragePaths.library.path) {
         let doc = try CollectionStore.read(from: StoragePaths.library)
         boxes = doc.boxes
+        trashedBoxes = doc.trashedBoxes
         selectedBox = doc.selectedBox
-        for b in boxes {
-          for item in b.items { access.retain(access.resolve(item)) }
-        }
-        for bi in boxes.indices {
-          for ii in boxes[bi].items.indices {
-            let resolved = access.resolve(boxes[bi].items[ii])
-            boxes[bi].items[ii].sourcePath = resolved.path
-            if let prepared = boxes[bi].items[ii].preparedPath,
-              !FileTree.isInside(URL(fileURLWithPath: prepared), directory: StoragePaths.prepared)
-            {
-              boxes[bi].items[ii].preparedPath = nil
-              boxes[bi].items[ii].preparedBytes = nil
-              boxes[bi].items[ii].preparedDescription = nil
-            }
-          }
+        boxes = boxes.map(resolvePersistedBox)
+        trashedBoxes = trashedBoxes.map { entry in
+          var next = entry
+          next.box = resolvePersistedBox(entry.box)
+          return next
         }
       }
     } catch {
@@ -96,6 +127,7 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
       self.error =
         "Your saved parcel library could not be read. It has not been overwritten. \(error.localizedDescription)"
     }
+    boxes = ShelfRanking.normalizePins(boxes)
     if boxes.isEmpty { boxes = [ParcelBox(name: "My first parcel")] }
     if !boxes.contains(where: { $0.id == selectedBox }) { selectedBox = boxes.first?.id }
     packaging.cleanMacMetadata = preferences.cleanMetadata
@@ -104,18 +136,35 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     showWelcome = !UserDefaults.standard.bool(forKey: "hasSeenWelcome")
     refreshLicense()
     restoreReadyState()
+    purgeExpiredBin()
+    scheduleBinExpiry()
+  }
+  private func resolvePersistedBox(_ box: ParcelBox) -> ParcelBox {
+    var resolvedBox = box
+    for position in resolvedBox.items.indices {
+      let resolved = access.resolve(resolvedBox.items[position])
+      access.retain(resolved)
+      resolvedBox.items[position].sourcePath = resolved.path
+      if let prepared = resolvedBox.items[position].preparedPath,
+        !FileTree.isInside(URL(fileURLWithPath: prepared), directory: StoragePaths.prepared) {
+        resolvedBox.items[position].preparedPath = nil
+        resolvedBox.items[position].preparedBytes = nil
+        resolvedBox.items[position].preparedDescription = nil
+      }
+    }
+    return resolvedBox
   }
   func cleanUnusedCopies() {
     guard !busy, libraryWritable else { return }
     do {
-      let n = try CacheCare.removeUnused(boxes: boxes, olderThan: Date().addingTimeInterval(-86400))
+      let n = try CacheCare.removeUnused(boxes: retainedBoxes, olderThan: Date().addingTimeInterval(-86400))
       notice = "Removed \(n) unused app copies older than a day. Your originals are safe."
     } catch { self.error = error.localizedDescription }
   }
   func checkCacheOnStartup() {
     guard !cleanupChecked, libraryWritable else { return }
     cleanupChecked = true
-    _ = try? CacheCare.removeUnused(boxes: boxes, olderThan: Date().addingTimeInterval(-30 * 86400))
+    _ = try? CacheCare.removeUnused(boxes: retainedBoxes, olderThan: Date().addingTimeInterval(-30 * 86400))
     if preferences.autoClearStale { clearStaleItems() }
   }
   func refreshLicense() { license = LicenseManager.shared.status() }
@@ -149,11 +198,14 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     }
   }
   func save() {
-    guard libraryWritable else { return }
     do {
-      try CollectionStore.save(
-        .init(boxes: boxes, selectedBox: selectedBox), to: StoragePaths.library)
+      try persistLibrary()
     } catch { self.error = "This change could not be saved: \(error.localizedDescription)" }
+  }
+  private func persistLibrary() throws {
+    guard libraryWritable, persistsLibrary else { return }
+    try CollectionStore.save(
+      .init(boxes: boxes, selectedBox: selectedBox, trashedBoxes: trashedBoxes), to: StoragePaths.library)
   }
   func finishWelcome() {
     showWelcome = false
@@ -161,6 +213,7 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
   }
   func selectBox(_ id: UUID) {
     guard !busy, receivingCount == 0 else { return }
+    guard boxes.contains(where: { $0.id == id }) else { return }
     selectedBox = id
     selectedItems = []
     restoreReadyState()
@@ -176,6 +229,40 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     save()
     showRenameBox = true
   }
+  @discardableResult func createNamedBox(_ name: String, pin: Bool = true) -> UUID? {
+    guard !busy, receivingCount == 0, libraryWritable else { return nil }
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty, trimmed.count <= 80 else {
+      error = "Use a parcel name between 1 and 80 characters."
+      return nil
+    }
+    var box = ParcelBox(name: trimmed)
+    box.isPinned = pin
+    if pin {
+      for index in boxes.indices where boxes[index].isShelfPinned { boxes[index].isPinned = false }
+    }
+    boxes.insert(box, at: 0)
+    selectedBox = box.id
+    selectedItems = []
+    invalidateArchive()
+    save()
+    return box.id
+  }
+  func shelfDestination(_ destination: UUID?) -> UUID? {
+    guard !busy, receivingCount == 0, libraryWritable else { return nil }
+    if let destination {
+      guard boxes.contains(where: { $0.id == destination }) else { return nil }
+      selectBox(destination)
+      return destination
+    }
+    let box = ParcelBox(name: "Untitled parcel")
+    boxes.insert(box, at: 0)
+    selectedBox = box.id
+    selectedItems = []
+    invalidateArchive()
+    save()
+    return box.id
+  }
   func renameBox(_ name: String) {
     guard !busy, let i = index else { return }
     let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -186,15 +273,135 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     boxes[i].name = trimmed
     changed()
   }
-  func deleteCurrentBox() {
-    guard !busy, receivingCount == 0, let i = index else { return }
-    boxes.remove(at: i)
-    if boxes.isEmpty { boxes = [ParcelBox(name: "My parcel")] }
-    selectedBox = boxes.first?.id
-    selectedItems = []
-    restoreReadyState()
-    reconcileAccess()
+  func nameCurrentFromContents() {
+    guard !busy, let suggestion = ParcelNameSuggester.suggest(for: items) else {
+      notice = "Add a few files before asking Parcel for a name."
+      return
+    }
+    renameBox(suggestion)
+    notice = "Named locally from file metadata."
+    RecentActionStore.shared.record(id: "smart-name", title: "Name from contents", symbol: "sparkles")
+  }
+  func toggleParcelPin(_ id: UUID) {
+    guard !busy, receivingCount == 0, libraryWritable,
+      let position = boxes.firstIndex(where: { $0.id == id }) else { return }
+    let pinning = !boxes[position].isShelfPinned
+    var next = boxes
+    for candidate in next.indices {
+      if candidate == position { next[candidate].isPinned = pinning }
+      else if pinning && next[candidate].isShelfPinned { next[candidate].isPinned = false }
+    }
+    boxes = next
     save()
+  }
+  func shelfFileURLs(in boxID: UUID, itemID: UUID? = nil) throws -> [URL] {
+    guard let box = boxes.first(where: { $0.id == boxID }) else {
+      throw ParcelError.storageError("This parcel is no longer in your library.")
+    }
+    let pieces = itemID.map { target -> [ParcelItem] in
+      guard let item = box.items.first(where: { $0.id == target }) else { return [] }
+      return stackMembers(of: item, in: box)
+    } ?? box.items
+    guard !pieces.isEmpty else { throw ParcelError.emptyCollection }
+    return try pieces.map { piece in
+      let url = piece.effectiveURL
+      guard FileManager.default.fileExists(atPath: url.path) else {
+        throw ParcelError.missingSource(piece.effectiveName)
+      }
+      return url
+    }
+  }
+  @discardableResult func copyShelfFiles(in boxID: UUID, itemID: UUID? = nil,
+                                         to board: NSPasteboard = .general, matchingSearch: Bool = false) throws -> Int {
+    guard canExport, !busy, receivingCount == 0 else {
+      throw ParcelError.storageError("Copy is unavailable while packing or when a licence is required.")
+    }
+    let urls: [URL]
+    if matchingSearch, itemID == nil, let box = boxes.first(where: { $0.id == boxID }) {
+      let pieces = filteredItems(in: box)
+      guard !pieces.isEmpty else { throw ParcelError.emptyCollection }
+      urls = try pieces.map { piece in
+        guard FileManager.default.fileExists(atPath: piece.effectiveURL.path) else { throw ParcelError.missingSource(piece.effectiveName) }
+        return piece.effectiveURL
+      }
+    } else { urls = try shelfFileURLs(in: boxID, itemID: itemID) }
+    board.clearContents()
+    guard board.writeObjects(urls.map { $0 as NSURL }) else {
+      throw ParcelError.storageError("The clipboard is unavailable. Drag the files out instead.")
+    }
+    return urls.count
+  }
+  func deleteCurrentBox() {
+    if let selectedBox { moveToBin(selectedBox) }
+  }
+  func moveToBin(_ boxID: UUID, now: Date = Date()) {
+    guard !busy, receivingCount == 0, libraryWritable,
+      let position = boxes.firstIndex(where: { $0.id == boxID }) else { return }
+    updateBin {
+      let box = boxes.remove(at: position)
+      trashedBoxes.insert(TrashedParcel(box: box, deletedAt: now), at: 0)
+      if boxes.isEmpty { boxes = [ParcelBox(name: "My parcel")] }
+      if selectedBox == boxID { selectedBox = boxes.first?.id }
+    }
+  }
+  func restoreFromBin(_ boxID: UUID, now: Date = Date()) {
+    guard !busy, receivingCount == 0, libraryWritable,
+      let position = trashedBoxes.firstIndex(where: { $0.id == boxID }) else { return }
+    guard trashedBoxes[position].expiresAt > now else { purgeExpiredBin(now: now); return }
+    guard !boxes.contains(where: { $0.id == boxID }) else {
+      error = "An active parcel already has this identity. The Bin entry has been kept unchanged."
+      return
+    }
+    updateBin {
+      var box = trashedBoxes.remove(at: position).box
+      if box.isShelfPinned && boxes.contains(where: \.isShelfPinned) { box.isPinned = false }
+      boxes.insert(box, at: 0)
+      selectedBox = box.id
+    }
+  }
+  func emptyBin(_ boxID: UUID? = nil) {
+    guard !busy, receivingCount == 0, libraryWritable else { return }
+    updateBin {
+      if let boxID { trashedBoxes.removeAll { $0.id == boxID } }
+      else { trashedBoxes.removeAll() }
+    }
+  }
+  func purgeExpiredBin(now: Date = Date()) {
+    guard !busy, receivingCount == 0, libraryWritable else { return }
+    guard trashedBoxes.contains(where: { $0.expiresAt <= now }) else { return }
+    updateBin { trashedBoxes.removeAll { $0.expiresAt <= now } }
+  }
+  private func updateBin(_ change: () -> Void) {
+    let previousBoxes = boxes
+    let previousBin = trashedBoxes
+    let previousSelection = selectedBox
+    change()
+    do {
+      try persistLibrary()
+      if selectedBox != previousSelection {
+        selectedItems = []
+        restoreReadyState()
+      }
+      reconcileAccess()
+      scheduleBinExpiry()
+    } catch {
+      boxes = previousBoxes
+      trashedBoxes = previousBin
+      selectedBox = previousSelection
+      self.error = "The Bin could not be updated. Your parcels are unchanged. \(error.localizedDescription)"
+    }
+  }
+  private func scheduleBinExpiry() {
+    binTimer?.invalidate()
+    guard persistsLibrary, let deadline = trashedBoxes.map(\.expiresAt).min() else { return }
+    let timer = Timer(timeInterval: max(60, deadline.timeIntervalSinceNow), repeats: false) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.purgeExpiredBin()
+        self?.scheduleBinExpiry()
+      }
+    }
+    RunLoop.main.add(timer, forMode: .common)
+    binTimer = timer
   }
   private var index: Int? { boxes.firstIndex { $0.id == selectedBox } }
   private func changed() {
@@ -217,7 +424,7 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     phase = .open
     lastManifest = ""  // Rebuilt when copied, so a stale manifest is never shown.
   }
-  private func reconcileAccess() { access.reconcile(Set(boxes.flatMap(\.items).map(\.sourcePath))) }
+  private func reconcileAccess() { access.reconcile(Set(retainedBoxes.flatMap(\.items).map(\.sourcePath))) }
   func updateNote(_ note: String) {
     guard !busy, let i = index else { return }
     boxes[i].note = String(note.prefix(2000))
@@ -242,33 +449,40 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     if receivingCount == 0 && phase == .receiving { phase = .open }
   }
   func ingest(_ urls: [URL], into id: UUID? = nil) {
-    guard !busy, let boxID = id ?? selectedBox else { return }
+    guard !busy, let boxID = id ?? selectedBox,
+      let boxIndex = boxes.firstIndex(where: { $0.id == boxID }) else { return }
+    var updatedBox = boxes[boxIndex]
+    var knownPaths = Set(updatedBox.items.map(\.sourcePath))
+    let originalCount = updatedBox.items.count
     var rejected: [String] = []
     for url in urls {
       do {
         guard url.isFileURL else { throw ParcelError.unsupportedSource("This content") }
+        let path = url.standardizedFileURL.path
+        guard !knownPaths.contains(path) else { continue }
         access.retain(url)
         let values = try url.resourceValues(forKeys: [.isAliasFileKey])
         guard values.isAliasFile != true else {
           throw ParcelError.unsupportedSource(url.lastPathComponent)
         }
         let info = try FileTree.inspect(url)
-        guard let bi = boxes.firstIndex(where: { $0.id == boxID }) else { return }
-        let path = url.standardizedFileURL.path
-        guard !boxes[bi].items.contains(where: { $0.sourcePath == path }) else { continue }
-        guard boxes[bi].items.count < 2000 else {
+        guard updatedBox.items.count < 2000 else {
           throw ParcelError.storageError("A parcel can contain up to 2,000 top-level items.")
         }
-        boxes[bi].items.append(
+        updatedBox.items.append(
           ParcelItem(
             sourcePath: path, bookmark: access.bookmark(url), displayName: url.lastPathComponent,
             isDirectory: info.folder, byteCount: info.folder ? 0 : info.bytes))
-        boxes[bi].updatedAt = Date()
-        boxes[bi].lastArchivePath = nil
-        bounce += 1
+        knownPaths.insert(path)
       } catch { rejected.append(error.localizedDescription) }
     }
-    invalidateArchive()
+    if updatedBox.items.count != originalCount {
+      updatedBox.updatedAt = Date()
+      updatedBox.lastArchivePath = nil
+      boxes[boxIndex] = updatedBox
+      bounce += 1
+    }
+    if boxID == selectedBox { invalidateArchive() }
     save()
     reconcileAccess()
     if !rejected.isEmpty { error = rejected.joined(separator: "\n") }
@@ -320,6 +534,12 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
       let output = folder.appendingPathComponent(name)
       try text.write(to: output, atomically: true, encoding: .utf8)
       ingest([output], into: boxID)
+      let destination = boxID ?? selectedBox
+      if let destination, let boxIndex = boxes.firstIndex(where: { $0.id == destination }),
+        let itemIndex = boxes[boxIndex].items.firstIndex(where: { $0.sourcePath == output.path }) {
+        boxes[boxIndex].items[itemIndex].inlineText = text
+        save()
+      }
       if isLink {
         notice = "Link saved as readable text. Access permissions on the linked page are unchanged."
       }
@@ -328,9 +548,29 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
   func toggleSelection(_ id: UUID) {
     if selectedItems.contains(id) { selectedItems.remove(id) } else { selectedItems.insert(id) }
   }
+  func stackSelected() {
+    guard !busy, let i = index, selectedItems.count > 1 else { return }
+    let group = UUID()
+    let ordered = boxes[i].items.filter { selectedItems.contains($0.id) }
+    guard let representative = ordered.first else { return }
+    for j in boxes[i].items.indices where selectedItems.contains(boxes[i].items[j].id) {
+      boxes[i].items[j].stackID = group
+    }
+    selectedItems = [representative.id]
+    changed()
+    notice = "Stacked \(ordered.count) items into one shelf icon."
+  }
+  func unstack(_ itemID: UUID) {
+    guard !busy, let i = index, let stackID = boxes[i].items.first(where: { $0.id == itemID })?.stackID else { return }
+    for j in boxes[i].items.indices where boxes[i].items[j].stackID == stackID { boxes[i].items[j].stackID = nil }
+    selectedItems = []
+    changed()
+  }
   func selectAll() { selectedItems = Set(items.map(\.id)) }
   func remove(_ ids: Set<UUID>) {
     guard !busy, let i = index else { return }
+    error = nil
+    notice = nil
     boxes[i].items.removeAll { ids.contains($0.id) }
     selectedItems.subtract(ids)
     changed()
@@ -436,7 +676,7 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     refreshLicense()
     // Every refusal explains itself — a dead button with no feedback is a bug.
     guard canExport else {
-      error = "Preparing images needs an active licence. Your trial may have ended."
+      error = "Preparing images needs an active licence."
       return
     }
     guard !busy else {
@@ -455,7 +695,7 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     phase = .preparing
     progress = 0
     showPrepare = false
-    job = Task {
+    job = Task { [self] in
       var results: [(UUID, PreparedImage)] = []
       var failures: [String] = []
       for (idx, item) in targets.enumerated() {
@@ -496,18 +736,184 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
       if !failures.isEmpty { error = failures.joined(separator: "\n") }
     }
   }
-  func seal() {
+  func prepareVideos() {
+    refreshLicense()
+    guard canExport, !busy, receivingCount == 0, let boxID = selectedBox, !videoItems.isEmpty else { return }
+    let targets = videoItems
+    let settings = videoRecipe
+    let cancellation = CancellationToken()
+    token = cancellation; phase = .preparing; progress = 0; showVideoPrepare = false
+    job = Task {
+      var results: [(UUID, PreparedVideo)] = []
+      var failures: [String] = []
+      for (offset, item) in targets.enumerated() {
+        if cancellation.isCancelled { break }
+        progress = Double(offset) / Double(targets.count); progressLabel = "Preparing \(item.displayName)"
+        do {
+          let result = try await VideoPipeline.prepare(source: item.sourceURL, recipe: settings, token: cancellation)
+          results.append((item.id, result))
+        } catch { if !cancellation.isCancelled { failures.append(error.localizedDescription) } }
+      }
+      if !cancellation.isCancelled, let position = boxes.firstIndex(where: { $0.id == boxID }) {
+        var box = boxes[position]
+        for (itemID, result) in results {
+          if let itemIndex = box.items.firstIndex(where: { $0.id == itemID }) {
+            box.items[itemIndex].preparedPath = result.url.path
+            box.items[itemIndex].preparedBytes = result.bytes
+            box.items[itemIndex].preparedDescription = result.description
+          } else { StoragePaths.deleteOwned(result.url) }
+        }
+        box.lastArchivePath = nil; box.updatedAt = Date(); boxes[position] = box
+        notice = "\(results.count) video \(results.count == 1 ? "copy" : "copies") prepared. Originals are safe."
+      } else {
+        results.forEach { StoragePaths.deleteOwned($0.1.url) }
+        notice = "Video preparation cancelled. Originals are unchanged."
+      }
+      phase = .open; token = nil; job = nil; progress = 0; archiveURL = nil; lastManifest = ""
+      save()
+      if !failures.isEmpty { error = failures.joined(separator: "\n") }
+    }
+  }
+  func transformDocuments(_ kind: DocumentTransformKind, itemIDs: Set<UUID>? = nil) {
+    refreshLicense()
+    guard canExport else {
+      error = "Transforming files needs an active licence."
+      return
+    }
+    guard !busy, receivingCount == 0, let boxID = selectedBox else { return }
+    let candidates = itemIDs.map { ids in items.filter { ids.contains($0.id) } } ?? transformItems
+    let targets = candidates.filter {
+      !$0.isDirectory && DocumentTransformPipeline.available(for: [$0.effectiveURL]).contains(kind)
+    }
+    guard !targets.isEmpty else {
+      notice = "Select a compatible image, PDF, document or spreadsheet first."
+      return
+    }
+    let cancellation = CancellationToken()
+    token = cancellation
+    phase = .preparing
+    progress = 0
+    showTransform = false
+    job = Task {
+      var results: [DocumentTransformResult] = []
+      var failures: [String] = []
+      for (offset, item) in targets.enumerated() {
+        if cancellation.isCancelled { break }
+        progress = Double(offset) / Double(targets.count)
+        progressLabel = "Transforming \(item.displayName)"
+        do {
+          let result = try await DocumentTransformPipeline.transform(
+            source: item.effectiveURL, kind: kind, token: cancellation)
+          results.append(result)
+        } catch {
+          if !cancellation.isCancelled { failures.append(error.localizedDescription) }
+        }
+      }
+      if !cancellation.isCancelled, let position = boxes.firstIndex(where: { $0.id == boxID }) {
+        var box = boxes[position]
+        var known = Set(box.items.map(\.sourcePath))
+        for result in results {
+          do {
+            let info = try FileTree.inspect(result.url)
+            guard !known.contains(result.url.path), box.items.count < 2000 else {
+              _ = StoragePaths.deleteOwned(result.ownedRoot)
+              continue
+            }
+            box.items.append(ParcelItem(
+              sourcePath: result.url.path, displayName: result.url.lastPathComponent,
+              isDirectory: info.folder, byteCount: info.folder ? 0 : info.bytes))
+            known.insert(result.url.path)
+          } catch {
+            _ = StoragePaths.deleteOwned(result.ownedRoot)
+            failures.append(error.localizedDescription)
+          }
+        }
+        box.lastArchivePath = nil
+        box.updatedAt = Date()
+        boxes[position] = box
+        bounce += results.isEmpty ? 0 : 1
+        notice = "Added \(results.count) transformed \(results.count == 1 ? "copy" : "copies"). Originals are safe."
+      } else {
+        results.forEach { _ = StoragePaths.deleteOwned($0.ownedRoot) }
+        notice = "Transform cancelled. Originals are unchanged."
+      }
+      phase = .open
+      token = nil
+      job = nil
+      progress = 0
+      archiveURL = nil
+      lastManifest = ""
+      save()
+      if !failures.isEmpty { error = failures.joined(separator: "\n") }
+    }
+  }
+  func quickConvert(
+    _ urls: [URL], action: QuickConvertAction,
+    completion: @escaping @MainActor (Int, String?) -> Void
+  ) {
+    refreshLicense()
+    guard canExport, !busy, receivingCount == 0, !urls.isEmpty,
+      QuickConvertAction.available(for: urls).contains(action),
+      let boxID = ShelfRanking.primary(boxes)?.id ?? selectedBox
+    else { completion(0, "This selection cannot be converted right now."); return }
+    let cancellation = CancellationToken()
+    token = cancellation; phase = .preparing; progress = 0
+    job = Task {
+      var results: [QuickConversionResult] = []
+      var failures: [String] = []
+      for (offset, url) in urls.enumerated() {
+        if cancellation.isCancelled { break }
+        progress = Double(offset) / Double(urls.count)
+        progressLabel = "Converting \(url.lastPathComponent)"
+        do {
+          results.append(try await QuickConversionPipeline.convert(
+            source: url, action: action, token: cancellation))
+        } catch { if !cancellation.isCancelled { failures.append("\(url.lastPathComponent): \(error.localizedDescription)") } }
+      }
+      var added = 0
+      if !cancellation.isCancelled, let position = boxes.firstIndex(where: { $0.id == boxID }) {
+        var box = boxes[position]
+        for result in results {
+          do {
+            let info = try FileTree.inspect(result.url)
+            box.items.append(ParcelItem(
+              sourcePath: result.url.path, displayName: result.url.lastPathComponent,
+              isDirectory: info.folder, byteCount: info.folder ? 0 : info.bytes))
+            added += 1
+          } catch {
+            _ = StoragePaths.deleteOwned(result.ownedRoot)
+            failures.append(error.localizedDescription)
+          }
+        }
+        box.updatedAt = Date(); box.lastArchivePath = nil; boxes[position] = box
+        selectedBox = boxID; bounce += added > 0 ? 1 : 0
+      } else {
+        results.forEach { _ = StoragePaths.deleteOwned($0.ownedRoot) }
+      }
+      phase = .open; token = nil; job = nil; progress = 0; archiveURL = nil; lastManifest = ""
+      notice = added > 0 ? "\(added) converted \(added == 1 ? "copy" : "copies") added to your parcel." : nil
+      save()
+      let message = failures.isEmpty ? nil : failures.joined(separator: "\n")
+      completion(added, message)
+    }
+  }
+  func seal(reportError: ((String) -> Void)? = nil, options override: PackagingOptions? = nil,
+            finished: ((URL?) -> Void)? = nil) {
+    let fail: (String) -> Void = { message in
+      if let reportError { reportError(message) } else { self.error = message }
+    }
     refreshLicense()
     guard !busy, receivingCount == 0, canExport, let box = current, !box.items.isEmpty else {
+      finished?(nil)
       return
     }
     guard box.items.allSatisfy({ FileManager.default.fileExists(atPath: $0.effectiveURL.path) })
     else {
-      error =
-        "A parcel item is missing. Locate it, restore its original, or remove it before sealing."
+      fail("A parcel item is missing. Locate it, restore its original, or remove it before sealing.")
+      finished?(nil)
       return
     }
-    let options = packaging
+    let options = override ?? packaging
     let t = CancellationToken()
     let boxID = box.id
     let ext = options.format.fileExtension
@@ -522,7 +928,8 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
       do {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
       } catch {
-        self.error = error.localizedDescription
+        fail(error.localizedDescription)
+        finished?(nil)
         return
       }
     }
@@ -540,7 +947,7 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     progress = 0
     archiveURL = nil
     progressLabel = "Gathering your pieces"
-    job = Task {
+    job = Task { [self] in
       do {
         let result = try await Task.detached(priority: .userInitiated) {
           try PackageBuilder.build(
@@ -568,7 +975,7 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
         phase = .ready
         progress = 1
         // The packed file wears Parcel's icon on the Desktop and in Finder.
-        if let icon = NSApp.applicationIconImage {
+        if let icon = NSApplication.shared.applicationIconImage {
           NSWorkspace.shared.setIcon(icon, forFile: result.archive.path, options: [])
         }
         notice =
@@ -584,11 +991,12 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
         if t.isCancelled {
           notice = "Cancelled. Originals are unchanged."
         } else {
-          self.error = error.localizedDescription
+          fail(error.localizedDescription)
         }
       }
       token = nil
       job = nil
+      finished?(phase == .ready ? archiveURL : nil)
     }
   }
   func cancel() {
@@ -641,9 +1049,10 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
   }
   /// Runs on-device OCR over the parcel's images and copies all recognized
   /// text to the clipboard — Dropover's built-in "extract text" action.
-  func extractTextFromImages() {
+  func extractTextFromImages(itemIDs: Set<UUID>? = nil) {
     guard !extractingText else { return }
-    let targets = imageItems
+    let candidates = itemIDs.map { ids in items.filter { ids.contains($0.id) } } ?? workingItems
+    let targets = candidates.filter { !$0.isDirectory && ImagePipeline.canPrepare($0.effectiveURL) }
     guard !targets.isEmpty else {
       notice = "Add an image to the parcel first, then extract its text."
       return
@@ -654,6 +1063,7 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
       var parts: [String] = []
       for item in targets {
         if Task.isCancelled { break }
+        guard FileManager.default.fileExists(atPath: item.effectiveURL.path) else { continue }
         if let text = await TextRecognition.recognizeText(in: item.effectiveURL) {
           parts.append(text)
         }
@@ -672,6 +1082,13 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
         }
       }
     }
+  }
+  func copyInlineText(_ item: ParcelItem) {
+    guard let text = item.inlineText else { return }
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(text, forType: .string)
+    Toaster.shared.copied("Text")
+    notice = "Copied text from \"\(item.displayName)\"."
   }
   /// Saves the packed parcel straight to the default location — no questions.
   /// Change the location in Preferences.
@@ -738,13 +1155,13 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
       i += 1
     }
   }
-  func copyArchiveToClipboard() {
-    guard canExport, !busy, ready, let zip = archiveURL else { return }
-    let pb = NSPasteboard.general
-    pb.clearContents()
-    pb.writeObjects([zip as NSURL])
+  @discardableResult func copyArchiveToClipboard(to board: NSPasteboard = .general) -> Bool {
+    guard canExport, !busy, ready, let zip = archiveURL else { return false }
+    board.clearContents()
+    guard board.writeObjects([zip as NSURL]) else { return false }
     Toaster.shared.copied("Parcel \(zip.pathExtension.uppercased())")
     notice = "Parcel \(zip.pathExtension.uppercased()) copied — paste it anywhere."
+    return true
   }
   /// A LOCAL file link to the packed parcel — it only works on this
   /// Mac, it is not a cloud/internet share link. Paste it into any app
@@ -811,7 +1228,7 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
         try FileManager.default.copyItem(at: StoragePaths.library, to: backup)
       }
       try CollectionStore.save(
-        .init(boxes: boxes, selectedBox: selectedBox), to: StoragePaths.library)
+        .init(boxes: boxes, selectedBox: selectedBox, trashedBoxes: trashedBoxes), to: StoragePaths.library)
       libraryWritable = true
       error = nil
       notice = "The previous library was backed up before starting fresh."

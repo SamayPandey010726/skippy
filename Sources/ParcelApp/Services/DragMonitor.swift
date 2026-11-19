@@ -1,85 +1,110 @@
 import AppKit
+import ParcelCore
 
-/// Notices when a file drag begins anywhere on screen, so the drop popup can
-/// appear on its own.
-///
-/// Three mechanisms, each covering the others' blind spots:
-/// 1. Permission-free poll (primary): left mouse button down + the cursor
-///    moving means a drag is likely in flight — the drag pasteboard is then
-///    checked for file URLs. Button up ends it. Needs no permissions.
-/// 2. Global mouse monitors (when Accessibility is granted): event-driven and
-///    instant.
-/// 3. Drags that start inside Parcel itself (dragging the packed file out)
-///    are suppressed so the popup doesn't chase its own tail.
-///
-/// All local-only.
 @MainActor final class DragMonitor {
   static let shared = DragMonitor()
-  /// Called with true when a file drag starts, false when it ends.
-  /// Multiple listeners supported (drop popup + Dock picker).
   private var dragStateHandlers: [(Bool) -> Void] = []
   var onDragState: (Bool) -> Void {
     get { { [weak self] dragging in self?.dragStateHandlers.forEach { $0(dragging) } } }
     set { dragStateHandlers.append(newValue) }
   }
-  /// Current drag state, for spring-load activation (Dock hover).
-  var isDragging: Bool { dragging }
-  private let board = NSPasteboard(name: NSPasteboard.Name("NSDragPboard"))
+  var onDragLocation: ((NSPoint) -> Void)?
+  var onTopEdgeHover: ((NSPoint) -> Void)?
+  var onShiftFileDrag: (([URL]?, NSPoint) -> Void)?
+  var shouldDetectShake: () -> Bool = { false }
+  var onMouseShake: (() -> Void)?
+  private var shake = PointerShakeDetector()
+  var isDragging: Bool { session.isDragging }
+  private(set) var isSending = false
+  private var convertsOwnDrag = false
+  private let board = NSPasteboard(name: .drag)
+  private var session = ExternalDragSession(pasteboardGeneration: 0)
   private var timer: Timer?
-  private var mouseMonitor: Any?
-  private var upMonitor: Any?
-  private var lastMouse = NSPoint.zero
-  private var dragging = false
-  private var suppressOwnDrag = false
+  private var monitors: [Any] = []
+  private var shiftPresented = false
 
-  /// Call before Parcel starts its own drag-out session.
-  func suppressNextOwnDrag() { suppressOwnDrag = true }
+  func suppressNextOwnDrag(allowQuickConvert: Bool = false) {
+    isSending = true
+    convertsOwnDrag = allowQuickConvert
+    let wasDragging = isDragging
+    session.suppress()
+    endShiftGesture()
+    if wasDragging { onDragState(false) }
+  }
+  func finishOwnDrag() { isSending = false; convertsOwnDrag = false; endShiftGesture() }
 
   func start() {
-    mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDragged) {
-      [weak self] _ in
-      Task { @MainActor [weak self] in self?.checkPasteboard() }
+    guard monitors.isEmpty else { return }
+    session = ExternalDragSession(pasteboardGeneration: board.changeCount)
+    if let monitor = NSEvent.addGlobalMonitorForEvents(
+      matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .mouseMoved], handler: { [weak self] event in
+        MainActor.assumeIsolated {
+          if event.type == .mouseMoved { self?.checkShake(event) } else { self?.tick() }
+        }
+      }) {
+      monitors.append(monitor)
     }
-    upMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] _ in
-      Task { @MainActor [weak self] in
-        self?.suppressOwnDrag = false
-        self?.setDragging(false)
-      }
-    }
-    guard timer == nil else { return }
-    lastMouse = NSEvent.mouseLocation
-    let t = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
-      Task { @MainActor [weak self] in self?.tick() }
-    }
-    RunLoop.main.add(t, forMode: .common)
-    timer = t
+    if let monitor = NSEvent.addLocalMonitorForEvents(
+      matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .mouseMoved], handler: { [weak self] event in
+        if event.type == .mouseMoved { self?.checkShake(event) } else { self?.tick() }
+        return event
+      }) { monitors.append(monitor) }
+  }
+  private func checkShake(_ event: NSEvent) {
+    onTopEdgeHover?(NSEvent.mouseLocation)
+    guard shouldDetectShake() else { shake = PointerShakeDetector(); return }
+    if shake.update(point: NSEvent.mouseLocation, time: event.timestamp,
+      buttonDown: NSEvent.pressedMouseButtons != 0 || isDragging || isSending) { onMouseShake?() }
   }
 
   private func tick() {
-    guard !suppressOwnDrag else { return }
-    let leftDown = (NSEvent.pressedMouseButtons & 1) == 1
-    let mouse = NSEvent.mouseLocation
-    let moved = hypot(mouse.x - lastMouse.x, mouse.y - lastMouse.y) > 6
-    lastMouse = mouse
-    if leftDown && moved {
-      checkPasteboard()
-    } else if !leftDown {
-      setDragging(false)
+    let wasDragging = isDragging
+    let buttonDown = NSEvent.pressedMouseButtons & 1 != 0
+    if buttonDown && timer == nil {
+      let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+        MainActor.assumeIsolated { self?.tick() }
+      }
+      timer.tolerance = 0.008
+      RunLoop.main.add(timer, forMode: .common)
+      self.timer = timer
+    } else if !buttonDown {
+      timer?.invalidate()
+      timer = nil
     }
-    // Button held without moving: keep the current state.
+    session.update(
+      buttonDown: buttonDown,
+      pasteboardGeneration: board.changeCount,
+      supported: buttonDown && !wasDragging && FileDropSurface.supports(board))
+    if isDragging != wasDragging { onDragState(isDragging) }
+    if isDragging { onDragLocation?(NSEvent.mouseLocation) }
+    updateShiftGesture()
   }
 
-  private func checkPasteboard() {
-    guard !suppressOwnDrag else { return }
+  private func updateShiftGesture() {
+    let point = NSEvent.mouseLocation
+    let shift = NSEvent.modifierFlags.contains(.shift)
+    let convertibleDrag = isDragging || (isSending && convertsOwnDrag && NSEvent.pressedMouseButtons & 1 != 0)
+    if convertibleDrag, shift {
+      let urls = Self.fileURLs(on: board)
+      guard !urls.isEmpty else { return }
+      if !shiftPresented {
+        shiftPresented = true
+        onShiftFileDrag?(urls, point)
+      }
+    } else { endShiftGesture(at: point) }
+  }
+  private func endShiftGesture(at point: NSPoint = NSEvent.mouseLocation) {
+    guard shiftPresented else { return }
+    shiftPresented = false
+    onShiftFileDrag?(nil, point)
+  }
+  static func fileURLs(on board: NSPasteboard) -> [URL] {
     let urls = board.readObjects(
-      forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
-    setDragging(!(urls?.isEmpty ?? true))
-  }
-
-  private func setDragging(_ now: Bool) {
-    if now != dragging {
-      dragging = now
-      onDragState(now)
-    }
+      forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+    return urls.filter { url in
+      var directory: ObjCBool = false
+      return url.isFileURL && FileManager.default.fileExists(atPath: url.path, isDirectory: &directory)
+        && !directory.boolValue
+    }.map(\.standardizedFileURL)
   }
 }

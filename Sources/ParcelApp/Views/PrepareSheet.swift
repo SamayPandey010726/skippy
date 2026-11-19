@@ -78,7 +78,7 @@ struct PrepareSheet: View {
           Label("Prepare copies", systemImage: "wand.and.stars")
         }.buttonStyle(MossButtonStyle()).disabled(store.imageItems.isEmpty || !store.canExport)
       }
-    }.padding(30).frame(width: 505).background(Ink.paper).preferredColorScheme(.light)
+    }.padding(30).frame(width: 505).background(Ink.paper)
   }
 }
 struct RenameSheet: View {
@@ -131,12 +131,12 @@ struct ImageComparisonView: View {
         }.buttonStyle(MossButtonStyle(secondary: true))
         Button("Done") { dismiss() }.buttonStyle(MossButtonStyle())
       }
-    }.padding(30).frame(width: 700).background(Ink.paper).preferredColorScheme(.light)
+    }.padding(30).frame(width: 640).background(Ink.paper)
   }
   private func preview(url: URL, title: String, bytes: Int64) -> some View {
     VStack(alignment: .leading, spacing: 11) {
       Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(Ink.green)
-      FileThumbnail(url: url, size: 285, pixelLimit: 1600).frame(height: 250).background(
+      FileThumbnail(url: url, size: 270, pixelLimit: 1600).frame(height: 250).background(
         Ink.cream, in: RoundedRectangle(cornerRadius: 12))
       Text(byteString(bytes)).font(.system(size: 11, design: .monospaced)).foregroundStyle(
         Ink.secondary)

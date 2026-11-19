@@ -38,6 +38,8 @@ public struct ParcelItem: Codable, Identifiable, Equatable, Sendable {
   public var preparedPath: String?
   public var preparedBytes: Int64?
   public var preparedDescription: String?
+  public var inlineText: String?
+  public var stackID: UUID?
   /// Pinned items survive the self-cleaning auto-clear. Inspired by FlowShelf's pin model.
   public var isPinned: Bool
   public init(
@@ -51,11 +53,12 @@ public struct ParcelItem: Codable, Identifiable, Equatable, Sendable {
     self.isDirectory = isDirectory
     self.byteCount = byteCount
     self.isPinned = isPinned
+    stackID = nil
     addedAt = Date()
   }
   private enum CodingKeys: String, CodingKey {
     case id, sourcePath, bookmark, displayName, isDirectory, byteCount, addedAt
-    case preparedPath, preparedBytes, preparedDescription, isPinned
+    case preparedPath, preparedBytes, preparedDescription, isPinned, inlineText, stackID
   }
   public init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -69,11 +72,20 @@ public struct ParcelItem: Codable, Identifiable, Equatable, Sendable {
     preparedPath = try c.decodeIfPresent(String.self, forKey: .preparedPath)
     preparedBytes = try c.decodeIfPresent(Int64.self, forKey: .preparedBytes)
     preparedDescription = try c.decodeIfPresent(String.self, forKey: .preparedDescription)
+    inlineText = try c.decodeIfPresent(String.self, forKey: .inlineText)
+    stackID = try c.decodeIfPresent(UUID.self, forKey: .stackID)
     isPinned = try c.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
   }
   public var sourceURL: URL { URL(fileURLWithPath: sourcePath) }
   public var effectiveURL: URL { URL(fileURLWithPath: preparedPath ?? sourcePath) }
   public var effectiveBytes: Int64 { preparedBytes ?? byteCount }
+  public var isInlineText: Bool { inlineText != nil }
+  public var compactDisplayName: String {
+    let stem = (effectiveName as NSString).deletingPathExtension
+    let words = stem.split(whereSeparator: { $0 == " " || $0 == "_" || $0 == "-" })
+    guard words.count > 2 || effectiveName.count > 20 else { return effectiveName }
+    return words.prefix(2).joined(separator: " ") + "…"
+  }
   public var effectiveName: String {
     guard let path = preparedPath else { return displayName }
     let ext = URL(fileURLWithPath: path).pathExtension
@@ -90,8 +102,10 @@ public struct ParcelBox: Codable, Identifiable, Equatable, Sendable {
   public var items: [ParcelItem] = []
   public var note = ""
   public var lastArchivePath: String?
+  public var isPinned: Bool?
   public init(name: String) { self.name = name }
   public var totalBytes: Int64 { items.reduce(0) { $0 + $1.effectiveBytes } }
+  public var isShelfPinned: Bool { isPinned ?? items.contains(where: \.isPinned) }
 }
 
 public enum ImageFormat: String, Codable, CaseIterable, Sendable {

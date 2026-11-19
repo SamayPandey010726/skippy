@@ -18,6 +18,14 @@ import SwiftUI
     show(text)
   }
 
+  func tip(_ key: String, _ text: String) {
+    let defaults = UserDefaults.standard
+    guard defaults.object(forKey: "parcel.showTips") as? Bool ?? true,
+      !defaults.bool(forKey: "parcel.tip.\(key)") else { return }
+    defaults.set(true, forKey: "parcel.tip.\(key)")
+    show("Tip · \(text)")
+  }
+
   private func show(_ text: String) {
     hideWork?.cancel()
     let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion

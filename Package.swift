@@ -9,7 +9,8 @@ var targets: [Target] = [
 ]
 #if os(macOS)
 products.append(.executable(name: "Parcel", targets: ["ParcelApp"]))
-targets.append(.executableTarget(name: "ParcelApp", dependencies: ["ParcelCore"], resources: [.process("Resources")]))
+targets.append(.executableTarget(name: "ParcelApp", dependencies: ["ParcelCore", .product(name: "ZIPFoundation", package: "ZIPFoundation")], resources: [.process("Resources")]))
+targets.append(.testTarget(name: "ParcelAppTests", dependencies: ["ParcelApp", "ParcelCore", .product(name: "ZIPFoundation", package: "ZIPFoundation")]))
 #endif
 let package = Package(name: "Parcel", platforms: [.macOS(.v14)], products: products,
     dependencies: [.package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.20")],

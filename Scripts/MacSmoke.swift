@@ -40,6 +40,9 @@ import UniformTypeIdentifiers
     try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: scratch) }
     try StoragePaths.createDirectories()
+    #if PARCEL_TESTING
+    defer { try? FileManager.default.removeItem(at: StoragePaths.root) }
+    #endif
     let source = scratch.appendingPathComponent("opaque.png")
     try fixture(at: source, transparent: false)
     let originalBytes = try Data(contentsOf: source)
@@ -91,9 +94,10 @@ import UniformTypeIdentifiers
     }
     try require(rejected, "Cancelled image job did not stop")
     let key = Curve25519.Signing.PrivateKey()
-    let payload = Data(
-      "{\"product\":\"parcel\",\"licenseID\":\"smoke\",\"customer\":\"Test\",\"issuedAt\":1,\"expiresAt\":null}"
-        .utf8)
+    let payload = try JSONEncoder().encode(LicensePayload(
+      product: "parcel", licenseID: "smoke", customer: "Test", issuedAt: 1,
+      expiresAt: nil, machineID: MachineID.current, plan: "single", deviceLimit: 1,
+      machineIDs: nil))
     func b64(_ data: Data) -> String {
       data.base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(
         of: "/", with: "_"

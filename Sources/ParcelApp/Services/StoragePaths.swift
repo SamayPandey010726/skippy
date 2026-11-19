@@ -3,9 +3,14 @@ import Foundation
 import ParcelCore
 
 enum StoragePaths {
+  #if PARCEL_TESTING
+  static let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+    "Parcel-native-fixtures-" + UUID().uuidString, isDirectory: true)
+  #else
   static let root = FileManager.default.urls(
     for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent(
       "Parcel", isDirectory: true)
+  #endif
   static let library = root.appendingPathComponent("parcels.json")
   static let prepared = root.appendingPathComponent("Prepared", isDirectory: true)
   static let exports = root.appendingPathComponent("Exports", isDirectory: true)

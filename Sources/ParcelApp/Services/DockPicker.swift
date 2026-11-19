@@ -24,14 +24,14 @@ import UniformTypeIdentifiers
     if panel == nil {
       let host = NSHostingView(rootView: DockPickerView().environmentObject(store))
       host.translatesAutoresizingMaskIntoConstraints = false
-      let p = NSPanel(
+      let p = ShelfPanel(
         contentRect: NSRect(x: 0, y: 0, width: 300, height: 320),
         styleMask: [.nonactivatingPanel, .borderless], backing: .buffered, defer: false)
       p.contentView = host
       p.backgroundColor = .clear
       p.isOpaque = false
       p.hasShadow = false
-      p.level = .floating
+      p.level = .popUpMenu
       p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
       p.ignoresMouseEvents = false
       panel = p
@@ -42,7 +42,7 @@ import UniformTypeIdentifiers
     if let screen = NSScreen.main {
       let frame = screen.visibleFrame
       let w: CGFloat = min(300, frame.width - 32)
-      let h: CGFloat = min(340, frame.height - 48)
+      let h: CGFloat = min(490, frame.height - 48)
       var x = frame.midX - w / 2
       var y = frame.minY + 16
       // Dock side heuristic: if the visible frame is inset on the left
@@ -74,10 +74,7 @@ struct DockPickerView: View {
 
   /// Pinned-first (parcels with pinned items), then most recent. Caps at 5.
   private var pickerBoxes: [ParcelBox] {
-    let withPinned = store.boxes.filter { $0.items.contains(where: \.isPinned) }
-    let rest = store.boxes.filter { !$0.items.contains(where: \.isPinned) }
-    let ordered = withPinned + rest
-    return Array(ordered.prefix(5))
+    ShelfRanking.destinations(store.boxes, limit: 5)
   }
 
   var body: some View {
@@ -88,13 +85,17 @@ struct DockPickerView: View {
         Text("Drop into a parcel").font(.system(size: 13, weight: .semibold))
           .foregroundStyle(p.text)
         Spacer()
-        Text("Esc to close").font(.system(size: 10)).foregroundStyle(p.secondary)
+        Button { DockPickerController.shared.hide() } label: {
+          Image(systemName: "xmark").font(.system(size: 10))
+        }.buttonStyle(.plain).accessibilityLabel("Close Dock picker")
       }.padding(.horizontal, 16).padding(.vertical, 12)
       Divider().background(p.line.opacity(0.5))
-      ForEach(pickerBoxes) { box in
-        parcelRow(box, palette: p)
+      ScrollView {
+        VStack(spacing: 0) {
+          ForEach(pickerBoxes) { box in parcelRow(box, palette: p) }
+          newParcelRow(palette: p)
+        }
       }
-      newParcelRow(palette: p)
     }
     .background(
       RoundedRectangle(cornerRadius: 18).fill(p.paper)
@@ -118,7 +119,7 @@ struct DockPickerView: View {
     let hovered = hoveredBox == box.id
     return VStack(alignment: .leading, spacing: 0) {
       HStack(spacing: 10) {
-        Image(systemName: box.items.contains(where: \.isPinned) ? "pin.fill" : "folder")
+        Image(systemName: box.isShelfPinned ? "pin.fill" : "folder")
           .font(.system(size: 13)).foregroundStyle(p.accent)
         VStack(alignment: .leading, spacing: 2) {
           Text(box.name).font(.system(size: 12, weight: .medium)).lineLimit(1)
@@ -160,9 +161,7 @@ struct DockPickerView: View {
     .background(hovered ? p.accent.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
     .contentShape(Rectangle())
     .onHover { hoveredBox = $0 ? box.id : nil }
-    .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-      handleDrop(providers, into: box.id)
-    }
+    .overlay(dropSurface(into: box.id))
     .animation(Motion.playfulSettle, value: hovered)
   }
 
@@ -175,27 +174,18 @@ struct DockPickerView: View {
     .padding(.horizontal, 16).padding(.vertical, 11)
     .background(p.accent.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
     .contentShape(Rectangle())
-    .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-      store.newBox()
-      guard let newID = store.selectedBox else { return false }
-      return handleDrop(providers, into: newID)
-    }
+    .overlay(dropSurface(into: nil))
   }
 
-  private func handleDrop(_ providers: [NSItemProvider], into boxID: UUID) -> Bool {
-    var accepted = false
-    for provider in providers where provider.canLoadObject(ofClass: URL.self) {
-      accepted = true
-      _ = provider.loadObject(ofClass: URL.self) { url, _ in
-        guard let url else { return }
-        Task { @MainActor in
-          store.ingest([url], into: boxID)
-          store.selectBox(boxID)
-          DockPickerController.shared.hide()
-          AppController.shared.openWorkbench()
-        }
-      }
-    }
-    return accepted
+  private func dropSurface(into boxID: UUID?) -> some View {
+    FileDropSurface(enabled: !store.busy,
+      receive: { _ in }, receiving: { _ in },
+      hover: { hoveredBox = $0 ? boxID : nil }, failure: { _ in },
+      beginDrop: {
+        DropPopupController.shared.summon()
+        guard let handler = DropPopupController.shared.beginDrop(into: boxID) else { return nil }
+        DockPickerController.shared.hide()
+        return handler
+      })
   }
 }
