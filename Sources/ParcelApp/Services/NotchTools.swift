@@ -684,7 +684,7 @@ struct NotchToolsView: View {
     }
     .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 7)
     .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: shelf.activeModule)
-    .task(id: shelf.activeModule) {
+    .task(id: shelf.activeModule.rawValue + (shelf.isArrowPreview ? "-preview" : "-open")) {
       if shelf.activeModule == .system {
         var last: MacReadings.Sample?
         while !Task.isCancelled {
@@ -699,7 +699,7 @@ struct NotchToolsView: View {
       if shelf.activeModule == .calendar, EKEventStore.authorizationStatus(for: .event) == .fullAccess {
         tools.refreshCalendar()
       }
-      guard shelf.activeModule == .dashboard || shelf.activeModule == .music else { return }
+      guard !shelf.isArrowPreview, shelf.activeModule == .dashboard || shelf.activeModule == .music else { return }
       while !Task.isCancelled {
         tools.refreshMedia()
         try? await Task.sleep(for: .seconds(2))
@@ -1206,7 +1206,7 @@ struct NotchToolsView: View {
     HStack(spacing: 8) {
       VStack(spacing: 6) {
         HStack { NotchSectionTitle(title: "Quick note", symbol: "note.text"); Text("Saved automatically").font(.system(size: 8)).foregroundStyle(.secondary) }
-        TextEditor(text: $tools.note).font(.system(size: 10.5)).scrollContentBackground(.hidden)
+        TextEditor(text: $tools.note).accessibilityLabel("Quick note").font(.body).scrollContentBackground(.hidden)
           .padding(9).background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
       }
       VStack(spacing: 7) {

@@ -47,6 +47,8 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
   private var progress: CGFloat = 0
   private var motion: Timer?
   private var previewWork: DispatchWorkItem?
+  private weak var previewTarget: NSButton?
+  private var arrowModules: [NSButton: NotchModule] = [:]
   private var icons: [NSButton] = []
   private var mark: QuiverMark?
   private var center = CGPoint.zero
@@ -72,6 +74,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     installed = true
     shelf.quiverAnchor = { [weak self] in self?.anchor }
     strip.pointer = { [weak self] in self?.hover($0) }
+    strip.pointerMoved = { [weak self] in self?.trackArrow() }
     attach()
     widgets.$widgets.combineLatest(tools.$pinnedApps).receive(on: RunLoop.main).sink { [weak self] _ in self?.layout() }.store(in: &subscriptions)
     NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
@@ -116,6 +119,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
       p.title = "Skippy quiver"; p.level = .statusBar; p.hidesOnDeactivate = false
       p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
       p.isOpaque = false; p.backgroundColor = .clear; p.hasShadow = true; p.isReleasedWhenClosed = false
+      p.acceptsMouseMovedEvents = true
       p.contentView = strip; floating = p
     }
     layout()
@@ -128,9 +132,10 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     if inside {
       if !unfolded { setUnfolded(true) }
     } else {
-      previewWork?.cancel()
+      previewTarget = nil; previewWork?.cancel()
       let work = DispatchWorkItem { [weak self] in
         guard let self else { return }
+        if self.stripContainsPointer { self.trackArrow(); return }
         if let frame = self.shelf.presentationFrame, frame.insetBy(dx: -7, dy: -7).contains(NSEvent.mouseLocation) {
           self.hover(false); return
         }
@@ -173,9 +178,19 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     RunLoop.main.add(timer, forMode: .common)
   }
 
-  private func hoverArrow(_ module: NotchModule, button: NSView, inside: Bool) {
+  private var stripContainsPointer: Bool {
+    guard let window = strip.window, window.isVisible else { return false }
+    return strip.bounds.contains(strip.convert(window.mouseLocationOutsideOfEventStream, from: nil))
+  }
+
+  private func trackArrow() {
+    guard unfolded, let window = strip.window else { return }
+    let point = strip.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+    let button = icons.first { !$0.isHidden && $0.isEnabled && $0.frame.contains(point) }
+    guard previewTarget !== button else { return }
     previewWork?.cancel()
-    guard inside, unfolded else { return }
+    previewTarget = button
+    guard let button, let module = arrowModules[button] else { return }
     let work = DispatchWorkItem { [weak self, weak button] in
       guard let self, let button, let window = button.window, self.unfolded else { return }
       let rect = window.convertToScreen(button.convert(button.bounds, to: nil))
@@ -252,14 +267,13 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     strip.layer?.cornerRadius = surface == .menu ? 5 : height / 2
     strip.layer?.backgroundColor = surface == .menu ? NSColor.clear.cgColor : NSColor(calibratedRed: 0.075, green: 0.13, blue: 0.115, alpha: 0.97).cgColor
     strip.subviews.forEach { $0.removeFromSuperview() }
-    icons.removeAll()
+    icons.removeAll(); arrowModules.removeAll(); previewTarget = nil
     for widget in widgets.pinned.prefix(5) {
       let module = widget.kind.module
       let button = strip.addIcon(module.title, image: NSImage(systemSymbolName: module.symbol, accessibilityDescription: nil),
         frame: .zero, inMenu: surface == .menu) { [weak self] view in self?.show(module, from: view) }
-      button.onHover = { [weak self, weak button] inside in
-        if let button { self?.hoverArrow(module, button: button, inside: inside) }
-      }
+      arrowModules[button] = module
+      button.onHover = { [weak self] _ in self?.trackArrow() }
       icons.append(button)
     }
     for app in tools.pinnedApps.prefix(5 - icons.count) {
@@ -322,14 +336,16 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
 
 @MainActor final class QuiverStrip: NSView {
   var pointer: ((Bool) -> Void)?
+  var pointerMoved: (() -> Void)?
   private var tracking: NSTrackingArea?
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
     if let tracking { removeTrackingArea(tracking) }
-    let area = NSTrackingArea(rect: .zero, options: [.activeAlways, .inVisibleRect, .mouseEnteredAndExited], owner: self)
+    let area = NSTrackingArea(rect: .zero, options: [.activeAlways, .inVisibleRect, .mouseMoved, .mouseEnteredAndExited], owner: self)
     addTrackingArea(area); tracking = area
   }
-  override func mouseEntered(with event: NSEvent) { pointer?(true) }
+  override func mouseEntered(with event: NSEvent) { pointer?(true); pointerMoved?() }
+  override func mouseMoved(with event: NSEvent) { pointerMoved?() }
   override func mouseExited(with event: NSEvent) { pointer?(false) }
   func addIcon(_ title: String, image: NSImage?, frame: CGRect, inMenu: Bool, action: @escaping (NSView) -> Void) -> ArrowButton {
     let button = ArrowButton(frame: frame)
@@ -350,10 +366,11 @@ final class ArrowButton: NSButton {
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
     if let tracking { removeTrackingArea(tracking) }
-    let area = NSTrackingArea(rect: .zero, options: [.activeAlways, .inVisibleRect, .mouseEnteredAndExited], owner: self)
+    let area = NSTrackingArea(rect: .zero, options: [.activeAlways, .inVisibleRect, .mouseMoved, .mouseEnteredAndExited], owner: self)
     addTrackingArea(area); tracking = area
   }
   override func mouseEntered(with event: NSEvent) { pointing = true; needsDisplay = true; onHover?(true) }
+  override func mouseMoved(with event: NSEvent) { onHover?(true) }
   override func mouseExited(with event: NSEvent) { pointing = false; needsDisplay = true; onHover?(false) }
   override func draw(_ dirtyRect: NSRect) {
     if pointing && isEnabled {

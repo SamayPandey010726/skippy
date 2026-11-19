@@ -4,7 +4,7 @@ Skippy is a quiver of small productivity apps called arrows. File Shelf carries 
 
 ## How it opens
 
-Hover over the compact mark to unfold up to five pinned arrows beside it. The mark stays in place. Click an arrow to open a panel beside that icon. Click the mark for the paged workspace. Overflow opens the complete list. The strip folds after 1.8 seconds away and stays available while the pointer moves into the tool panel. Escape closes the panel. The global shortcut and the context menu also open the workspace.
+Hover over the compact mark to unfold up to five pinned arrows beside it. The mark stays in place. Rest the pointer on a pinned tool to preview its panel without activating Skippy. Click to keep the tool open and use its keyboard controls. Pinned external apps launch on click. Click the mark for the paged workspace. Overflow opens the complete list. The strip folds after 0.55 seconds away and stays available while the pointer moves into the tool panel. Escape closes the panel. Control–Option–Command–P and the context menu also open the workspace. Command–K finds any of the 18 arrows by name. Use Up or Down to choose a result, Return to open it and Escape to cancel. The shortcut hints follow the user’s bindings in Settings.
 
 Choose Menu bar, Notch, Floating, Left edge, Right edge, Top edge, Bottom edge or Dock in Settings. Drag the floating mark into position or toward a screen edge to snap. Skippy remembers the display and relative position. The notch mark sits below the camera cutout on equipped displays. In Dock mode, the real Dock tile accepts clicks, files and a secondary-click menu. Optional hover beside that tile uses macOS Accessibility permission to identify its location.
 

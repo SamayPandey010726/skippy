@@ -90,7 +90,7 @@ try glide(center, shelf)
 try pause(0.85, at: shelf)
 let previewFrame = frame - 1
 try FileManager.default.copyItem(at: out.appendingPathComponent(String(format: "frame-%04d.png", previewFrame)), to: out.appendingPathComponent("File-Shelf.png"))
-guard windows().contains(where: { $0.width >= 300 && $0.height >= 160 }) else { throw RecordingError.panelFailed }
+guard windows().contains(where: { $0.width >= 300 && $0.height >= 160 }) else { print("Preview missing", windows(), "mark", mark, "strip", strip, "pointer", shelf); fflush(stdout); throw RecordingError.panelFailed }
 let notes = CGPoint(x: center.x + 93 * direction, y: center.y)
 try glide(shelf, notes)
 try pause(0.55, at: notes)

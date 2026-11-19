@@ -120,7 +120,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   private let hoverDelay: TimeInterval
   private let folderHoverDelay: TimeInterval
   @Published private(set) var choosingArrow = false
-  private(set) var isArrowPreview = false
+  @Published private(set) var isArrowPreview = false
   var quiverAnchor: (() -> CGRect?)?
   var presentationFrame: CGRect? { panel?.isVisible == true ? panel?.frame : nil }
   private var menuAnchor: CGRect?
@@ -581,7 +581,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   }
 
   func previewArrow(_ module: NotchModule, at anchor: CGRect) {
-    guard !visible || isArrowPreview else { return }
+    guard !isVisible || !expanded || isArrowPreview else { return }
     presentArrow(module, at: anchor, preview: true)
   }
 
@@ -1002,6 +1002,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       }
     }
     if toolsVisible {
+      if (command == .copy || command == .paste) && activeModule != .parcel && activeModule != .dashboard { return false }
       switch command {
       case .chooseArrow: break
       case .nextFile:
