@@ -83,6 +83,8 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   private var hideWork: DispatchWorkItem?
   private var trackedMenus: Set<ObjectIdentifier> = []
   private var confirmingAction = false
+  private var selectingOnScreen = false
+  private var selectionEndedAt: TimeInterval = 0
   private var expandWork: DispatchWorkItem?
   private var folderWork: DispatchWorkItem?
   private var observers: [NSObjectProtocol] = []
@@ -122,6 +124,8 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   @Published private(set) var choosingArrow = false
   @Published private(set) var isArrowPreview = false
   var quiverAnchor: (() -> CGRect?)?
+  var quiverPanelPointer: ((Bool) -> Void)?
+  private var quiverPointerInside = false
   var presentationFrame: CGRect? { panel?.isVisible == true ? panel?.frame : nil }
   private var menuAnchor: CGRect?
   private var restoredAnchor: CGPoint?
@@ -405,7 +409,10 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     })
     if let monitor = NSEvent.addGlobalMonitorForEvents(
       matching: [.leftMouseDown, .rightMouseDown],
-      handler: { [weak self] _ in Task { @MainActor in self?.collapseForOutsideClick(at: NSEvent.mouseLocation) } }) {
+      handler: { [weak self] event in
+        let timestamp = event.timestamp
+        Task { @MainActor in self?.collapseForOutsideClick(at: NSEvent.mouseLocation, timestamp: timestamp) }
+      }) {
       eventMonitors.append(monitor)
     }
     if let monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] event in
@@ -793,6 +800,10 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   private func trackPointer() {
     guard let panel, visible, !moving else { return }
     let inside = panel.frame.contains(NSEvent.mouseLocation)
+    if quiverPointerInside != inside {
+      quiverPointerInside = inside
+      quiverPanelPointer?(inside)
+    }
     if waitForPointerExit {
       if !inside { waitForPointerExit = false }
       pointerInside = inside
@@ -1452,6 +1463,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       !DragMonitor.shared.isSending else { return }
     closeFilePreview()
     isArrowPreview = false; choosingArrow = false
+    if quiverPointerInside { quiverPointerInside = false; quiverPanelPointer?(false) }
     awaitingSummonedPointerEntry = false
     hideClipboard()
     hideSearch()
@@ -1526,7 +1538,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       self.idleWork = nil
       guard self.visible, self.idleTimeout > 0 else { return }
       let usingAuxiliaryPanel = self.clipboardPinnedOpen || self.searchPinnedOpen || self.optionsPinnedOpen
-      if self.receiving || self.store?.busy == true || self.confirmingAction || self.moving || !self.trackedMenus.isEmpty || DragMonitor.shared.isSending || self.filePreview.isInsidePreview || usingAuxiliaryPanel {
+      if self.receiving || self.store?.busy == true || self.confirmingAction || self.selectingOnScreen || self.moving || !self.trackedMenus.isEmpty || DragMonitor.shared.isSending || self.filePreview.isInsidePreview || usingAuxiliaryPanel {
         self.recordActivity(); return
       }
       let remaining = self.idleTimeout - (ProcessInfo.processInfo.systemUptime - self.lastActivity)
@@ -1535,6 +1547,23 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     idleWork = work
     DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
   }
+  /// A system picker owns the next click. Keep the tool's contents and uncover the target pixel.
+  func beginScreenSelection() -> @MainActor () -> Void {
+    guard isVisible else { return {} }
+    selectingOnScreen = true
+    isArrowPreview = false
+    let stamp = generation
+    panel?.orderOut(nil)
+    return { [weak self] in
+      guard let self else { return }
+      self.selectingOnScreen = false
+      self.selectionEndedAt = ProcessInfo.processInfo.systemUptime
+      guard self.visible, self.generation == stamp else { return }
+      self.panel?.orderFrontRegardless()
+      self.focusForKeyboard()
+    }
+  }
+
   func confirmationChanged(_ presented: Bool) {
     recordActivity()
     confirmingAction = presented
@@ -1610,7 +1639,8 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   private func topCenterAnchor(in frame: CGRect) -> CGPoint {
     CGPoint(x: frame.midX + physicalCourierSize.width / 2, y: frame.maxY - 12)
   }
-  private func collapseForOutsideClick(at point: CGPoint) {
+  private func collapseForOutsideClick(at point: CGPoint, timestamp: TimeInterval) {
+    guard !selectingOnScreen, timestamp > selectionEndedAt else { return }
     guard visible, expanded, !moving, !confirmingAction, trackedMenus.isEmpty,
       store?.busy != true, !receiving else { return }
     // Tool modules are explicitly opened, not hover previews. Keep them pinned until

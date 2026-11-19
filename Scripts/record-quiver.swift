@@ -5,7 +5,7 @@ import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
 
-enum RecordingError: Error { case missingWindow, hoverFailed, panelFailed, captureFailed, foldFailed }
+enum RecordingError: Error { case missingWindow, hoverFailed, panelFailed, captureFailed, foldFailed, focusChanged }
 let out = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
 let pid = Int(CommandLine.arguments[2])!
@@ -42,6 +42,12 @@ func escape() {
 }
 escape()
 Thread.sleep(forTimeInterval: 0.5)
+let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first
+let priorApp = NSWorkspace.shared.frontmostApplication
+if priorApp?.processIdentifier == pid { _ = finder?.activate(options: [.activateIgnoringOtherApps]) }
+Thread.sleep(forTimeInterval: 0.3)
+let baselineFocus = NSWorkspace.shared.frontmostApplication?.processIdentifier
+guard let baselineFocus, baselineFocus != pid else { throw RecordingError.focusChanged }
 let screen = CGDisplayBounds(CGMainDisplayID())
 guard let mark = windows().first(where: { (26...42).contains($0.width) && (24...44).contains($0.height) }) else {
   print("Skippy windows:", windows()); throw RecordingError.missingWindow
@@ -91,6 +97,8 @@ try pause(0.85, at: shelf)
 let previewFrame = frame - 1
 try FileManager.default.copyItem(at: out.appendingPathComponent(String(format: "frame-%04d.png", previewFrame)), to: out.appendingPathComponent("File-Shelf.png"))
 guard windows().contains(where: { $0.width >= 300 && $0.height >= 160 }) else { print("Preview missing", windows(), "mark", mark, "strip", strip, "pointer", shelf); fflush(stdout); throw RecordingError.panelFailed }
+guard NSWorkspace.shared.frontmostApplication?.processIdentifier == baselineFocus else { throw RecordingError.focusChanged }
+print("PASS hovering preserved foreground application")
 let notes = CGPoint(x: center.x + 93 * direction, y: center.y)
 try glide(shelf, notes)
 try pause(0.55, at: notes)

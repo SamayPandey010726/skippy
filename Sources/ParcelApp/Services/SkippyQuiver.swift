@@ -73,6 +73,11 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     guard !installed else { return }
     installed = true
     shelf.quiverAnchor = { [weak self] in self?.anchor }
+    shelf.quiverPanelPointer = { [weak self] inside in
+      guard let self else { return }
+      if inside { self.foldWork?.cancel() }
+      else if !self.stripContainsPointer { self.hover(false) }
+    }
     strip.pointer = { [weak self] in self?.hover($0) }
     strip.pointerMoved = { [weak self] in self?.trackArrow() }
     attach()
@@ -136,8 +141,8 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
       let work = DispatchWorkItem { [weak self] in
         guard let self else { return }
         if self.stripContainsPointer { self.trackArrow(); return }
-        if let frame = self.shelf.presentationFrame, frame.insetBy(dx: -7, dy: -7).contains(NSEvent.mouseLocation) {
-          self.hover(false); return
+        if let frame = self.shelf.presentationFrame, frame.contains(NSEvent.mouseLocation) {
+          return
         }
         self.shelf.dismissArrowPreview()
         self.setUnfolded(false)

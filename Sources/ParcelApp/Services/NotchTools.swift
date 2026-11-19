@@ -191,9 +191,11 @@ struct NotchMacro: Codable, Identifiable {
   }
 
   func pickColour() {
+    let restore = DropPopupController.shared.beginScreenSelection()
     NSColorSampler().show { [weak self] colour in
-      guard let colour, let hex = Self.hexValue(for: colour) else { return }
       Task { @MainActor in
+        defer { restore() }
+        guard let colour, let hex = Self.hexValue(for: colour) else { return }
         self?.pickedColour = hex
         self?.copyText(hex, label: "Colour")
       }
@@ -303,11 +305,13 @@ struct NotchMacro: Codable, Identifiable {
 
   private func captureScreenArea(_ completion: @escaping (URL) -> Void) {
     let url = FileManager.default.temporaryDirectory.appendingPathComponent("parcels-capture-\(UUID().uuidString).png")
+    let restore = DropPopupController.shared.beginScreenSelection()
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
     process.arguments = ["-i", "-x", url.path]
     process.terminationHandler = { [weak self] process in
       DispatchQueue.main.async {
+        restore()
         guard process.terminationStatus == 0, FileManager.default.fileExists(atPath: url.path) else {
           try? FileManager.default.removeItem(at: url)
           self?.status = "Screen selection cancelled or unavailable"
@@ -317,7 +321,7 @@ struct NotchMacro: Codable, Identifiable {
       }
     }
     do { try process.run() }
-    catch { status = "Could not start screen capture" }
+    catch { restore(); status = "Could not start screen capture" }
   }
 
   func chooseImageForOCR() {
@@ -1559,7 +1563,7 @@ struct NotchToolsView: View {
   private var screenshotView: some View {
     VStack(alignment: .leading, spacing: 8) {
       HStack {
-        Text("\(tools.captures.count) regions").font(.system(size: 12, weight: .semibold))
+        Text(tools.captures.count == 1 ? "1 region" : "\(tools.captures.count) regions").font(.system(size: 12, weight: .semibold))
         Spacer()
         NotchActionButton(title: "Add region", symbol: "plus", tint: skin.palette.accent, action: tools.captureAnother)
         NotchActionButton(title: "Copy joined", symbol: "doc.on.doc", tint: skin.palette.accent, action: tools.copyCombinedCaptures)

@@ -44,6 +44,14 @@ jobs:
       - name: Exercise all arrows through the running application
         if: ${{ !cancelled() }}
         run: swift Scripts/check-arrow-navigation.swift "$(pgrep -x Skippy | head -1)"
+      - name: Check real menu-bar hover and pointer handoff
+        if: ${{ !cancelled() }}
+        run: |
+          pkill -x Skippy
+          defaults write com.yourcompany.parcel skippy.surface -string "Menu bar"
+          bash Scripts/apple-terminal.sh mac
+          sleep 2
+          swift Scripts/check-menu-hover.swift "$(pgrep -x Skippy | head -1)"
       - name: Save pointer diagnostics after a failure
         if: failure()
         run: |

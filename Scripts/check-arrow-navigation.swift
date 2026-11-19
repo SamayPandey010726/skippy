@@ -35,6 +35,16 @@ func check(_ label: String, until predicate: () -> Bool) {
   print("FAIL", label, "visible panel names", panels().map { $0[kCGWindowName as String] ?? "(unnamed)" })
   if checkingControls { controlFailures.append(label) } else { exit(1) }
 }
+let gallery = URL(fileURLWithPath: "build/recordings/Arrows", isDirectory: true)
+try FileManager.default.createDirectory(at: gallery, withIntermediateDirectories: true)
+func captureArrow(_ name: String) {
+  guard let panel = panels().first(where: { $0[kCGWindowName as String] as? String == "Skippy · " + name }),
+        let id = panel[kCGWindowNumber as String] as? UInt32 else { return }
+  let capture = Process()
+  capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+  capture.arguments = ["-x", "-o", "-l", String(id), gallery.appendingPathComponent(name + ".png").path]
+  do { try capture.run(); capture.waitUntilExit() } catch { print("Capture failed for", name, error) }
+}
 let application = AXUIElementCreateApplication(pid_t(pid))
 func attribute(_ node: AXUIElement, _ key: String) -> CFTypeRef? {
   var result: CFTypeRef?
@@ -192,6 +202,8 @@ for name in arrows {
   }
   key(kVK_Return)
   check("open " + name) { panels().contains { $0[kCGWindowName as String] as? String == "Skippy · " + name } }
+  Thread.sleep(forTimeInterval: 0.18)
+  captureArrow(name)
   checkingControls = true
   verifyContent(name)
   checkingControls = false
