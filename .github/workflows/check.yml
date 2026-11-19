@@ -1,22 +1,46 @@
-name: Parcel checks
+name: Skippy checks
 on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
 jobs:
   native-macos:
     runs-on: macos-15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: Compiler and core tests
+      - name: Compiler and native tests
         run: swift test
-      - name: Compile and bundle the native app
+      - name: Compile and bundle Skippy
+        if: ${{ !cancelled() }}
         run: bash Scripts/build-macos.sh
-      - name: Native image smoke checks
-        run: bash Scripts/check-macos.sh
-      - name: Preserve app executable permissions in ZIP
-        run: ditto -c -k --keepParent build/Parcel.app build/Parcel-developer.zip
-      - name: Upload unsigned review build
-        uses: actions/upload-artifact@v4
+      - name: Native smoke checks and launch
+        if: ${{ !cancelled() }}
+        run: |
+          bash Scripts/check-macos.sh
+          bash Scripts/apple-terminal.sh mac
+          sleep 3
+          pgrep -x Skippy
+      - name: Archive developer build
+        if: ${{ !cancelled() }}
+        run: ditto -c -k --keepParent build/Skippy.app build/Skippy-developer.zip
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
         with:
-          name: Parcel-developer-build
-          path: build/Parcel-developer.zip
+          name: Skippy-Mac
+          path: |
+            build/Skippy-developer.zip
+            build/recordings/
+  simulators:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Boot iPhone and iPad
+        run: |
+          mkdir -p build/devices
+          SKIPPY_SIM_CAPTURE=build/devices/iPhone.png bash Scripts/apple-terminal.sh iphone
+          SKIPPY_SIM_CAPTURE=build/devices/iPad.png bash Scripts/apple-terminal.sh ipad
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Apple-simulators
+          path: build/devices

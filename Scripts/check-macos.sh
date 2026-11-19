@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 [[ "$(uname -s)" == Darwin ]] || { echo 'Native smoke checks require macOS.' >&2;exit 1; }
 swift_options=()
 if [[ "${PARCEL_SWIFT_DISABLE_SANDBOX:-0}" == 1 ]]; then swift_options+=(--disable-sandbox); fi
-swift build ${swift_options[@]+"${swift_options[@]}"} --product Parcel
+swift build ${swift_options[@]+"${swift_options[@]}"} --product Skippy
 swift build ${swift_options[@]+"${swift_options[@]}"} --product ParcelCheck
 bin="$(swift build ${swift_options[@]+"${swift_options[@]}"} --show-bin-path)"
 objects=()

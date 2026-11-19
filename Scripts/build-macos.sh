@@ -39,15 +39,15 @@ if [[ "${PARCEL_SWIFT_DISABLE_SANDBOX:-0}" == 1 ]]; then swift_options+=(--disab
 if [[ -n "${PARCEL_SWIFT_DEBUG_INFO:-}" ]]; then swift_options+=(-debug-info-format "$PARCEL_SWIFT_DEBUG_INFO"); fi
 for arch in "${architectures[@]}"; do
     scratch=".build/bundle-$arch"
-    swift build ${swift_options[@]+"${swift_options[@]}"} --scratch-path "$scratch" -c release --product Parcel --arch "$arch"
+    swift build ${swift_options[@]+"${swift_options[@]}"} --scratch-path "$scratch" -c release --product Skippy --arch "$arch"
     bin="$(swift build ${swift_options[@]+"${swift_options[@]}"} --scratch-path "$scratch" -c release --arch "$arch" --show-bin-path)"
-    binaries+=("$bin/Parcel")
+    binaries+=("$bin/Skippy")
     resource_bin="$bin"
 done
-app='build/Parcel.app'
+app='build/Skippy.app'
 if [[ -e "$app" ]]; then rm -rf -- "$app"; fi
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-if $universal; then lipo -create "${binaries[@]}" -output "$app/Contents/MacOS/Parcel"; else cp "${binaries[0]}" "$app/Contents/MacOS/Parcel"; fi
+if $universal; then lipo -create "${binaries[@]}" -output "$app/Contents/MacOS/Skippy"; else cp "${binaries[0]}" "$app/Contents/MacOS/Skippy"; fi
 cp Config/Info.plist "$app/Contents/Info.plist"
 plutil -replace CFBundleIdentifier -string "$bundle_id" "$app/Contents/Info.plist"
 plutil -replace CFBundleShortVersionString -string "$version" "$app/Contents/Info.plist"
@@ -70,16 +70,17 @@ cp Sources/ParcelApp/Resources/paper-seal.wav "$app/Contents/Resources/"
 # metadata into a hand-assembled .app. Mirror Xcode's metadata extraction so
 # Shortcuts, Siri and Spotlight can discover Parcel's actions after install.
 primary_arch="${architectures[0]}"
-intent_objects="$PWD/.build/bundle-$primary_arch/out/Intermediates.noindex/Parcel.build/Release/Parcel-p.build/Objects-normal/$primary_arch"
-intent_sources="$intent_objects/Parcel.SwiftFileList"
-intent_values="$intent_objects/Parcel-primary.swiftconstvalues"
+intent_sources="$(find ".build/bundle-$primary_arch" -type f -name '*.SwiftFileList' -path "*/Objects-normal/$primary_arch/*" | while IFS= read -r list; do
+    if grep -q 'ParcelAppIntents.swift' "$list"; then echo "$list"; fi
+  done | head -1)"
+intent_values="$(dirname "$intent_sources")/$(basename "$intent_sources" .SwiftFileList)-primary.swiftconstvalues"
 if [[ -f "$intent_sources" && -f "$intent_values" ]]; then
     intent_staging="$(mktemp -d "${TMPDIR:-/tmp}/Parcel-appintents.XXXXXX")"
     printf '%s\n' "$intent_values" > "$intent_staging/const-values.txt"
     xcrun appintentsmetadataprocessor \
         --output "$intent_staging" \
         --toolchain-dir "$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain" \
-        --module-name Parcel \
+        --module-name ParcelApp \
         --sdk-root "$(xcrun --sdk macosx --show-sdk-path)" \
         --xcode-version "$(xcodebuild -version | awk '/Build version/{print $3}')" \
         --platform-family macOS \
