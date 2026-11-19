@@ -20,8 +20,8 @@ enum NotchModule: String, CaseIterable, Identifiable {
   var id: String { rawValue }
   var title: String {
     switch self {
-    case .dashboard: "Parcels"
-    case .parcel: "Parcel"
+    case .dashboard: "Skippy"
+    case .parcel: "File Shelf"
     case .clipboard: "Clipboard"
     case .extract: "Extract text"
     case .color: "Pick colour"
@@ -450,7 +450,7 @@ struct NotchMacro: Codable, Identifiable {
     let panel = NSOpenPanel()
     panel.allowedContentTypes = [.applicationBundle]
     panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
-    panel.message = "Choose an app to pin to Parcels"
+    panel.message = "Choose an app to pin to Skippy"
     guard panel.runModal() == .OK, let url = panel.url,
       let bundle = Bundle(url: url), let id = bundle.bundleIdentifier else { return }
     guard !pinnedApps.contains(where: { $0.bundleIdentifier == id }) else { status = "App is already pinned"; return }
@@ -545,7 +545,7 @@ struct NotchMacro: Codable, Identifiable {
       } else {
         mediaSource = nil; mediaIsPlaying = false
         mediaTitle = player == nil ? "Nothing playing" : audioTitle
-        mediaArtist = player == nil ? "Music and Spotify appear here" : "Playing in Parcel"
+        mediaArtist = player == nil ? "Music and Spotify appear here" : "Playing in Skippy"
       }
     }
   }
@@ -685,7 +685,7 @@ struct NotchToolsView: View {
 
   private var header: some View {
     HStack(spacing: 7) {
-      NotchIconButton(symbol: "xmark", help: "Close Parcels", action: shelf.dismiss)
+      NotchIconButton(symbol: "xmark", help: "Close Skippy", action: shelf.dismiss)
       ZStack {
         Circle().fill(skin.palette.accent.opacity(0.18))
         Image(systemName: shelf.activeModule.symbol).font(.system(size: 10, weight: .bold)).foregroundStyle(skin.palette.accent)
@@ -710,7 +710,7 @@ struct NotchToolsView: View {
 
   private var headerSubtitle: String {
     switch shelf.activeModule {
-    case .dashboard: widgets.editing ? "Drag, resize and pin widgets" : "Your live workspace"
+    case .dashboard: widgets.editing ? "Drag, resize and pin widgets" : "Your quiver"
     case .parcel: "Everything ready to move"
     case .clipboard: "Your recent copies"
     case .extract: "Private, on-device OCR"
@@ -850,7 +850,7 @@ struct NotchToolsView: View {
               }
             }
           }
-          Button(widget.pinned ? "Remove from collapsed notch" : "Pin to collapsed notch") {
+          Button(widget.pinned ? "Remove from quiver" : "Pin to quiver") {
             widgets.togglePinned(widget.kind)
           }
           Button("Open") { shelf.showModule(widget.kind.module) }
@@ -918,7 +918,7 @@ struct NotchToolsView: View {
             }.frame(maxWidth: .infinity)
           }.buttonStyle(.plain).help(app.localizedName ?? "App")
             .contextMenu {
-              Button(tools.isPinned(app) ? "Remove from notch" : "Pin to notch") { tools.togglePinned(app) }
+              Button(tools.isPinned(app) ? "Remove from quiver" : "Pin to quiver") { tools.togglePinned(app) }
               Button("Open") { tools.activate(app) }
             }
         }
@@ -1221,7 +1221,7 @@ struct NotchToolsView: View {
       HStack(spacing: 6) {
         suggestion("parcel workflows"); suggestion("convert PDF on Mac"); suggestion("share files securely")
       }
-      Text("Your query opens in the default browser. Parcels never records it.").font(.system(size: 8.5)).foregroundStyle(.secondary)
+      Text("Your query opens in the default browser. Skippy never records it.").font(.system(size: 8.5)).foregroundStyle(.secondary)
       Spacer()
     }.frame(maxWidth: 390)
   }
@@ -1276,7 +1276,7 @@ struct NotchToolsView: View {
             .background(Color.primary.opacity(0.001), in: RoundedRectangle(cornerRadius: 11))
           }.buttonStyle(.plain)
             .contextMenu {
-              Button(tools.isPinned(app) ? "Remove from notch" : "Pin to notch") { tools.togglePinned(app) }
+              Button(tools.isPinned(app) ? "Remove from quiver" : "Pin to quiver") { tools.togglePinned(app) }
               Button("Open") { tools.activate(app) }
             }
         }

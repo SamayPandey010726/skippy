@@ -515,7 +515,7 @@ final class CourierRefinementTests: XCTestCase {
     XCTAssertTrue(titles.contains("Copy text with OCR"))
   }
 
-  @MainActor func testClipboardShortcutTogglesFromCourierChoices() throws {
+  @MainActor func testClipboardShortcutTogglesBetweenArrowAndDashboard() throws {
     let store = ParcelStore(persist: false)
     let shelf = DropPopupController(store: store)
     shelf.summon()
@@ -526,9 +526,9 @@ final class CourierRefinementTests: XCTestCase {
       context: nil, characters: "c", charactersIgnoringModifiers: "c", isARepeat: false,
       keyCode: binding.keyCode))
     XCTAssertTrue(shelf.handleCourierKey(event))
-    XCTAssertTrue(shelf.isClipboardVisible)
+    XCTAssertEqual(shelf.activeModule, .clipboard)
     XCTAssertTrue(shelf.handleCourierKey(event))
-    XCTAssertFalse(shelf.isClipboardVisible)
+    XCTAssertEqual(shelf.activeModule, .dashboard)
     shelf.dismiss()
   }
 

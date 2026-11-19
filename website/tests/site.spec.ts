@@ -12,7 +12,7 @@ test('public pages contain no source repository links', async ({ page }) => {
 
 test('interactive shelf preserves files through search and supports core actions', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Your Mac is fast. Moving things is not.' })).toBeVisible()
-  const demo = page.getByLabel('Interactive Parcel product demo')
+  const demo = page.getByLabel('Interactive Skippy product demo')
   await demo.scrollIntoViewIfNeeded()
   await expect(demo.getByRole('button', { name: /Campaign brief/ })).toBeVisible()
 
@@ -32,7 +32,7 @@ test('interactive shelf preserves files through search and supports core actions
 
   await demo.getByRole('button', { name: 'New parcel' }).click()
   await expect(demo.getByRole('heading', { name: 'Name your new parcel' })).toBeVisible()
-  await demo.getByLabel('Parcel name').fill('Client delivery')
+  await demo.getByLabel('Skippy name').fill('Client delivery')
   await demo.getByRole('button', { name: 'Create & pin' }).click()
   await expect(demo.getByText('Created and pinned “Client delivery”.')).toBeVisible()
 })
@@ -46,7 +46,7 @@ test('cinematic journey is scroll-driven and directly controllable', async ({ pa
 })
 
 test('clipboard opens, searches and uses the live shortener', async ({ page }) => {
-  const demo = page.getByLabel('Interactive Parcel product demo')
+  const demo = page.getByLabel('Interactive Skippy product demo')
   await demo.scrollIntoViewIfNeeded()
   await demo.getByRole('button', { name: 'Clipboard' }).click()
   await expect(demo.getByRole('complementary', { name: 'Clipboard' })).toBeVisible()
@@ -60,7 +60,7 @@ test('clipboard opens, searches and uses the live shortener', async ({ page }) =
 })
 
 test('keyboard controls and responsive layout work', async ({ page }) => {
-  const demo = page.getByLabel('Interactive Parcel product demo')
+  const demo = page.getByLabel('Interactive Skippy product demo')
   await demo.scrollIntoViewIfNeeded()
   await demo.focus()
   await page.keyboard.press('Meta+P')

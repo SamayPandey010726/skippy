@@ -15,7 +15,7 @@ extension Notification.Name {
   init() { ParcelShortcuts.updateAppShortcutParameters() }
 
   var body: some Scene {
-    MenuBarExtra("Parcels", systemImage: "square.grid.2x2.fill", isInserted: .constant(false)) { EmptyView() }
+    MenuBarExtra("Skippy", systemImage: "square.grid.2x2.fill", isInserted: .constant(false)) { EmptyView() }
     .commands {
       CommandGroup(replacing: .appSettings) {
         Button("Settings…") { AppController.shared.openPreferences() }.keyboardShortcut(",")
@@ -30,7 +30,7 @@ extension Notification.Name {
           NotificationCenter.default.post(name: .parcelFocusSearch, object: nil)
         }.keyboardShortcut("f").disabled(!store.license.canUseApp)
       }
-      CommandMenu("Parcel") {
+      CommandMenu("Skippy") {
         Button("Pack \(store.packaging.format.label)") { store.seal() }
           .keyboardShortcut("p", modifiers: [.command, .shift])
           .disabled(store.busy || store.items.isEmpty || !store.canExport)
@@ -56,7 +56,7 @@ extension Notification.Name {
           .keyboardShortcut("c", modifiers: [.command, .shift]).disabled(!store.canExport)
         Button("Copy local file link") { store.copyArchiveLink() }
           .disabled(!store.ready || store.busy || !store.canExport)
-        Button("Open Parcels") { AppController.shared.toggleDropPopup() }
+        Button("Open Skippy") { AppController.shared.toggleDropPopup() }
         Divider()
         Button("Share via WhatsApp") { store.shareViaWhatsApp() }.disabled(store.busy || !store.canExport)
         Divider()

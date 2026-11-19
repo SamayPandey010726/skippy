@@ -17,7 +17,7 @@ import AppKit
   @objc func sendToParcels(_ pasteboard: NSPasteboard, userData: String?,
     error: AutoreleasingUnsafeMutablePointer<NSString?>) {
     let urls = Self.fileURLs(from: pasteboard)
-    guard !urls.isEmpty else { error.pointee = "Select files or folders to send to Parcels."; return }
+    guard !urls.isEmpty else { error.pointee = "Select files or folders to send to Skippy."; return }
     guard let store, !store.busy, store.phase != .receiving, !store.needsLibraryRecovery else {
       error.pointee = "Parcel is busy or its library needs recovery. Try again when it is ready."; return
     }

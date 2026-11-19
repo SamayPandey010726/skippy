@@ -50,7 +50,7 @@ struct WelcomeView: View {
         Text("Step \(step.rawValue + 1) of \(OnboardingStep.allCases.count)")
           .font(.system(size: 10)).foregroundStyle(Ink.secondary)
         Spacer()
-        Button(step == .shortcut ? "Start using Parcels" : "Continue") {
+        Button(step == .shortcut ? "Start using Skippy" : "Continue") {
           if step == .shortcut { finish() } else { move(1) }
         }.buttonStyle(MossButtonStyle())
       }
@@ -62,8 +62,8 @@ struct WelcomeView: View {
     switch step {
     case .welcome:
       tutorialPage(
-        title: "Meet Parcels.",
-        body: "A customizable workspace that lives over your Mac's menu bar and keeps everyday tools within reach.") {
+        title: "Meet Skippy.",
+        body: "Hover over the quiver to unfold your pinned arrows. Click an arrow for its tool, or click the Skippy mark to browse them all.") {
           ZStack { GardenBackdrop(); CourierSatchel(count: 3, awake: true) }
         }
     case .collect:
@@ -127,8 +127,8 @@ struct WelcomeView: View {
         }
     case .shortcut:
       tutorialPage(
-        title: "Open Parcels from anywhere.",
-        body: "Use the global shortcut or shake your pointer whenever Parcels is collapsed. Click the shortcut now to choose another combination.") {
+        title: "Open Skippy from anywhere.",
+        body: "Use the global shortcut or shake your pointer whenever Skippy is collapsed. Click the shortcut now to choose another combination.") {
           VStack(spacing: 12) {
             ShortcutRecorder(shortcut: shortcuts.shortcut, onRecord: shortcuts.update)
               .frame(width: 150, height: 38)

@@ -22,7 +22,7 @@ jobs:
           pgrep -x Skippy
       - name: Archive developer build
         if: ${{ !cancelled() }}
-        run: ditto -c -k --keepParent build/Skippy.app build/Skippy-developer.zip
+        run: codesign --verify --strict build/Skippy.app && ditto -c -k --keepParent build/Skippy.app build/Skippy-developer.zip
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:

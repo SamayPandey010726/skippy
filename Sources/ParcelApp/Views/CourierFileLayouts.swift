@@ -65,7 +65,7 @@ struct CourierToolbar: View {
                 .frame(width: 42, height: 42)
             }
           Button { shelf.showModule(.dashboard) } label: { Image(systemName: "square.grid.2x2") }
-            .help("Open Parcels")
+            .help("Open Skippy")
           if store.selectedItems.count > 1 {
             Button(action: store.stackSelected) { Image(systemName: "square.stack.3d.up.fill") }
               .help("Stack \(store.selectedItems.count) selected items into one icon")

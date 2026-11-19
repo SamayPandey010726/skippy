@@ -19,7 +19,7 @@ enum CourierCommand: String, CaseIterable, Identifiable {
     case .ocr: return "Copy image text (OCR)"
     case .settings: return "Open settings"
     case .open: return "Open focused file"
-    case .close: return "Close Parcels"
+    case .close: return "Close Skippy"
     }
   }
   var defaultBinding: CourierKeyBinding {

@@ -17,7 +17,7 @@ import SwiftUI
   func restoreAccessoryPolicyIfPossible() {
     if workbench?.isVisible != true && preferencesWindow?.isVisible != true && tutorialWindow?.isVisible != true
       && activationWindow?.isVisible != true {
-      NSApp.setActivationPolicy(.accessory)
+      NSApp.setActivationPolicy(SkippyQuiver.shared.surface == .dock ? .regular : .accessory)
     }
   }
   func install(store: ParcelStore) {
@@ -41,8 +41,8 @@ import SwiftUI
     guard !operationalServicesInstalled else { restoreAccessoryPolicyIfPossible(); return }
     operationalServicesInstalled = true
     WatchedFolders.shared.start(store: store)
+    SkippyQuiver.shared.install()
     DropPopupController.shared.install(store: store)
-    CourierMenuBar.shared.install(store: store)
     ParcelFileService.shared.install(store: store)
     SpotlightIndexer.shared.install(store: store)
     ClipboardHistoryStore.shared.start()
@@ -55,7 +55,7 @@ import SwiftUI
     if activationWindow == nil {
       let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 530),
         styleMask: [.titled, .closable], backing: .buffered, defer: false)
-      window.title = "Activate Parcel"
+      window.title = "Activate Skippy"
       window.delegate = self
       window.isReleasedWhenClosed = false
       window.isRestorable = false
@@ -107,7 +107,7 @@ import SwiftUI
     if tutorialWindow == nil {
       let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 540, height: 640),
         styleMask: [.titled, .closable], backing: .buffered, defer: false)
-      window.title = "Welcome to Parcel"
+      window.title = "Welcome to Skippy"
       window.delegate = self
       window.isReleasedWhenClosed = false
       window.isRestorable = false
@@ -151,7 +151,7 @@ import SwiftUI
     if preferencesWindow == nil {
       let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 550, height: 540),
         styleMask: [.titled, .closable], backing: .buffered, defer: false)
-      window.title = "Parcels Settings"; window.isReleasedWhenClosed = false
+      window.title = "Skippy Settings"; window.isReleasedWhenClosed = false
       window.isRestorable = false
       window.contentView = NSHostingView(rootView: UniversalInterface { PreferencesView().environmentObject(store) })
       window.center(); preferencesWindow = window
@@ -160,7 +160,7 @@ import SwiftUI
     preferencesWindow?.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
   }
-  func windowWillClose(_ notification: Notification) { NSApp.setActivationPolicy(.accessory) }
+  func windowWillClose(_ notification: Notification) { DispatchQueue.main.async { self.restoreAccessoryPolicyIfPossible() } }
   func fitInterfaceWindows() {
     guard let workbench else { return }
     let scale = DropPopupController.shared.interfaceScale
@@ -266,8 +266,8 @@ enum SelectionCapture {
     let alert = NSAlert()
     alert.messageText = "A parcel is still being received or prepared."
     alert.informativeText =
-      "Wait for it to finish, or cancel the operation in Parcel before quitting. Your originals are safe."
-    alert.addButton(withTitle: "Keep Parcel open")
+      "Wait for it to finish, or cancel the operation in Skippy before quitting. Your originals are safe."
+    alert.addButton(withTitle: "Keep Skippy open")
     alert.runModal()
     return .terminateCancel
   }
@@ -275,8 +275,9 @@ enum SelectionCapture {
   /// Right-click the Dock icon: packed parcels fan out, anything opens directly.
   func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
     let store = ParcelRuntime.store
-    guard !store.recentParcels.isEmpty else { return nil }
-    let menu = NSMenu()
+    guard store.license.canUseApp else { return nil }
+    let menu = SkippyQuiver.shared.menu()
+    if !store.recentParcels.isEmpty { menu.addItem(.separator()) }
     for box in store.recentParcels.prefix(6) {
       let sub = NSMenu()
       for item in box.items.prefix(15) {

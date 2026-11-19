@@ -91,7 +91,7 @@ struct BrandMark: View {
   var body: some View {
     HStack(spacing: 9) {
       Image(systemName: "bag.fill").font(.system(size: 19)).foregroundStyle(Ink.green)
-      Text("parcel").font(.custom(Ink.serif, size: 27)).tracking(-1).foregroundStyle(Ink.green)
+      Text("Skippy").font(.custom(Ink.serif, size: 27)).tracking(-1).foregroundStyle(Ink.green)
     }
   }
 }

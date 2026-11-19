@@ -80,7 +80,7 @@ final class ShortcutRecorderButton: NSButton {
     layer?.borderWidth = 1
     updateAppearance()
     toolTip = "Click, then press your preferred shortcut"
-    setAccessibilityLabel("Global Parcels shortcut")
+    setAccessibilityLabel("Global Skippy shortcut")
     setAccessibilityHelp("Click, then press a letter or number with at least two modifier keys")
   }
 

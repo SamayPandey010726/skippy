@@ -76,12 +76,13 @@ final class NotchToolsTests: XCTestCase {
     defer { defaults.removePersistentDomain(forName: suite) }
     let widgets = NotchWidgetStore(defaults: defaults)
     widgets.resize(.parcel, to: .fourByFour)
+    let wasPinned = widgets.pinned.contains { $0.kind == .parcel }
     widgets.togglePinned(.parcel)
     widgets.move(.parcel, before: .music)
     let restored = NotchWidgetStore(defaults: defaults)
     XCTAssertEqual(restored.widgets.first?.kind, .parcel)
     XCTAssertEqual(restored.widgets.first?.size, .fourByFour)
-    XCTAssertEqual(restored.widgets.first?.pinned, true)
+    XCTAssertEqual(restored.widgets.first?.pinned, !wasPinned)
   }
 
   @MainActor func testWidgetsPackIntoWholePagesAndMusicDefaultsToFullPage() throws {
