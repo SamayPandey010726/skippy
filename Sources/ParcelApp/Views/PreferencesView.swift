@@ -229,6 +229,12 @@ struct PreferencesView: View {
         Picker("Attach quiver to", selection: $quiver.surface) {
           ForEach(QuiverSurface.allCases) { Text($0.rawValue).tag($0) }
         }
+        if quiver.surface == .dock && !AXIsProcessTrusted() {
+          Button("Allow Dock hover in Accessibility…") {
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(options)
+          }
+        }
         Text("Hover to unfold pinned arrows. Click an arrow to open its panel. Drag the floating mark to a screen edge to attach it. In the Dock, click to open or secondary-click for arrows.")
           .font(.caption).foregroundStyle(.secondary)
         Picker("Collapse after", selection: Binding(get: { courier.idleTimeout }, set: { courier.idleTimeout = $0 })) {

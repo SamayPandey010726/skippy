@@ -40,6 +40,8 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
   private var floating: NSPanel?
   private var subscriptions = Set<AnyCancellable>()
   private var foldWork: DispatchWorkItem?
+  private var dockHover: DockHover?
+  private var dockTile: CGRect?
   private var installed = false
   private var dragging = false
   private let defaults: UserDefaults
@@ -71,6 +73,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     if let mark = strip.subviews.last, let window = mark.window, window.isVisible {
       return window.convertToScreen(mark.convert(mark.bounds, to: nil))
     }
+    if surface == .dock, let dockTile { return dockTile }
     guard let screen = display else { return nil }
     let v = screen.visibleFrame, f = screen.frame
     let x = v.minX > f.minX + 8 ? v.minX : (v.maxX < f.maxX - 8 ? v.maxX : v.midX)
@@ -84,8 +87,15 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     strip.removeFromSuperview()
     if let status { NSStatusBar.system.removeStatusItem(status); self.status = nil }
     floating?.orderOut(nil); floating = nil
-    if surface == .dock { NSApp.setActivationPolicy(.regular); return }
-    AppController.shared.restoreAccessoryPolicyIfPossible()
+    dockHover?.stop(); dockHover = nil; dockTile = nil
+    if surface == .dock {
+      NSApp.setActivationPolicy(.regular)
+      dockHover = DockHover(entered: { [weak self] tile in
+        guard let self else { return }
+        self.dockTile = tile
+        self.hover(true); self.layout(); self.floating?.orderFrontRegardless()
+      }, left: { [weak self] in self?.hover(false) })
+    } else { AppController.shared.restoreAccessoryPolicyIfPossible() }
     if surface == .menu {
       let item = NSStatusBar.system.statusItem(withLength: cell)
       item.button?.addSubview(strip)
@@ -99,7 +109,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
       p.contentView = strip; floating = p
     }
     layout()
-    floating?.orderFrontRegardless()
+    if surface != .dock { floating?.orderFrontRegardless() }
   }
 
   func hover(_ inside: Bool) {
@@ -114,6 +124,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
           self.hover(false); return
         }
         self.unfolded = false; self.layout(animate: true)
+        if self.surface == .dock { self.floating?.orderOut(nil) }
       }
       foldWork = work
       DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: work)
@@ -152,7 +163,8 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
   }
 
   private func layout(animate: Bool = false) {
-    guard surface != .dock, !dragging, let screen = display else { return }
+    guard !dragging, let screen = (dockTile.flatMap { tile in NSScreen.screens.first { $0.frame.intersects(tile) } } ?? display) else { return }
+    if surface == .dock && dockTile == nil { return }
     let oldExpandedWidth = strip.frame.width
     let entries = widgets.pinned.map { widget in
       (widget.kind.module.title, NSImage(systemSymbolName: widget.kind.module.symbol, accessibilityDescription: nil),
@@ -170,6 +182,11 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     case .right: center.x = visible.maxX - cell / 2
     case .top: center.y = visible.maxY - height / 2
     case .bottom: center.y = visible.minY + height / 2
+    case .dock:
+      if let tile = dockTile {
+        center = CGPoint(x: min(max(tile.midX, visible.minX + cell / 2), visible.maxX - cell / 2),
+          y: min(max(tile.midY, visible.minY + height / 2), visible.maxY - height / 2))
+      }
     case .notch: center = CGPoint(x: screen.frame.midX, y: screen.frame.maxY - screen.safeAreaInsets.top - height / 2)
     default: break
     }
@@ -216,7 +233,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     mark.beginDrop = { [weak self] in self?.shelf.beginPrimaryDrop() }
     mark.dragHover = { [weak self] inside in self?.hover(inside) }
     mark.registerForDraggedTypes([.fileURL, .png, .tiff, .URL, .string] + NSFilePromiseReceiver.readableDraggedTypes.map { .init($0) })
-    if let floating {
+    if let floating, surface != .dock {
       mark.windowMovement = WindowMoveActions(begin: {}, drag: { [weak self] event in
         guard let self else { return }
         self.dragging = true; self.foldWork?.cancel()

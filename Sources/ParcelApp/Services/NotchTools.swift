@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 import CoreImage.CIFilterBuiltins
 import EventKit
+import PDFKit
 import SwiftUI
 import UniformTypeIdentifiers
 import UserNotifications
@@ -649,6 +650,9 @@ struct NotchToolsView: View {
   @State private var showingMacros = false
   @State private var macroName = ""
   @State private var macroCommand = ""
+  @State private var macReadings: MacReadings?
+  @State private var documentFonts = ""
+  @State private var deliveredAlerts = ""
   @State private var dashboardPage: Int? = 0
 
   var body: some View {
@@ -671,6 +675,16 @@ struct NotchToolsView: View {
     .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 7)
     .animation(Motion.layoutRelayout, value: shelf.activeModule)
     .task(id: shelf.activeModule) {
+      if shelf.activeModule == .system {
+        var last: MacReadings.Sample?
+        while !Task.isCancelled {
+          let current = MacReadings.Sample()
+          macReadings = MacReadings(current, previous: last)
+          last = current
+          try? await Task.sleep(for: .seconds(2))
+        }
+        return
+      }
       if shelf.activeModule == .dashboard || shelf.activeModule == .downloads { tools.refreshDownloads() }
       if shelf.activeModule == .calendar, EKEventStore.authorizationStatus(for: .event) == .fullAccess {
         tools.refreshCalendar()
@@ -990,11 +1004,15 @@ struct NotchToolsView: View {
           awake: true, celebration: shelf.reveal, skin: skin)
           .frame(width: 44, height: 44).allowsHitTesting(false)
         VStack(alignment: .leading, spacing: 2) {
-          Text("PARCEL").font(.system(size: 8, weight: .bold)).tracking(0.8).foregroundStyle(skin.palette.accent)
+          Text("FILE SHELF").font(.system(size: 8, weight: .bold)).tracking(0.8).foregroundStyle(skin.palette.accent)
           Text(shelf.primaryBox?.name ?? "My parcel").font(.system(size: 14, weight: .semibold)).lineLimit(1)
         }
         Spacer()
         Text("\(shelf.primaryBox?.items.count ?? 0) items").font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
+        NotchActionButton(title: "Add", symbol: "plus", tint: skin.palette.accent) {
+          if let id = shelf.primaryBox?.id { store.selectBox(id) }
+          store.addFilesPanel()
+        }
         NotchActionButton(title: "Paste", symbol: "doc.on.clipboard", tint: skin.palette.accent,
           action: shelf.pasteFiles)
         NotchActionButton(title: "Pack", symbol: "archivebox", tint: skin.palette.accent,
@@ -1070,6 +1088,10 @@ struct NotchToolsView: View {
             Image(systemName: "text.viewfinder").font(.system(size: 29, weight: .light)).foregroundStyle(skin.palette.accent)
           }
           Text("Text extraction").font(.system(size: 12, weight: .semibold))
+          Button("Inspect fonts in a PDF…", action: inspectFonts)
+          if !documentFonts.isEmpty {
+            ScrollView { Text(documentFonts).font(.caption).textSelection(.enabled) }.frame(maxHeight: 50)
+          }
           Text("Vision reads images locally. Nothing is uploaded.").font(.system(size: 8.5)).multilineTextAlignment(.center).foregroundStyle(.secondary)
           HStack(spacing: 5) {
             NotchActionButton(title: "Screen", symbol: "viewfinder", tint: skin.palette.accent, action: tools.extractFromScreen)
@@ -1089,6 +1111,25 @@ struct NotchToolsView: View {
           }
         }
       }
+    }
+  }
+
+  private func inspectFonts() {
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [.pdf]
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    Task {
+      documentFonts = await Task.detached(priority: .userInitiated) {
+        guard let document = PDFDocument(url: url), !document.isLocked else { return "The PDF could not be read." }
+        var names = Set<String>()
+        for page in 0..<document.pageCount {
+          guard let text = document.page(at: page)?.attributedString else { continue }
+          text.enumerateAttribute(.font, in: NSRange(location: 0, length: text.length)) { value, _, _ in
+            if let font = value as? NSFont { names.insert(font.fontName) }
+          }
+        }
+        return names.isEmpty ? "No selectable text with font information." : names.sorted().joined(separator: ", ")
+      }.value
     }
   }
 
@@ -1134,7 +1175,7 @@ struct NotchToolsView: View {
             NotchActionButton(title: "Stop", symbol: "stop.fill", tint: .red, action: tools.stopTimer)
           }
         }
-        Text("The countdown stays visible when Parcel collapses.").font(.system(size: 8.5)).foregroundStyle(.secondary)
+        Text("Reopen the Timer arrow to check your countdown.").font(.system(size: 8.5)).foregroundStyle(.secondary)
       }
     }.frame(maxWidth: .infinity, maxHeight: .infinity)
   }
@@ -1405,7 +1446,7 @@ struct NotchToolsView: View {
     VStack(spacing: 12) {
       Image(systemName: "pencil.tip.crop.circle").font(.system(size: 40)).foregroundStyle(skin.palette.accent)
       Text("Draw over your screen").font(.system(size: 14, weight: .semibold))
-      Text("Use a pen, highlighter, lines and shapes. Your drawing disappears when you finish.")
+      Text("Draw, erase or save the annotation layer as a transparent PNG.")
         .font(.system(size: 10)).foregroundStyle(.secondary).multilineTextAlignment(.center)
       NotchActionButton(title: "Start drawing", symbol: "pencil.tip", tint: skin.palette.accent) {
         shelf.dismiss()
@@ -1509,7 +1550,20 @@ struct NotchToolsView: View {
         metric("Cores", "\(info.activeProcessorCount)", "cpu")
         metric("Uptime", uptime(info.systemUptime), "clock.arrow.circlepath")
       }
-      HStack { NotchSectionTitle(title: "Recent Parcel activity", symbol: "clock.arrow.circlepath"); Text(info.operatingSystemVersionString).font(.system(size: 8)).foregroundStyle(.secondary) }
+      HStack(spacing: 7) {
+        metric("CPU use", macReadings?.cpu ?? "…", "cpu")
+        metric("Active + wired + compressed", macReadings?.memory ?? "…", "memorychip")
+        metric("Disk available", macReadings?.availableDisk ?? "…", "internaldrive")
+      }
+      Text(macReadings?.network ?? "Sampling network…").font(.caption).monospacedDigit()
+      Button("Show Skippy notifications") {
+        Task {
+          let alerts = await UNUserNotificationCenter.current().deliveredNotifications()
+          deliveredAlerts = alerts.isEmpty ? "No delivered Skippy alerts." : alerts.map { $0.request.content.title }.joined(separator: " · ")
+        }
+      }
+      if !deliveredAlerts.isEmpty { Text(deliveredAlerts).font(.caption).lineLimit(2) }
+      HStack { NotchSectionTitle(title: "Recent Skippy activity", symbol: "clock.arrow.circlepath"); Text(info.operatingSystemVersionString).font(.system(size: 8)).foregroundStyle(.secondary) }
       if recent.actions.isEmpty { Text("Your recent conversions, copies and packs appear here.").font(.system(size: 9)).foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity) }
       else {
         ForEach(recent.actions.prefix(3)) { action in
