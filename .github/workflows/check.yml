@@ -17,9 +17,23 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           bash Scripts/check-macos.sh
+          defaults write com.yourcompany.parcel hasSeenWelcome -bool YES
+          defaults write com.yourcompany.parcel skippy.surface -string Floating
+          defaults write com.yourcompany.parcel skippy.x -float 0.58
+          defaults write com.yourcompany.parcel skippy.y -float 0.80
           bash Scripts/apple-terminal.sh mac
           sleep 3
           pgrep -x Skippy
+      - name: Record the launched Mac application
+        if: ${{ !cancelled() }}
+        run: |
+          swiftc -target "$(uname -m)-apple-macos14.0" Scripts/record-quiver.swift -o build/recorder
+          build/recorder build/frames "$(pgrep -x Skippy | head -1)"
+          mkdir -p build/recordings
+          if ! command -v ffmpeg >/dev/null; then brew install ffmpeg; fi
+          ffmpeg -loglevel error -framerate 10 -i build/frames/frame-%04d.png -vf 'scale=960:-2' -pix_fmt yuv420p -movflags +faststart build/recordings/Skippy.mp4
+          ffmpeg -loglevel error -framerate 10 -i build/frames/frame-%04d.png -filter_complex 'scale=600:-1,split[a][b];[a]palettegen[p];[b][p]paletteuse' build/recordings/Skippy.gif
+          cp build/frames/frame-0038.png build/recordings/File-Shelf.png
       - name: Archive developer build
         if: ${{ !cancelled() }}
         run: codesign --verify --strict build/Skippy.app && ditto -c -k --keepParent build/Skippy.app build/Skippy-developer.zip

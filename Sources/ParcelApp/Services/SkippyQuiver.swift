@@ -30,7 +30,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
 /// The same native strip lives in the NSStatusItem or in a floating NSPanel.
 /// Keep the primary mark at the outside end when the secondary buttons appear.
 @MainActor final class SkippyQuiver: NSObject, ObservableObject {
-  static let shared = SkippyQuiver()
+  static let shared = SkippyQuiver(defaults: .standard, shelf: .shared, widgets: .shared, tools: .shared)
   @Published var surface: QuiverSurface {
     didSet { defaults.set(surface.rawValue, forKey: "skippy.surface"); if installed { attach() } }
   }
@@ -50,8 +50,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
   private var display: NSScreen? {
     NSScreen.screens.first { DropPopupController.displayID(for: $0) == defaults.string(forKey: "skippy.display") } ?? NSScreen.main
   }
-  init(defaults: UserDefaults = .standard, shelf: DropPopupController = .shared,
-       widgets: NotchWidgetStore = .shared, tools: NotchToolStore = .shared) {
+  init(defaults: UserDefaults, shelf: DropPopupController, widgets: NotchWidgetStore, tools: NotchToolStore) {
     self.defaults = defaults; self.shelf = shelf; self.widgets = widgets; self.tools = tools
     surface = QuiverSurface(rawValue: defaults.string(forKey: "skippy.surface") ?? "") ?? .menu
     super.init()
@@ -194,8 +193,14 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
       for (i, entry) in entries.prefix(5).enumerated() {
         let b = strip.addIcon(entry.0, image: entry.1, frame: rect(i + 1), inMenu: surface == .menu, action: entry.2)
         if animate && oldExpandedWidth < width && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+          let destination = b.frame
+          b.frame.origin.x = rect(0).origin.x
           b.alphaValue = 0
-          NSAnimationContext.runAnimationGroup { context in context.duration = 0.18; b.animator().alphaValue = 1 }
+          NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            b.animator().setFrameOrigin(destination.origin)
+            b.animator().alphaValue = 1
+          }
         }
       }
       if more {

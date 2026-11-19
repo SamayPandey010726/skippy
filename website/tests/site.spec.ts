@@ -32,7 +32,7 @@ test('interactive shelf preserves files through search and supports core actions
 
   await demo.getByRole('button', { name: 'New parcel' }).click()
   await expect(demo.getByRole('heading', { name: 'Name your new parcel' })).toBeVisible()
-  await demo.getByLabel('Skippy name').fill('Client delivery')
+  await demo.getByLabel('Parcel name').fill('Client delivery')
   await demo.getByRole('button', { name: 'Create & pin' }).click()
   await expect(demo.getByText('Created and pinned “Client delivery”.')).toBeVisible()
 })

@@ -78,6 +78,7 @@ final class NotchToolsTests: XCTestCase {
     widgets.resize(.parcel, to: .fourByFour)
     let wasPinned = widgets.pinned.contains { $0.kind == .parcel }
     widgets.togglePinned(.parcel)
+    widgets.move(.music, before: .parcel)
     widgets.move(.parcel, before: .music)
     let restored = NotchWidgetStore(defaults: defaults)
     XCTAssertEqual(restored.widgets.first?.kind, .parcel)

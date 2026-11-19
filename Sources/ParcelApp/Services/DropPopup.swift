@@ -244,7 +244,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     }
     if parkedInMenuBar && !expanded {
       let ambientCount = NotchWidgetStore.shared.pinned.count + NotchToolStore.shared.pinnedApps.count
-      let size = CGSize(width: min(screen.width - 24, CGFloat(160 + ambientCount * 29) * interfaceScale),
+      let size = CGSize(width: min(screen.width - 24, CGFloat(160 + min(3, ambientCount) * 29) * interfaceScale),
         height: 36 * interfaceScale)
       let frame = CGRect(x: screen.midX - size.width / 2, y: screen.maxY - size.height,
         width: size.width, height: size.height)
