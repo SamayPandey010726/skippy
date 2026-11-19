@@ -644,6 +644,8 @@ struct NotchToolsView: View {
   @ObservedObject private var recent = RecentActionStore.shared
   @EnvironmentObject private var store: ParcelStore
   var skin: ParcelSkin
+  @ObservedObject private var shortcuts = CourierShortcutStore.shared
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var qrInput = ""
   @State private var webQuery = ""
   @State private var calculation = ""
@@ -659,21 +661,29 @@ struct NotchToolsView: View {
     VStack(spacing: 7) {
       header
       Group {
-        if shelf.activeModule == .dashboard { widgetDashboard }
+        if shelf.choosingArrow { ArrowFinder(shelf: shelf) }
+        else if shelf.activeModule == .dashboard { widgetDashboard }
         else { moduleBody }
       }
         .id(shelf.activeModule)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .transition(.opacity.combined(with: .offset(y: 4)))
       HStack {
-        Circle().fill(skin.palette.accent).frame(width: 5, height: 5)
-        Text(tools.status).font(.system(size: 8.5, weight: .medium)).foregroundStyle(.secondary).lineLimit(1)
+        if tools.status != "Ready" {
+          Text(tools.status).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+        }
         Spacer()
-        Text("⌥T").font(.system(size: 8, weight: .semibold, design: .rounded)).foregroundStyle(.secondary)
+        Button(action: shelf.chooseArrow) {
+          Label("Find an arrow", systemImage: "magnifyingglass")
+          Text(shortcuts.binding(for: .chooseArrow).displayName).monospaced()
+        }
+        .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(.secondary)
+        .accessibilityLabel("Find an arrow")
+
       }
     }
     .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 7)
-    .animation(Motion.layoutRelayout, value: shelf.activeModule)
+    .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: shelf.activeModule)
     .task(id: shelf.activeModule) {
       if shelf.activeModule == .system {
         var last: MacReadings.Sample?
@@ -705,8 +715,8 @@ struct NotchToolsView: View {
         Image(systemName: shelf.activeModule.symbol).font(.system(size: 10, weight: .bold)).foregroundStyle(skin.palette.accent)
       }.frame(width: 26, height: 26)
       VStack(alignment: .leading, spacing: 0) {
-        Text(shelf.activeModule.title).font(.system(size: 11.5, weight: .semibold))
-        Text(headerSubtitle).font(.system(size: 8)).foregroundStyle(.secondary).lineLimit(1)
+        Text(shelf.activeModule.title).font(.system(size: 16, weight: .semibold))
+        Text(headerSubtitle).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
       }
       Spacer()
       if shelf.activeModule == .dashboard {
@@ -1626,5 +1636,57 @@ private extension NSColor {
     guard value.count == 6, let number = Int(value, radix: 16) else { return nil }
     self.init(srgbRed: CGFloat((number >> 16) & 0xff) / 255,
       green: CGFloat((number >> 8) & 0xff) / 255, blue: CGFloat(number & 0xff) / 255, alpha: 1)
+  }
+}
+
+/// Type a tool name, move through matching tools with the arrow keys, and press Return.
+private struct ArrowFinder: View {
+  @ObservedObject var shelf: DropPopupController
+  @State private var query = ""
+  @State private var index = 0
+  @FocusState private var focused: Bool
+  private var matches: [NotchModule] {
+    NotchModule.allCases.filter { $0 != .dashboard && (query.isEmpty || $0.title.localizedCaseInsensitiveContains(query)) }
+  }
+  var body: some View {
+    VStack(spacing: 8) {
+      TextField("Find an arrow", text: $query)
+        .textFieldStyle(.roundedBorder).focused($focused)
+        .onSubmit { if matches.indices.contains(index) { select(matches[index]) } }
+        .onKeyPress(.downArrow) { index = min(index + 1, max(0, matches.count - 1)); return .handled }
+        .onKeyPress(.upArrow) { index = max(0, index - 1); return .handled }
+        .onExitCommand { shelf.cancelChoosingArrow() }
+      if matches.isEmpty {
+        Text("No matching arrows").foregroundStyle(.secondary)
+        Spacer()
+      } else {
+        ScrollViewReader { scroll in
+          ScrollView {
+            VStack(spacing: 2) {
+              ForEach(Array(matches.enumerated()), id: \.element.id) { position, module in
+                Button { select(module) } label: {
+                  HStack {
+                    Image(systemName: module.symbol).frame(width: 22)
+                    Text(module.title)
+                    Spacer()
+                    if index == position { Image(systemName: "return").foregroundStyle(.secondary) }
+                  }
+                  .padding(.horizontal, 8).frame(height: 27).contentShape(Rectangle())
+                  .background(index == position ? Color.primary.opacity(0.1) : .clear,
+                              in: RoundedRectangle(cornerRadius: 6))
+                }.buttonStyle(.plain).id(module.id)
+              }
+            }
+          }
+          .onChange(of: index) { _, i in if matches.indices.contains(i) { scroll.scrollTo(matches[i].id) } }
+        }
+      }
+    }
+    .onChange(of: query) { _, _ in index = 0 }
+    .onAppear { focused = true }
+  }
+  private func select(_ module: NotchModule) {
+    shelf.showModule(module)
+    shelf.focusForKeyboard()
   }
 }

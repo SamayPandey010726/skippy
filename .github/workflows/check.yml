@@ -38,9 +38,11 @@ jobs:
           build/recorder build/frames "$(pgrep -x Skippy | head -1)"
           mkdir -p build/recordings
           if ! command -v ffmpeg >/dev/null; then brew install ffmpeg; fi
-          ffmpeg -loglevel error -framerate 10 -i build/frames/frame-%04d.png -vf 'scale=960:-2' -pix_fmt yuv420p -movflags +faststart build/recordings/Skippy.mp4
-          ffmpeg -loglevel error -framerate 10 -i build/frames/frame-%04d.png -filter_complex 'scale=600:-1,split[a][b];[a]palettegen[p];[b][p]paletteuse' build/recordings/Skippy.gif
-          cp build/frames/frame-0038.png build/recordings/File-Shelf.png
+          ffmpeg -loglevel error -framerate 30 -i build/frames/frame-%04d.png -vf 'scale=960:-2' -pix_fmt yuv420p -movflags +faststart build/recordings/Skippy.mp4
+          ffmpeg -loglevel error -framerate 30 -i build/frames/frame-%04d.png -filter_complex 'fps=15,scale=600:-1,split[a][b];[a]palettegen[p];[b][p]paletteuse' build/recordings/Skippy.gif
+          cp build/frames/File-Shelf.png build/recordings/File-Shelf.png
+      - name: Exercise all arrows through the running application
+        run: swift Scripts/check-arrow-navigation.swift "$(pgrep -x Skippy | head -1)"
       - name: Archive developer build
         if: ${{ !cancelled() }}
         run: codesign --verify --strict build/Skippy.app && ditto -c -k --keepParent build/Skippy.app build/Skippy-developer.zip

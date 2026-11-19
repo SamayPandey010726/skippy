@@ -68,14 +68,14 @@ func capture(_ point: CGPoint) throws {
   frame += 1
 }
 func pause(_ seconds: Double, at point: CGPoint) throws {
-  let count = max(1, Int(seconds * 10))
-  for _ in 0..<count { let start = Date(); try capture(point); Thread.sleep(forTimeInterval: max(0, 0.1 - Date().timeIntervalSince(start))) }
+  let count = max(1, Int((seconds * 30).rounded()))
+  for _ in 0..<count { let start = Date(); try capture(point); Thread.sleep(forTimeInterval: max(0, (1.0 / 30) - Date().timeIntervalSince(start))) }
 }
 func glide(_ from: CGPoint, _ to: CGPoint) throws {
-  for i in 1...7 {
-    let t = Double(i) / 7
+  for i in 1...15 {
+    let t = Double(i) / 15
     let p = CGPoint(x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t)
-    pointer(p); try pause(0.1, at: p)
+    pointer(p); try pause(1.0 / 30, at: p)
   }
 }
 let away = CGPoint(x: center.x - 140, y: center.y + 65)
@@ -87,11 +87,14 @@ guard let strip = windows().first(where: { $0.width > 75 && $0.height <= 44 }) e
 let direction: CGFloat = strip.midX < center.x ? -1 : 1
 let shelf = CGPoint(x: center.x + 31 * direction, y: center.y)
 try glide(center, shelf)
-pointer(shelf, .leftMouseDown); pointer(shelf, .leftMouseUp); try pause(1.25, at: shelf)
+try pause(0.85, at: shelf)
+let previewFrame = frame - 1
+try FileManager.default.copyItem(at: out.appendingPathComponent(String(format: "frame-%04d.png", previewFrame)), to: out.appendingPathComponent("File-Shelf.png"))
 guard windows().contains(where: { $0.width >= 300 && $0.height >= 160 }) else { throw RecordingError.panelFailed }
 let notes = CGPoint(x: center.x + 93 * direction, y: center.y)
 try glide(shelf, notes)
-pointer(notes, .leftMouseDown); pointer(notes, .leftMouseUp); try pause(1.25, at: notes)
+try pause(0.55, at: notes)
+pointer(notes, .leftMouseDown); pointer(notes, .leftMouseUp); try pause(0.65, at: notes)
 try glide(notes, center)
 pointer(center, .leftMouseDown); pointer(center, .leftMouseUp); try pause(1.6, at: center)
 escape()

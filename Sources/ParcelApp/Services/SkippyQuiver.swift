@@ -44,7 +44,15 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
   private var dockTile: CGRect?
   private var installed = false
   private var dragging = false
-  private var folding = false
+  private var progress: CGFloat = 0
+  private var motion: Timer?
+  private var previewWork: DispatchWorkItem?
+  private var icons: [NSButton] = []
+  private var mark: QuiverMark?
+  private var center = CGPoint.zero
+  private var height: CGFloat = 34
+  private var growsRight = false
+  private var screenBounds = CGRect.zero
   private let defaults: UserDefaults
   private let shelf: DropPopupController
   private let widgets: NotchWidgetStore
@@ -71,7 +79,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
   }
 
   var anchor: CGRect? {
-    if let mark = strip.subviews.last, let window = mark.window, window.isVisible {
+    if let mark, let window = mark.window, window.isVisible {
       return window.convertToScreen(mark.convert(mark.bounds, to: nil))
     }
     if surface == .dock, let dockTile { return dockTile }
@@ -83,7 +91,8 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
   }
 
   private func attach() {
-    foldWork?.cancel(); unfolded = false; folding = false
+    foldWork?.cancel(); previewWork?.cancel(); motion?.invalidate()
+    unfolded = false; progress = 0
     shelf.dismiss()
     strip.removeFromSuperview()
     if let status { NSStatusBar.system.removeStatusItem(status); self.status = nil }
@@ -117,38 +126,64 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     guard !dragging else { return }
     foldWork?.cancel()
     if inside {
-      if !unfolded || folding { folding = false; unfolded = true; layout(animate: true) }
+      if !unfolded { setUnfolded(true) }
     } else {
+      previewWork?.cancel()
       let work = DispatchWorkItem { [weak self] in
         guard let self else { return }
-        if let frame = self.shelf.presentationFrame, frame.insetBy(dx: -5, dy: -5).contains(NSEvent.mouseLocation) {
+        if let frame = self.shelf.presentationFrame, frame.insetBy(dx: -7, dy: -7).contains(NSEvent.mouseLocation) {
           self.hover(false); return
         }
-        self.fold()
+        self.shelf.dismissArrowPreview()
+        self.setUnfolded(false)
       }
       foldWork = work
-      DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: work)
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.55, execute: work)
     }
   }
 
-  private func fold() {
-    guard unfolded, !folding else { return }
-    folding = true
-    let finish = { [weak self] in
-      guard let self, self.folding else { return }
-      self.folding = false; self.unfolded = false; self.layout()
-      if self.surface == .dock { self.floating?.orderOut(nil) }
+  private func setUnfolded(_ open: Bool) {
+    guard open != unfolded else { return }
+    unfolded = open
+    motion?.invalidate()
+    let target: CGFloat = open ? 1 : 0
+    let start = progress
+    let began = ProcessInfo.processInfo.systemUptime
+    let duration = max(0.06, Double(abs(target - start)) * (open ? 0.22 : 0.17))
+    func finish() {
+      progress = target; render(); motion?.invalidate(); motion = nil
+      if !open && surface == .dock { floating?.orderOut(nil) }
     }
-    guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, let mark = strip.subviews.last else {
-      finish(); return
-    }
-    NSAnimationContext.runAnimationGroup({ context in
-      context.duration = 0.14
-      for icon in strip.subviews.dropLast() {
-        icon.animator().setFrameOrigin(mark.frame.origin)
-        icon.animator().alphaValue = 0
+    guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { finish(); return }
+    let timer = Timer(timeInterval: 1.0 / 120, repeats: true) { [weak self] timer in
+      MainActor.assumeIsolated {
+        guard let self else { timer.invalidate(); return }
+        let t = min(1, (ProcessInfo.processInfo.systemUptime - began) / duration)
+        if t == 1 {
+          self.progress = target; self.render(); timer.invalidate(); self.motion = nil
+          if !open && self.surface == .dock { self.floating?.orderOut(nil) }
+        } else {
+          let eased = t * t * (3 - 2 * t)
+          self.progress = start + (target - start) * CGFloat(eased)
+          self.render()
+        }
       }
-    }, completionHandler: { MainActor.assumeIsolated { finish() } })
+    }
+    motion = timer
+    RunLoop.main.add(timer, forMode: .common)
+  }
+
+  private func hoverArrow(_ module: NotchModule, button: NSView, inside: Bool) {
+    previewWork?.cancel()
+    guard inside, unfolded else { return }
+    let work = DispatchWorkItem { [weak self, weak button] in
+      guard let self, let button, let window = button.window, self.unfolded else { return }
+      let rect = window.convertToScreen(button.convert(button.bounds, to: nil))
+      guard rect.contains(NSEvent.mouseLocation) else { return }
+      self.shelf.previewArrow(module, at: rect)
+    }
+    previewWork = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.23, execute: work)
   }
 
   private func show(_ module: NotchModule, from view: NSView? = nil) {
@@ -186,21 +221,15 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     return menu
   }
 
-  private func layout(animate: Bool = false) {
+  private func layout() {
     guard !dragging, let screen = (dockTile.flatMap { tile in NSScreen.screens.first { $0.frame.intersects(tile) } } ?? display) else { return }
     if surface == .dock && dockTile == nil { return }
-    let oldExpandedWidth = strip.frame.width
-    let entries = widgets.pinned.map { widget in
-      (widget.kind.module.title, NSImage(systemSymbolName: widget.kind.module.symbol, accessibilityDescription: nil),
-       { (v: NSView) in self.show(widget.kind.module, from: v) })
-    } + tools.pinnedApps.map { app in
-      (app.name, Optional(tools.icon(for: app)), { (_: NSView) in self.tools.launch(app) })
-    }
+    previewWork?.cancel()
     let visible = screen.visibleFrame
     let px = CGFloat(defaults.object(forKey: "skippy.x") as? Double ?? 0.72)
     let py = CGFloat(defaults.object(forKey: "skippy.y") as? Double ?? 0.70)
-    var center = CGPoint(x: visible.minX + visible.width * px, y: visible.minY + visible.height * py)
-    let height: CGFloat = surface == .menu ? NSStatusBar.system.thickness : 34
+    center = CGPoint(x: visible.minX + visible.width * px, y: visible.minY + visible.height * py)
+    height = surface == .menu ? NSStatusBar.system.thickness : 34
     switch surface {
     case .left: center.x = visible.minX + cell / 2
     case .right: center.x = visible.maxX - cell / 2
@@ -214,42 +243,36 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     case .notch: center = CGPoint(x: screen.frame.midX, y: screen.frame.maxY - screen.safeAreaInsets.top - height / 2)
     default: break
     }
-    let growsRight = surface != .menu && center.x <= visible.midX
-    let more = unfolded && entries.count > 5
-    let n = unfolded ? min(entries.count, 5) + (more ? 1 : 0) : 0
-    let width = cell * CGFloat(1 + n)
-    status?.length = width
-    let x = min(max(center.x - cell / 2 - (growsRight ? 0 : width - cell), visible.minX), visible.maxX - width)
-    if let floating {
-      let frame = CGRect(x: x, y: min(max(center.y - height / 2, screen.frame.minY), screen.frame.maxY - height), width: width, height: height)
-      floating.setFrame(frame, display: true)
-    }
-    strip.frame = CGRect(x: 0, y: 0, width: width, height: height)
+    growsRight = surface != .menu && center.x <= visible.midX
+    screenBounds = visible
+    center.x = min(max(center.x, visible.minX + cell / 2), visible.maxX - cell / 2)
+    center.y = min(max(center.y, screen.frame.minY + height / 2), screen.frame.maxY - height / 2)
     strip.wantsLayer = true
+    strip.layer?.masksToBounds = true
     strip.layer?.cornerRadius = surface == .menu ? 5 : height / 2
-    strip.layer?.backgroundColor = surface == .menu ? NSColor.clear.cgColor : NSColor(calibratedRed: 0.09, green: 0.20, blue: 0.16, alpha: 0.97).cgColor
+    strip.layer?.backgroundColor = surface == .menu ? NSColor.clear.cgColor : NSColor(calibratedRed: 0.075, green: 0.13, blue: 0.115, alpha: 0.97).cgColor
     strip.subviews.forEach { $0.removeFromSuperview() }
-    func rect(_ slot: Int) -> CGRect { CGRect(x: cell * CGFloat(growsRight ? slot : n - slot), y: 0, width: cell, height: height) }
-    if unfolded {
-      for (i, entry) in entries.prefix(5).enumerated() {
-        let b = strip.addIcon(entry.0, image: entry.1, frame: rect(i + 1), inMenu: surface == .menu, action: entry.2)
-        if animate && oldExpandedWidth < width && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-          let destination = b.frame
-          b.frame.origin.x = rect(0).origin.x
-          b.alphaValue = 0
-          NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.18
-            b.animator().setFrameOrigin(destination.origin)
-            b.animator().alphaValue = 1
-          }
-        }
+    icons.removeAll()
+    for widget in widgets.pinned.prefix(5) {
+      let module = widget.kind.module
+      let button = strip.addIcon(module.title, image: NSImage(systemSymbolName: module.symbol, accessibilityDescription: nil),
+        frame: .zero, inMenu: surface == .menu) { [weak self] view in self?.show(module, from: view) }
+      button.onHover = { [weak self, weak button] inside in
+        if let button { self?.hoverArrow(module, button: button, inside: inside) }
       }
-      if more {
-        _ = strip.addIcon("More arrows", image: NSImage(systemSymbolName: "ellipsis", accessibilityDescription: nil),
-          frame: rect(n), inMenu: surface == .menu) { v in self.menu().popUp(positioning: nil, at: .zero, in: v) }
-      }
+      icons.append(button)
     }
-    let mark = QuiverMark(frame: rect(0))
+    for app in tools.pinnedApps.prefix(5 - icons.count) {
+      icons.append(strip.addIcon(app.name, image: tools.icon(for: app), frame: .zero, inMenu: surface == .menu) {
+        [weak self] _ in self?.tools.launch(app)
+      })
+    }
+    if widgets.pinned.count + tools.pinnedApps.count > 5 {
+      icons.append(strip.addIcon("More arrows", image: NSImage(systemSymbolName: "ellipsis", accessibilityDescription: nil),
+        frame: .zero, inMenu: surface == .menu) { [weak self] v in self?.menu().popUp(positioning: nil, at: .zero, in: v) })
+    }
+    let mark = QuiverMark(frame: .zero)
+    self.mark = mark
     mark.inMenu = surface == .menu
     mark.setAccessibilityLabel("Open Skippy"); mark.toolTip = "Skippy · Open quiver"
     mark.tap = { [weak self, weak mark] in self?.show(.dashboard, from: mark) }
@@ -273,6 +296,27 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
       }, end: {})
     }
     strip.addSubview(mark)
+    render()
+  }
+
+  private func render() {
+    let width = cell + (cell * CGFloat(icons.count) * progress).rounded()
+    if let status, status.length != width { status.length = width }
+    let markX = growsRight ? 0 : width - cell
+    let origin = CGPoint(x: min(max(center.x - cell / 2 - markX, screenBounds.minX), screenBounds.maxX - width),
+                         y: center.y - height / 2)
+    let size = CGSize(width: width, height: height)
+    let frame = CGRect(origin: origin, size: size)
+    if let floating, floating.frame != frame { floating.setFrame(frame, display: false) }
+    strip.frame = CGRect(origin: .zero, size: size)
+    mark?.frame = CGRect(x: markX, y: 0, width: cell, height: height)
+    for (i, icon) in icons.enumerated() {
+      let offset = (cell * CGFloat(i + 1) * progress).rounded()
+      icon.frame = CGRect(x: markX + (growsRight ? offset : -offset), y: 0, width: cell, height: height)
+      icon.alphaValue = progress
+      icon.isHidden = progress == 0
+      icon.isEnabled = progress > 0.9
+    }
   }
 }
 
@@ -287,7 +331,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
   }
   override func mouseEntered(with event: NSEvent) { pointer?(true) }
   override func mouseExited(with event: NSEvent) { pointer?(false) }
-  func addIcon(_ title: String, image: NSImage?, frame: CGRect, inMenu: Bool, action: @escaping (NSView) -> Void) -> NSButton {
+  func addIcon(_ title: String, image: NSImage?, frame: CGRect, inMenu: Bool, action: @escaping (NSView) -> Void) -> ArrowButton {
     let button = ArrowButton(frame: frame)
     button.actionHandler = action; button.image = image
     button.imagePosition = .imageOnly; button.isBordered = false; button.bezelStyle = .accessoryBarAction
@@ -299,7 +343,26 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
   }
 }
 
-private final class ArrowButton: NSButton {
+final class ArrowButton: NSButton {
+  var onHover: ((Bool) -> Void)?
+  private var tracking: NSTrackingArea?
+  private var pointing = false
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    if let tracking { removeTrackingArea(tracking) }
+    let area = NSTrackingArea(rect: .zero, options: [.activeAlways, .inVisibleRect, .mouseEnteredAndExited], owner: self)
+    addTrackingArea(area); tracking = area
+  }
+  override func mouseEntered(with event: NSEvent) { pointing = true; needsDisplay = true; onHover?(true) }
+  override func mouseExited(with event: NSEvent) { pointing = false; needsDisplay = true; onHover?(false) }
+  override func draw(_ dirtyRect: NSRect) {
+    if pointing && isEnabled {
+      NSColor.labelColor.withAlphaComponent(0.18).setFill()
+      NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 6, yRadius: 6).fill()
+    }
+    super.draw(dirtyRect)
+  }
+
   var actionHandler: ((NSView) -> Void)?
   @objc func openArrow() { actionHandler?(self) }
   override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }

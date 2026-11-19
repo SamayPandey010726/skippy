@@ -53,6 +53,7 @@ final class SkippyQuiverTests: XCTestCase {
     let mark = try XCTUnwrap(quiver.anchor)
     quiver.hover(true)
     XCTAssertTrue(quiver.unfolded)
+    try await Task.sleep(for: .milliseconds(340))
     XCTAssertEqual(try XCTUnwrap(quiver.anchor).midX, mark.midX, accuracy: 1)
     XCTAssertFalse(shelf.isVisible)
     let button = try XCTUnwrap(quiver.strip.subviews.compactMap { $0 as? NSButton }.first { $0.toolTip == "Notes" })
@@ -83,4 +84,43 @@ final class SkippyQuiverTests: XCTestCase {
     quiver.hover(true)
     XCTAssertNotNil(quiver.strip.subviews.first { $0.toolTip == "File Shelf" })
   }
+  @MainActor func testPreviewCanBeBrowsedThenCommittedWithoutReplacingAnOpenEditor() throws {
+    let store = ParcelStore(persist: false)
+    let popup = DropPopupController(store: store)
+    let point = try XCTUnwrap(NSScreen.main).visibleFrame
+    let anchor = CGRect(x: point.midX, y: point.maxY - 32, width: 31, height: 32)
+    popup.quiverAnchor = { anchor }
+    defer { popup.dismiss() }
+    popup.previewArrow(.notes, at: anchor)
+    XCTAssertTrue(popup.isArrowPreview)
+    XCTAssertEqual(popup.activeModule, .notes)
+    popup.previewArrow(.calculator, at: anchor)
+    XCTAssertEqual(popup.activeModule, .calculator)
+    popup.openArrow(.calculator, at: anchor)
+    XCTAssertTrue(popup.isVisible)
+    XCTAssertFalse(popup.isArrowPreview)
+    popup.previewArrow(.notes, at: anchor)
+    popup.dismissArrowPreview()
+    XCTAssertTrue(popup.isVisible)
+    XCTAssertEqual(popup.activeModule, .calculator)
+    popup.dismiss()
+    popup.previewArrow(.parcel, at: anchor)
+    popup.dismissArrowPreview()
+    XCTAssertFalse(popup.isVisible)
+  }
+
+  @MainActor func testShortcutResetClearsCollisionsIndependentOfKeyboardLayout() throws {
+    let name = "Skippy.Shortcuts." + UUID().uuidString
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+    defer { defaults.removePersistentDomain(forName: name) }
+    let keys = CourierShortcutStore(defaults: defaults)
+    let k = CourierCommand.chooseArrow.defaultBinding
+    XCTAssertFalse(keys.update(.tools, binding: .init(keyCode: k.keyCode, modifiers: k.modifiers, keyLabel: "alternate")))
+    XCTAssertTrue(keys.update(.chooseArrow, binding: .init(keyCode: 47, modifiers: k.modifiers, keyLabel: ".")))
+    XCTAssertTrue(keys.update(.tools, binding: k))
+    keys.resetAll()
+    let restored = CourierShortcutStore(defaults: defaults)
+    for c in CourierCommand.allCases { XCTAssertEqual(restored.binding(for: c), c.defaultBinding) }
+  }
+
 }
