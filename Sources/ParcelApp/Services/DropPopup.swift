@@ -416,6 +416,9 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       self?.recordActivity()
       return event
     }) { eventMonitors.append(monitor) }
+    if let monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
+      self?.handleEditorShortcut(event) == true ? nil : event
+    }) { eventMonitors.append(monitor) }
     DragMonitor.shared.start()
     parkedInMenuBar = true
     if isPersistent && isEnabled { restoreResident() }
@@ -987,6 +990,19 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       reveal += 1
     } catch { report(error.localizedDescription) }
   }
+  private func handleEditorShortcut(_ event: NSEvent) -> Bool {
+    guard event.window === panel, let editor = panel?.firstResponder as? NSTextView,
+          event.modifierFlags.intersection([.command, .shift, .control, .option]) == .command else { return false }
+    switch event.charactersIgnoringModifiers?.lowercased() {
+    case "a": editor.selectAll(nil)
+    case "c": editor.copy(nil)
+    case "x" where editor.isEditable: editor.cut(nil)
+    case "v" where editor.isEditable: editor.paste(nil)
+    default: return false
+    }
+    return true
+  }
+
   @discardableResult func handleCourierKey(_ event: NSEvent) -> Bool {
     guard visible, expanded, !showingBin, !mediaEditor,
       let command = CourierShortcutStore.shared.command(for: event) else { return false }

@@ -105,4 +105,66 @@ final class NotchToolsTests: XCTestCase {
     tools.refreshMedia()
     XCTAssertLessThan(ProcessInfo.processInfo.systemUptime - started, 0.1)
   }
+  @MainActor func testSearchPreservesLiteralPlusAmpersandAndUnicode() throws {
+    let url = try XCTUnwrap(NotchToolStore.searchURL(for: " C++ & café "))
+    XCTAssertTrue(url.absoluteString.contains("C%2B%2B"))
+    XCTAssertEqual(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first?.value, "C++ & café")
+    XCTAssertNil(NotchToolStore.searchURL(for: "  "))
+  }
+
+  func testDownloadListReadsRecentFilesAndSkipsDirectories() throws {
+    let fm = FileManager.default
+    let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try fm.createDirectory(at: root.appendingPathComponent("Folder"), withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: root) }
+    for i in 0..<14 {
+      let file = root.appendingPathComponent("File-\(i)")
+      try Data().write(to: file)
+      try fm.setAttributes([.modificationDate: Date(timeIntervalSince1970: Double(i + 1))], ofItemAtPath: file.path)
+    }
+    XCTAssertEqual(NotchToolStore.recentDownloads(in: root).map(\.lastPathComponent), (2...13).reversed().map { "File-\($0)" })
+  }
+
+  @MainActor func testScreenshotSequenceJoinsAtFullWidthAndCanBeCleared() throws {
+    let store = NotchToolStore(defaults: .standard)
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    for (index, size) in [NSSize(width: 60, height: 20), NSSize(width: 40, height: 30)].enumerated() {
+      let image = NSImage(size: size)
+      image.lockFocus()
+      (index == 0 ? NSColor.red : NSColor.blue).setFill()
+      NSBezierPath(rect: CGRect(origin: .zero, size: size)).fill()
+      image.unlockFocus()
+      let url = root.appendingPathComponent("test-\(index).tiff")
+      try XCTUnwrap(image.tiffRepresentation).write(to: url)
+      store.addCapture(from: url)
+    }
+    XCTAssertEqual(store.captures.count, 2)
+    store.copyCombinedCaptures()
+    let joined = try XCTUnwrap(NSImage(pasteboard: .general))
+    XCTAssertEqual(joined.size.width, 60, accuracy: 1)
+    XCTAssertEqual(joined.size.height, 50, accuracy: 1)
+    store.clearCaptures()
+    XCTAssertTrue(store.captures.isEmpty)
+  }
+
+  @MainActor func testLocalPlaybackLoadsBundledMacAudio() throws {
+    let store = NotchToolStore(defaults: .standard)
+    let sound = URL(fileURLWithPath: "/System/Library/Sounds/Glass.aiff")
+    store.playAudio(at: sound)
+    XCTAssertEqual(store.audioTitle, "Glass")
+    if store.isPlaying {
+      store.toggleAudio()
+      XCTAssertFalse(store.isPlaying)
+      XCTAssertEqual(store.status, "Paused")
+    } else {
+      XCTAssertEqual(store.status, "Audio output unavailable")
+    }
+  }
+
+  func testSampledPixelRoundsToNearestSRGBByte() {
+    XCTAssertEqual(NotchToolStore.hexValue(for: NSColor(srgbRed: 1, green: 0.5, blue: 0, alpha: 1)), "#FF8000")
+  }
+
 }

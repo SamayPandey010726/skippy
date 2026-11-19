@@ -24,6 +24,8 @@ func panels() -> [[String: Any]] {
     return rect.width >= 300 && rect.height >= 160
   }
 }
+var controlFailures: [String] = []
+var checkingControls = false
 func check(_ label: String, until predicate: () -> Bool) {
   for _ in 0..<50 {
     if predicate() { print("PASS", label); return }
@@ -31,7 +33,7 @@ func check(_ label: String, until predicate: () -> Bool) {
   }
   print("Accessibility tree", descendants().flatMap(labels).prefix(90))
   print("FAIL", label, "visible panel names", panels().map { $0[kCGWindowName as String] ?? "(unnamed)" })
-  exit(1)
+  if checkingControls { controlFailures.append(label) } else { exit(1) }
 }
 let application = AXUIElementCreateApplication(pid_t(pid))
 func attribute(_ node: AXUIElement, _ key: String) -> CFTypeRef? {
@@ -66,9 +68,24 @@ func contains(_ text: String) -> Bool { descendants().contains { labels($0).cont
 func enter(_ string: String, role: String = kAXTextFieldRole) {
   guard let field = control(role) else { return }
   AXUIElementSetAttributeValue(field, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+  Thread.sleep(forTimeInterval: 0.12)
   key(kVK_ANSI_A, flags: .maskCommand)
-  for c in string { key(kVK_ANSI_A, character: c) }
+  Thread.sleep(forTimeInterval: 0.06)
+  for c in string { key(c == "/" ? kVK_ANSI_Slash : kVK_ANSI_A, character: c); Thread.sleep(forTimeInterval: 0.01) }
   Thread.sleep(forTimeInterval: 0.2)
+}
+func mouse(_ type: CGEventType, _ point: CGPoint) {
+  CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+  Thread.sleep(forTimeInterval: 0.08)
+}
+func stroke(from start: CGPoint, to end: CGPoint) {
+  mouse(.mouseMoved, start)
+  mouse(.leftMouseDown, start)
+  for i in 1...6 {
+    let t = CGFloat(i) / 6
+    mouse(.leftMouseDragged, CGPoint(x: start.x + t * (end.x-start.x), y: start.y + t * (end.y-start.y)))
+  }
+  mouse(.leftMouseUp, end)
 }
 func verifyContent(_ name: String) {
   let board = NSPasteboard.general
@@ -85,7 +102,14 @@ func verifyContent(_ name: String) {
     check("run Vision from clipboard") { press("Clipboard") }
     check("OCR writes expected words") { board.string(forType: .string)?.uppercased().contains("SKIPPY TEST") == true }
   case "Pick colour":
-    check("system pixel sampler available") { control(kAXButtonRole, "Pick a pixel") != nil }
+    board.clearContents()
+    check("open system pixel sampler") { press("Pick a pixel") }
+    Thread.sleep(forTimeInterval: 0.65)
+    let point = CGPoint(x: 80, y: 180)
+    mouse(.mouseMoved, point); mouse(.leftMouseDown, point); mouse(.leftMouseUp, point)
+    check("sample actual screen pixel into pasteboard") {
+      board.string(forType: .string)?.range(of: "^#[0-9A-F]{6}$", options: .regularExpression) != nil
+    }
   case "Timer":
     check("start timer") { press("Start") }
     check("stop active countdown") { press("Stop") }
@@ -125,8 +149,26 @@ func verifyContent(_ name: String) {
     check("calculator produced 16") { board.string(forType: .string) == "16" }
   case "Screenshots":
     check("empty capture sequence") { contains("0 regions") }
+    check("start screen region capture") { press("Add region") }
+    Thread.sleep(forTimeInterval: 0.85)
+    stroke(from: CGPoint(x: 80, y: 160), to: CGPoint(x: 180, y: 230))
+    check("region appears in sequence") { contains("1 regions") || contains("1 region") }
+    check("copy joined regions") { press("Copy joined") }
+    check("joined region on pasteboard") { NSImage(pasteboard: board) != nil }
+    check("clear capture sequence") { press("Clear") }
   case "Draw on screen":
-    check("drawing command available") { control(kAXButtonRole, "Start drawing") != nil }
+    check("open drawing overlay") { press("Start drawing") }
+    check("drawing toolbar") { control(kAXButtonRole, "Done") != nil }
+    stroke(from: CGPoint(x: 120, y: 180), to: CGPoint(x: 210, y: 245))
+    check("stroke enables undo") {
+      guard let button = control(kAXButtonRole, "Undo") else { return false }
+      return attribute(button, kAXEnabledAttribute) as? Bool == true
+    }
+    check("undo stroke") { press("Undo") }
+    check("undo clears last stroke") {
+      control(kAXButtonRole, "Undo").flatMap { attribute($0, kAXEnabledAttribute) as? Bool } == false
+    }
+    check("close drawing overlay") { press("Done") }
   default: break
   }
 }
@@ -136,7 +178,7 @@ try FileManager.default.createDirectory(at: downloads, withIntermediateDirectori
 let fixture = downloads.appendingPathComponent("Skippy QA.txt")
 try Data("Skippy test fixture".utf8).write(to: fixture, options: .withoutOverwriting)
 defer { try? FileManager.default.removeItem(at: fixture) }
-print("Accessibility trusted:", AXIsProcessTrusted())
+check("Accessibility can exercise UI controls") { AXIsProcessTrusted() }
 key(kVK_ANSI_P, flags: [.maskControl, .maskAlternate, .maskCommand])
 check("global shortcut opens dashboard") { !panels().isEmpty }
 let arrows = ["File Shelf", "Clipboard", "Extract text", "Pick colour", "Timer", "Notes", "QR tools", "Search",
@@ -150,7 +192,13 @@ for name in arrows {
   }
   key(kVK_Return)
   check("open " + name) { panels().contains { $0[kCGWindowName as String] as? String == "Skippy · " + name } }
-  if AXIsProcessTrusted() { verifyContent(name) }
+  checkingControls = true
+  verifyContent(name)
+  checkingControls = false
 }
+key(kVK_ANSI_P, flags: [.maskControl, .maskAlternate, .maskCommand])
+check("summon again after leaving drawing") { !panels().isEmpty }
 key(kVK_Escape)
 check("Escape dismisses the final tool") { panels().isEmpty }
+
+if !controlFailures.isEmpty { print("Failed control checks:", controlFailures); exit(1) }

@@ -53,10 +53,20 @@ final class SkippyQuiverTests: XCTestCase {
     let mark = try XCTUnwrap(quiver.anchor)
     quiver.hover(true)
     XCTAssertTrue(quiver.unfolded)
-    try await Task.sleep(for: .milliseconds(340))
+    let markView = try XCTUnwrap(quiver.strip.subviews.last as? QuiverMark)
+    var widths = Set<Int>()
+    for _ in 0..<24 {
+      try await Task.sleep(for: .milliseconds(13))
+      XCTAssertTrue(quiver.strip.subviews.last === markView)
+      XCTAssertEqual(try XCTUnwrap(quiver.anchor).midX, mark.midX, accuracy: 1)
+      widths.insert(Int(quiver.strip.bounds.width))
+    }
+    if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+      XCTAssertGreaterThan(widths.count, 2, "The native backplate must pass through intermediate widths")
+    }
     XCTAssertEqual(try XCTUnwrap(quiver.anchor).midX, mark.midX, accuracy: 1)
     XCTAssertFalse(shelf.isVisible)
-    let button = try XCTUnwrap(quiver.strip.subviews.compactMap { $0 as? NSButton }.first { $0.toolTip == "Notes" })
+    let button = try XCTUnwrap(quiver.strip.subviews.compactMap { $0 as? NSButton }.first { $0.accessibilityLabel() == "Notes" })
     button.performClick(nil)
     XCTAssertEqual(shelf.activeModule, .notes)
     XCTAssertTrue(shelf.isVisible)
@@ -82,7 +92,7 @@ final class SkippyQuiverTests: XCTestCase {
     quiver.surface = .menu
     XCTAssertNotNil(quiver.strip.window)
     quiver.hover(true)
-    XCTAssertNotNil(quiver.strip.subviews.first { $0.toolTip == "File Shelf" })
+    XCTAssertNotNil(quiver.strip.subviews.first { $0.accessibilityLabel() == "File Shelf" })
   }
   @MainActor func testPreviewCanBeBrowsedThenCommittedWithoutReplacingAnOpenEditor() throws {
     let store = ParcelStore(persist: false)

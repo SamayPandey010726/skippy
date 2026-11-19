@@ -131,7 +131,6 @@ struct NotchMacro: Codable, Identifiable {
         NotchMacro(name: "Open Calculator", command: "open -a Calculator")
       ]
     super.init()
-    refreshDownloads()
   }
 
   func startTimer() {
@@ -193,14 +192,18 @@ struct NotchMacro: Codable, Identifiable {
 
   func pickColour() {
     NSColorSampler().show { [weak self] colour in
-      guard let colour = colour?.usingColorSpace(.sRGB) else { return }
-      let hex = String(format: "#%02X%02X%02X", Int(colour.redComponent * 255),
-        Int(colour.greenComponent * 255), Int(colour.blueComponent * 255))
+      guard let colour, let hex = Self.hexValue(for: colour) else { return }
       Task { @MainActor in
         self?.pickedColour = hex
         self?.copyText(hex, label: "Colour")
       }
     }
+  }
+
+  nonisolated static func hexValue(for colour: NSColor) -> String? {
+    guard let rgb = colour.usingColorSpace(.sRGB) else { return nil }
+    func byte(_ fraction: CGFloat) -> Int { Int((min(1, max(0, fraction)) * 255).rounded()) }
+    return String(format: "#%02X%02X%02X", byte(rgb.redComponent), byte(rgb.greenComponent), byte(rgb.blueComponent))
   }
 
   func extractFromClipboard() {
@@ -249,12 +252,16 @@ struct NotchMacro: Codable, Identifiable {
   func captureAnother() {
     captureScreenArea { [weak self] url in
       defer { try? FileManager.default.removeItem(at: url) }
-      guard let data = try? Data(contentsOf: url), let image = NSImage(data: data), image.isValid else {
-        self?.status = "Could not read the screenshot"; return
-      }
-      self?.captures.append(image)
-      self?.status = "Screenshot added"
+      self?.addCapture(from: url)
     }
+  }
+
+  func addCapture(from url: URL) {
+    guard let data = try? Data(contentsOf: url), let image = NSImage(data: data), image.isValid else {
+      status = "Could not read the screenshot"; return
+    }
+    captures.append(image)
+    status = "Screenshot added"
   }
 
   func captureForLens() {
@@ -388,11 +395,16 @@ struct NotchMacro: Codable, Identifiable {
   }
 
   func searchGoogle(_ query: String) {
+    if let url = Self.searchURL(for: query) { NSWorkspace.shared.open(url) }
+  }
+
+  static func searchURL(for query: String) -> URL? {
     let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !value.isEmpty else { return }
+    guard !value.isEmpty else { return nil }
     var components = URLComponents(string: "https://www.google.com/search")!
     components.queryItems = [URLQueryItem(name: "q", value: value)]
-    if let url = components.url { NSWorkspace.shared.open(url) }
+    components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+    return components.url
   }
 
   func addMacro(name: String, command: String) {
@@ -480,18 +492,21 @@ struct NotchMacro: Codable, Identifiable {
     }
   }
 
-  func refreshDownloads() {
-    guard let folder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first,
-      let urls = try? FileManager.default.contentsOfDirectory(at: folder,
-        includingPropertiesForKeys: [.contentModificationDateKey, .isDirectoryKey],
-        options: [.skipsHiddenFiles]) else { downloads = []; return }
-    downloads = urls.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) != true }
-      .sorted {
-        let left = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-        let right = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-        return left > right
-      }
-      .prefix(12).map { $0 }
+  func refreshDownloads() async {
+    guard let folder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else { return }
+    let files = await Task.detached(priority: .utility) { Self.recentDownloads(in: folder) }.value
+    if !Task.isCancelled { downloads = files }
+  }
+
+  nonisolated static func recentDownloads(in folder: URL) -> [URL] {
+    let keys: Set<URLResourceKey> = [.contentModificationDateKey, .isDirectoryKey]
+    let urls = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: Array(keys),
+                                                              options: [.skipsHiddenFiles])) ?? []
+    let dated: [(URL, Date)] = urls.compactMap { url in
+      guard let info = try? url.resourceValues(forKeys: keys), info.isDirectory == false else { return nil }
+      return (url, info.contentModificationDate ?? .distantPast)
+    }
+    return dated.sorted { $0.1 > $1.1 }.prefix(12).map { $0.0 }
   }
 
   func openDownloads() {
@@ -516,18 +531,23 @@ struct NotchMacro: Codable, Identifiable {
     let panel = NSOpenPanel()
     panel.allowedContentTypes = [.audio]
     guard panel.runModal() == .OK, let url = panel.url else { return }
+    playAudio(at: url)
+  }
+
+  func playAudio(at url: URL) {
     do {
-      player = try AVAudioPlayer(contentsOf: url)
+      let opened = try AVAudioPlayer(contentsOf: url)
+      player = opened
       player?.delegate = self
       audioTitle = url.deletingPathExtension().lastPathComponent
-      player?.play(); isPlaying = true; status = "Playing"
+      isPlaying = opened.play(); status = isPlaying ? "Playing" : "Audio output unavailable"
     } catch { status = "That audio file could not be played" }
   }
 
   func toggleAudio() {
     guard let player else { chooseAudio(); return }
     if player.isPlaying { player.pause(); isPlaying = false; status = "Paused" }
-    else { player.play(); isPlaying = true; status = "Playing" }
+    else { isPlaying = player.play(); status = isPlaying ? "Playing" : "Audio output unavailable" }
   }
 
   /// Music and Spotify expose stable AppleScript dictionaries; this avoids private MediaRemote APIs.
@@ -695,7 +715,7 @@ struct NotchToolsView: View {
         }
         return
       }
-      if shelf.activeModule == .dashboard || shelf.activeModule == .downloads { tools.refreshDownloads() }
+      if shelf.activeModule == .dashboard || shelf.activeModule == .downloads { await tools.refreshDownloads() }
       if shelf.activeModule == .calendar, EKEventStore.authorizationStatus(for: .event) == .fullAccess {
         tools.refreshCalendar()
       }
@@ -1070,6 +1090,16 @@ struct NotchToolsView: View {
         .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
       ScrollView {
         LazyVStack(spacing: 4) {
+          if clipboard.filtered.isEmpty {
+            ContentUnavailableView {
+              Label(clipboard.search.isEmpty ? (clipboard.captureEnabled ? "Clipboard is empty" : "Capture is paused")
+                                             : "No matching copies", systemImage: "list.clipboard")
+            } description: {
+              Text(clipboard.search.isEmpty ? (clipboard.captureEnabled ? "Copy text, an image or a file to see it here."
+                                                                       : "Resume clipboard capture in Settings.")
+                                            : "Try a different search.")
+            }
+          }
           ForEach(clipboard.filtered.prefix(80)) { entry in
             HStack(spacing: 8) {
               Image(systemName: entry.kind.symbol).font(.system(size: 10, weight: .bold))

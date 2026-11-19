@@ -272,6 +272,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
       let module = widget.kind.module
       let button = strip.addIcon(module.title, image: NSImage(systemSymbolName: module.symbol, accessibilityDescription: nil),
         frame: .zero, inMenu: surface == .menu) { [weak self] view in self?.show(module, from: view) }
+      button.toolTip = nil
       arrowModules[button] = module
       button.onHover = { [weak self] _ in self?.trackArrow() }
       icons.append(button)
@@ -288,7 +289,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     let mark = QuiverMark(frame: .zero)
     self.mark = mark
     mark.inMenu = surface == .menu
-    mark.setAccessibilityLabel("Open Skippy"); mark.toolTip = "Skippy · Open quiver"
+    mark.setAccessibilityLabel("Open Skippy")
     mark.tap = { [weak self, weak mark] in self?.show(.dashboard, from: mark) }
     mark.courierMenu = { [weak self] _ in self?.menu() ?? NSMenu() }
     mark.beginDrop = { [weak self] in self?.shelf.beginPrimaryDrop() }

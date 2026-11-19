@@ -60,7 +60,10 @@ extension Notification.Name {
         Divider()
         Button("Share via WhatsApp") { store.shareViaWhatsApp() }.disabled(store.busy || !store.canExport)
         Divider()
-        Button("Select all pieces") { store.selectAll() }.keyboardShortcut("a")
+        Button("Select all pieces") {
+          if let editor = NSApp.keyWindow?.firstResponder as? NSTextView { editor.selectAll(nil) }
+          else { store.selectAll() }
+        }.keyboardShortcut("a")
           .disabled(!store.canExport)
         Button("Pin/unpin selected pieces") { store.togglePinSelected() }
           .keyboardShortcut("p", modifiers: [.command, .option])
