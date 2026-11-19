@@ -95,13 +95,13 @@ private struct ScreenMarkupView: View {
   var body: some View {
     ZStack(alignment: .top) {
       Color.black.opacity(0.001).contentShape(Rectangle())
-    .gesture(DragGesture(minimumDistance: 0).onChanged { value in
-      if current == nil { current = MarkupStroke(tool: tool, points: [value.startLocation], color: color) }
-      current?.points.append(value.location)
-    }.onEnded { _ in
-      if let current { strokes.append(current) }
-      current = nil
-    })
+        .gesture(DragGesture(minimumDistance: 0).onChanged { value in
+          if current == nil { current = MarkupStroke(tool: tool, points: [value.startLocation], color: color) }
+          current?.points.append(value.location)
+        }.onEnded { _ in
+          if let current { strokes.append(current) }
+          current = nil
+        })
       artwork.allowsHitTesting(false)
 
       HStack(spacing: 8) {

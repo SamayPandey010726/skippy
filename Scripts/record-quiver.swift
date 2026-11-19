@@ -20,6 +20,28 @@ func windows() -> [CGRect] {
 func pointer(_ point: CGPoint, _ type: CGEventType = .mouseMoved) {
   CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
 }
+// A quiet desktop backdrop keeps the native panels legible on the headless runner.
+final class Backdrop: NSView {
+  override func draw(_ dirtyRect: NSRect) {
+    NSGradient(colors: [NSColor(calibratedRed: 0.20, green: 0.36, blue: 0.31, alpha: 1),
+      NSColor(calibratedRed: 0.57, green: 0.69, blue: 0.56, alpha: 1),
+      NSColor(calibratedRed: 0.80, green: 0.83, blue: 0.68, alpha: 1)])?.draw(in: bounds, angle: 35)
+  }
+}
+_ = NSApplication.shared
+let background = NSWindow(contentRect: NSScreen.screens[0].frame, styleMask: .borderless, backing: .buffered, defer: false)
+background.contentView = Backdrop()
+background.ignoresMouseEvents = true
+background.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) + 1)
+background.orderFrontRegardless()
+background.displayIfNeeded()
+func escape() {
+  for down in [true, false] {
+    CGEvent(keyboardEventSource: nil, virtualKey: 53, keyDown: down)?.post(tap: .cghidEventTap)
+  }
+}
+escape()
+Thread.sleep(forTimeInterval: 0.5)
 let screen = CGDisplayBounds(CGMainDisplayID())
 guard let mark = windows().first(where: { (26...42).contains($0.width) && (24...44).contains($0.height) }) else {
   print("Skippy windows:", windows()); throw RecordingError.missingWindow
@@ -70,8 +92,9 @@ guard windows().contains(where: { $0.width >= 300 && $0.height >= 160 }) else { 
 let notes = CGPoint(x: center.x + 93 * direction, y: center.y)
 try glide(shelf, notes)
 pointer(notes, .leftMouseDown); pointer(notes, .leftMouseUp); try pause(1.25, at: notes)
-CGEvent(keyboardEventSource: nil, virtualKey: 53, keyDown: true)?.post(tap: .cghidEventTap)
-CGEvent(keyboardEventSource: nil, virtualKey: 53, keyDown: false)?.post(tap: .cghidEventTap)
-try glide(notes, away); try pause(2.45, at: away)
+try glide(notes, center)
+pointer(center, .leftMouseDown); pointer(center, .leftMouseUp); try pause(1.6, at: center)
+escape()
+try glide(center, away); try pause(2.45, at: away)
 guard windows().contains(where: { $0.width == mark.width && $0.height == mark.height }) else { throw RecordingError.foldFailed }
 print("Recorded", frame, "frames from the running Mac app. Collapsed, unfolded, opened tools and folded.")

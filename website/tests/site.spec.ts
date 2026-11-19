@@ -11,7 +11,7 @@ test('public pages contain no source repository links', async ({ page }) => {
 })
 
 test('interactive shelf preserves files through search and supports core actions', async ({ page }) => {
-  await expect(page.getByRole('heading', { name: 'Your Mac is fast. Moving things is not.' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'One quiver. Everyday tools.' })).toBeVisible()
   const demo = page.getByLabel('Interactive Skippy product demo')
   await demo.scrollIntoViewIfNeeded()
   await expect(demo.getByRole('button', { name: /Campaign brief/ })).toBeVisible()

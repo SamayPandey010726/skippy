@@ -58,6 +58,7 @@ const kindIcons = {
 }
 
 const features = [
+  { icon: Layers3, tag: 'Quiver', title: 'Hover to unfold your pinned arrows.', body: 'Choose a menu-bar mark, a notch, a floating icon, a screen edge or the Dock. Click an arrow for its tool panel.' },
   { icon: FolderInput, tag: 'Shelf', title: 'Catch anything without changing windows.', body: 'Drag files, paste images or text, or summon Skippy from the keyboard. Your current work stays exactly where it is.' },
   { icon: WandSparkles, tag: 'Convert', title: 'Shift-drag into a contextual conversion wheel.', body: 'Images, PDFs, Word, text and spreadsheets turn into compatible formats, with each result saved safely inside Skippy.' },
   { icon: Clipboard, tag: 'Clipboard', title: 'A visual clipboard that remembers the useful parts.', body: 'Search text, links, images and files. Drag them back out as their native content instead of hunting through old windows.' },
@@ -115,7 +116,7 @@ function Header({ onWaitlist }: { onWaitlist: () => void }) {
 }
 
 const cinematicScenes = [
-  { number: '00', label: 'The handoff problem', title: <>Your Mac is fast.<br /><em>Moving things is not.</em></>, body: 'Files, links, screenshots and copied thoughts disappear into windows. Skippy gives everything in motion one living place.' },
+  { number: '00', label: 'The quiver', title: <>One quiver.<br /><em>Everyday tools.</em></>, body: 'Hover over Skippy to unfold your pinned arrows. Open the File Shelf, a quick note or a focus timer right where you are working.' },
   { number: '01', label: 'Catch', title: <>Anything in.<br /><em>No detour.</em></>, body: 'Drag, paste, share or use the shortcut. Skippy appears exactly when you need it, without pulling you away from your work.' },
   { number: '02', label: 'Prepare', title: <>Change the thing.<br /><em>Keep the flow.</em></>, body: 'Convert formats, resize media, shorten links and extract visible text while the item stays inside the parcel.' },
   { number: '03', label: 'Pack', title: <>Loose pieces become<br /><em>one clean handoff.</em></>, body: 'Your files fold into a standards-based ZIP with the compression, naming and cleanup you prefer.' },
@@ -187,7 +188,7 @@ function CinematicExperience({ onWaitlist }: { onWaitlist: () => void }) {
       <div className="cinematic-viewport">
         <Suspense fallback={<div className="parcel-world-loading" aria-hidden="true" />}><ParcelWorld progress={progressRef} reducedMotion={reducedMotion} /></Suspense>
         <div className="cinematic-grain" aria-hidden="true" />
-        <div className="cinematic-hud" aria-hidden="true"><span>PARCEL / MAC UTILITY</span><span>LOCAL-FIRST SYSTEM</span><span>SCENE {cinematicScenes[scene].number}</span></div>
+        <div className="cinematic-hud" aria-hidden="true"><span>SKIPPY / MAC UTILITY</span><span>LOCAL-FIRST SYSTEM</span><span>SCENE {cinematicScenes[scene].number}</span></div>
         <div className="cinematic-scenes">
           {cinematicScenes.map((item, index) => <article className={`cinematic-copy ${index === scene ? 'active' : ''} cinematic-copy-${index}`} aria-hidden={index !== scene} key={item.label}><div className="cinematic-kicker"><span>{item.number}</span>{item.label}</div><h1>{item.title}</h1><p>{item.body}</p>{index === 0 && <div className="cinematic-actions"><button className="button cinematic-primary" type="button" onClick={onWaitlist}>Join waitlist <ChevronRight size={16} /></button><a href="#try">Skip to the live workspace <ArrowDown size={15} /></a></div>}</article>)}
         </div>
@@ -379,7 +380,7 @@ function VideoCard({ src, poster, kicker, title }: { src: string; poster: string
 }
 
 function FeatureGrid() {
-  return <section className="features-section" id="features"><div className="section-heading"><div><div className="eyebrow"><span /> One habit, fewer interruptions</div><h2>A shelf with unusually useful pockets.</h2></div><p>Skippy keeps small utilities attached to the thing you are already moving, so “just send this” stays a ten-second task.</p></div><div className="feature-grid">{features.map(({ icon: Icon, tag, title, body }) => <SpotlightCard key={title} className="feature-card" theme="light" spotlightColor="#735a39" intensity={0.18} spotlightSize={210} borderGlow={0.4}><div className="feature-icon"><Icon size={21} /></div><span className="feature-tag">{tag}</span><h3>{title}</h3><p>{body}</p></SpotlightCard>)}</div></section>
+  return <section className="features-section" id="features"><div className="section-heading"><div><div className="eyebrow"><span /> One habit, fewer interruptions</div><h2>Inside your quiver.</h2></div><p>Pin your everyday arrows, then open them directly from the menu bar, notch or screen edge.</p></div><div className="feature-grid">{features.map(({ icon: Icon, tag, title, body }) => <SpotlightCard key={title} className="feature-card" theme="light" spotlightColor="#735a39" intensity={0.18} spotlightSize={210} borderGlow={0.4}><div className="feature-icon"><Icon size={21} /></div><span className="feature-tag">{tag}</span><h3>{title}</h3><p>{body}</p></SpotlightCard>)}</div></section>
 }
 
 function WaysToWorkSection() {

@@ -1,3 +1,4 @@
+import Combine
 import AppKit
 import ParcelCore
 import UniformTypeIdentifiers
@@ -93,12 +94,17 @@ final class CourierRefinementTests: XCTestCase {
     let preview = CourierHoverPreview(enterDelay: .milliseconds(10))
     let first = ParcelItem(sourcePath: "/first.txt", displayName: "First")
     let second = ParcelItem(sourcePath: "/second.txt", displayName: "Second")
+    let firstShown = expectation(description: "First file is previewed")
+    let secondShown = expectation(description: "Preview switches to second file")
+    let firstObservation = preview.$item.first { $0?.id == first.id }.sink { _ in firstShown.fulfill() }
+    let secondObservation = preview.$item.first { $0?.id == second.id }.sink { _ in secondShown.fulfill() }
+    defer { firstObservation.cancel(); secondObservation.cancel() }
     preview.hover(first, inside: true)
-    try await Task.sleep(for: .milliseconds(40))
+    await fulfillment(of: [firstShown], timeout: 2)
     XCTAssertEqual(preview.item?.id, first.id)
     preview.hover(second, inside: true)
     preview.hover(first, inside: false)
-    try await Task.sleep(for: .milliseconds(40))
+    await fulfillment(of: [secondShown], timeout: 2)
     XCTAssertEqual(preview.item?.id, second.id)
     preview.hover(second, inside: false)
     try await Task.sleep(for: .milliseconds(300))

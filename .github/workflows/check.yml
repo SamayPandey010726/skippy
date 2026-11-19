@@ -21,9 +21,13 @@ jobs:
           defaults write com.yourcompany.parcel skippy.surface -string Floating
           defaults write com.yourcompany.parcel skippy.x -float 0.58
           defaults write com.yourcompany.parcel skippy.y -float 0.80
+          defaults write com.yourcompany.parcel parcel.notch.note -string "Review the launch sketches and send the handoff."
+          defaults write com.yourcompany.parcel parcel-skin -string moss
           bash Scripts/apple-terminal.sh mac
           sleep 3
           pgrep -x Skippy
+          open -a "$PWD/build/Skippy.app" "$PWD/Samples/Launch notes.txt" "$PWD/Samples/A little place.png"
+          sleep 2
       - name: Record the launched Mac application
         if: ${{ !cancelled() }}
         run: |
