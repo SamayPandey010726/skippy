@@ -1004,11 +1004,12 @@ struct NotchToolsView: View {
           awake: true, celebration: shelf.reveal, skin: skin)
           .frame(width: 44, height: 44).allowsHitTesting(false)
         VStack(alignment: .leading, spacing: 2) {
-          Text("FILE SHELF").font(.system(size: 8, weight: .bold)).tracking(0.8).foregroundStyle(skin.palette.accent)
           Text(shelf.primaryBox?.name ?? "My parcel").font(.system(size: 14, weight: .semibold)).lineLimit(1)
+          Text("\(shelf.primaryBox?.items.count ?? 0) items").font(.caption).foregroundStyle(.secondary)
         }
         Spacer()
-        Text("\(shelf.primaryBox?.items.count ?? 0) items").font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
+      }
+      HStack(spacing: 8) {
         NotchActionButton(title: "Add", symbol: "plus", tint: skin.palette.accent) {
           if let id = shelf.primaryBox?.id { store.selectBox(id) }
           store.addFilesPanel()
@@ -1017,17 +1018,18 @@ struct NotchToolsView: View {
           action: shelf.pasteFiles)
         NotchActionButton(title: "Pack", symbol: "archivebox", tint: skin.palette.accent,
           action: shelf.pack)
+        Spacer()
       }
       Divider().opacity(0.45)
       ScrollView(.horizontal, showsIndicators: false) {
-        LazyHStack(spacing: 9) {
+        LazyHStack(alignment: .top, spacing: 9) {
           ForEach(shelf.primaryBox?.items ?? []) { item in
             Button { NSWorkspace.shared.open(item.effectiveURL) } label: {
               VStack(spacing: 5) {
                 Image(nsImage: NSWorkspace.shared.icon(forFile: item.effectiveURL.path))
-                  .resizable().aspectRatio(contentMode: .fit).frame(width: 34, height: 34)
-                Text(item.effectiveName).font(.system(size: 8.5, weight: .medium)).lineLimit(1)
-                  .frame(width: 66)
+                  .resizable().aspectRatio(contentMode: .fit).frame(width: 42, height: 42)
+                Text(item.effectiveName).font(.caption).lineLimit(2)
+                  .frame(width: 100, alignment: .center)
               }.padding(7).background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 11))
             }.buttonStyle(.plain).help(item.effectiveName)
               .overlay {
@@ -1038,10 +1040,10 @@ struct NotchToolsView: View {
             Label("Drop or paste files here", systemImage: "arrow.down.doc")
               .font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary).padding(18)
           }
-        }
+        }.frame(maxHeight: .infinity, alignment: .topLeading)
       }
     }
-    .padding(10)
+    .padding(12)
     .background(skin.palette.accent.opacity(0.075), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     .background {
       FileDropSurface(enabled: !store.busy, receive: { _ in }, receiving: { _ in }, hover: { _ in },
