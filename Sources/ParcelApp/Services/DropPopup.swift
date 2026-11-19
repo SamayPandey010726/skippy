@@ -1546,7 +1546,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       store?.busy != true, !receiving else { return }
     // Tool modules are explicitly opened, not hover previews. Keep them pinned until
     // Close/Escape or the configured idle policy retracts the notch.
-    if toolsVisible { return }
+    if toolsVisible && quiverAnchor == nil { return }
     let insideCourier = panel?.frame.contains(point) == true
     let insidePreview = sidePreview.panel?.frame.contains(point) == true
     let insideClipboard = clipboard.panel?.frame.contains(point) == true

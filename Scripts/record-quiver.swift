@@ -32,7 +32,7 @@ _ = NSApplication.shared
 let background = NSWindow(contentRect: NSScreen.screens[0].frame, styleMask: .borderless, backing: .buffered, defer: false)
 background.contentView = Backdrop()
 background.ignoresMouseEvents = true
-background.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) + 1)
+background.level = .normal
 background.orderFrontRegardless()
 background.displayIfNeeded()
 func escape() {

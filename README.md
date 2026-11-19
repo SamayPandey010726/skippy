@@ -17,6 +17,15 @@ bash Scripts/apple-terminal.sh mac
 
 The launcher opens `build/Skippy.app`. Use `bash Scripts/apple-terminal.sh iphone` or `bash Scripts/apple-terminal.sh ipad` on a Mac with the corresponding Xcode simulator runtime to boot a simulator. Skippy itself targets macOS. The default Mac bundle is ad-hoc signed for development.
 
+## Run on GitHub’s Mac
+
+From a terminal authenticated to this repository, dispatch the existing workflow on the Skippy branch. Each run provisions a temporary Mac, executes the build and simulator checks, and attaches the bundle, recordings and device screenshots to the run.
+
+```bash
+gh workflow run check.yml --ref skippy/quiver
+gh run list --branch skippy/quiver --limit 1
+```
+
 ## Earlier shelf implementation
 
 The following notes describe the original Parcels shelf and its file pipelines. Current placement, interactions and release status are in the Skippy brief.

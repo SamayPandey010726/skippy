@@ -63,7 +63,11 @@ final class SkippyQuiverTests: XCTestCase {
     let screen = try XCTUnwrap(button.window?.screen)
     XCTAssertTrue(screen.visibleFrame.contains(panel))
     let anchor = try XCTUnwrap(button.window).convertToScreen(button.convert(button.bounds, to: nil))
-    XCTAssertEqual(panel, QuiverSurface.panel(at: anchor, within: screen.visibleFrame, size: panel.size))
+    let expected = QuiverSurface.panel(at: anchor, within: screen.visibleFrame, size: panel.size)
+    // WindowServer aligns window origins to physical pixels.
+    let pixel = 1 / screen.backingScaleFactor
+    XCTAssertEqual(panel.minX, expected.minX, accuracy: pixel)
+    XCTAssertEqual(panel.minY, expected.minY, accuracy: pixel)
     shelf.dismiss()
     XCTAssertFalse(shelf.isVisible)
     quiver.hover(false)

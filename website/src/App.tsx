@@ -372,11 +372,17 @@ function SearchPanel({ query, setQuery, files, close, inputRef }: { query: strin
 }
 
 function Proof() {
-  return <section className="proof-section" id="proof"><div className="section-heading"><div><div className="eyebrow"><span /> Clean demo workspace</div><h2>Real interactions. Nothing personal on screen.</h2></div><p>These recordings exercise the working browser sandbox inside an isolated Skippy workspace—no desktop, notifications, accounts or private files visible.</p></div><div className="video-grid"><VideoCard src="/media/parcel-link-demo.webm" poster="/media/parcel-link-demo.png" kicker="Clipboard" title="Shorten and recapture links" /><VideoCard src="/media/parcel-magnetic-demo.webm" poster="/media/parcel-magnetic-demo.png" kicker="Drag & drop" title="Targets meet your cursor halfway" /></div></section>
+  return <section className="proof-section" id="proof">
+    <div className="section-heading"><div><h2>Skippy in motion.</h2></div>
+      <p>Watch the quiver unfold on a Mac. The shelf demos below show how to move files and links.</p>
+    </div>
+    <VideoCard src="/media/skippy-quiver.mp4" poster="/media/skippy-quiver.png" kicker="Native macOS app" title="From one mark to File Shelf and Notes" />
+    <div className="video-grid"><VideoCard src="/media/parcel-link-demo.webm" poster="/media/parcel-link-demo.png" kicker="Clipboard demo" title="Shorten and recapture links" /><VideoCard src="/media/parcel-magnetic-demo.webm" poster="/media/parcel-magnetic-demo.png" kicker="File Shelf demo" title="Move files between targets" /></div>
+  </section>
 }
 
 function VideoCard({ src, poster, kicker, title }: { src: string; poster: string; kicker: string; title: string }) {
-  return <figure className="video-card"><video controls muted playsInline preload="metadata" poster={poster}><source src={src} type="video/webm" />Your browser cannot play this recording.</video><figcaption><span>{kicker}</span><strong>{title}</strong></figcaption></figure>
+  return <figure className="video-card"><video controls muted playsInline preload="metadata" poster={poster}><source src={src} type={src.endsWith('.mp4') ? 'video/mp4' : 'video/webm'} />Your browser cannot play this recording.</video><figcaption><span>{kicker}</span><strong>{title}</strong></figcaption></figure>
 }
 
 function FeatureGrid() {

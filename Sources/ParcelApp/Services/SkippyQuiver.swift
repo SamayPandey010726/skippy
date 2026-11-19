@@ -44,6 +44,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
   private var dockTile: CGRect?
   private var installed = false
   private var dragging = false
+  private var folding = false
   private let defaults: UserDefaults
   private let shelf: DropPopupController
   private let widgets: NotchWidgetStore
@@ -82,7 +83,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
   }
 
   private func attach() {
-    foldWork?.cancel(); unfolded = false
+    foldWork?.cancel(); unfolded = false; folding = false
     shelf.dismiss()
     strip.removeFromSuperview()
     if let status { NSStatusBar.system.removeStatusItem(status); self.status = nil }
@@ -116,19 +117,38 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     guard !dragging else { return }
     foldWork?.cancel()
     if inside {
-      if !unfolded { unfolded = true; layout(animate: true) }
+      if !unfolded || folding { folding = false; unfolded = true; layout(animate: true) }
     } else {
       let work = DispatchWorkItem { [weak self] in
         guard let self else { return }
         if let frame = self.shelf.presentationFrame, frame.insetBy(dx: -5, dy: -5).contains(NSEvent.mouseLocation) {
           self.hover(false); return
         }
-        self.unfolded = false; self.layout(animate: true)
-        if self.surface == .dock { self.floating?.orderOut(nil) }
+        self.fold()
       }
       foldWork = work
       DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: work)
     }
+  }
+
+  private func fold() {
+    guard unfolded, !folding else { return }
+    folding = true
+    let finish = { [weak self] in
+      guard let self, self.folding else { return }
+      self.folding = false; self.unfolded = false; self.layout()
+      if self.surface == .dock { self.floating?.orderOut(nil) }
+    }
+    guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, let mark = strip.subviews.last else {
+      finish(); return
+    }
+    NSAnimationContext.runAnimationGroup({ context in
+      context.duration = 0.14
+      for icon in strip.subviews.dropLast() {
+        icon.animator().setFrameOrigin(mark.frame.origin)
+        icon.animator().alphaValue = 0
+      }
+    }, completionHandler: { MainActor.assumeIsolated { finish() } })
   }
 
   private func show(_ module: NotchModule, from view: NSView? = nil) {
@@ -142,6 +162,10 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     let arrows = NSMenu()
     for widget in widgets.widgets {
       arrows.addItem(CourierMenuAction(widget.kind.module.title) { self.show(widget.kind.module) })
+    }
+    if !tools.pinnedApps.isEmpty {
+      arrows.addItem(.separator())
+      for app in tools.pinnedApps { arrows.addItem(CourierMenuAction(app.name) { self.tools.launch(app) }) }
     }
     let all = NSMenuItem(title: "All arrows", action: nil, keyEquivalent: ""); all.submenu = arrows; menu.addItem(all)
     let places = NSMenu()
