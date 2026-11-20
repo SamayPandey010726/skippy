@@ -177,10 +177,12 @@ func verifyContent(_ name: String) {
   switch name {
   case "File Shelf":
     check("files opened into shelf") { contains("Launch notes.txt") }
-    let file = URL(fileURLWithPath: "Samples/Garden sketch.svg")
-    board.clearContents(); board.writeObjects([file as NSURL])
+    board.clearContents()
+    check("write an existing file URL to the system clipboard") {
+      FileManager.default.fileExists(atPath: fixture.path) && board.setString(fixture.absoluteString, forType: .fileURL)
+    }
     check("paste a file into Parcels") { press("Paste") }
-    check("pasted file appears in the shelf") { contains("Garden sketch.svg") }
+    check("pasted file appears in the shelf") { contains(fixture.lastPathComponent) }
 
   case "Extract text":
     let image = NSImage(size: NSSize(width: 420, height: 110))

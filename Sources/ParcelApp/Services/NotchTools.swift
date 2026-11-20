@@ -1444,7 +1444,10 @@ struct NotchToolsView: View {
             action: { tools.controlMedia(.toggle) })
           mediaButton("forward.fill", action: { tools.controlMedia(.next) })
         }
-        NotchActionButton(title: "Play a local file", symbol: "folder", tint: skin.palette.accent, action: tools.chooseAudio)
+        NotchActionButton(title: "Play a local file", symbol: "folder", tint: skin.palette.accent) {
+          tools.chooseAudio()
+          shelf.focusForKeyboard()
+        }
       }.frame(maxWidth: 240, alignment: .leading)
     }.frame(maxWidth: .infinity, maxHeight: .infinity)
   }

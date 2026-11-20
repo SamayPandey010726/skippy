@@ -1146,8 +1146,9 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     } catch { report(error.localizedDescription) }
   }
   func pasteFiles() {
-    guard let store, let focusedBox, !receiving, !store.busy, store.phase != .receiving else { return }
-    store.selectBox(focusedBox)
+    let destination = toolsVisible && activeModule == .parcel ? primaryBox?.id : focusedBox
+    guard let store, let destination, !receiving, !store.busy, store.phase != .receiving else { return }
+    store.selectBox(destination)
     store.error = nil
     store.paste()
     if let error = store.error { store.error = nil; report(error) }
