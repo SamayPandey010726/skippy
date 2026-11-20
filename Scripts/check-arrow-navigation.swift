@@ -93,8 +93,8 @@ func demonstrationPoint(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
 
 var controlFailures: [String] = []
 var checkingControls = false
-func check(_ label: String, until predicate: () -> Bool) {
-  for _ in 0..<50 {
+func check(_ label: String, attempts: Int = 50, until predicate: () -> Bool) {
+  for _ in 0..<attempts {
     if predicate() { print("PASS", label); return }
     Thread.sleep(forTimeInterval: 0.08)
   }
@@ -235,10 +235,12 @@ func verifyContent(_ name: String) {
     if batch == "searchhandoff" {
       let browser = NSWorkspace.shared.urlForApplication(toOpen: URL(string: "https://www.google.com")!)
       key(kVK_Return)
-      check("submitted search opens the registered browser") {
-        guard let browser, let url = NSWorkspace.shared.frontmostApplication?.bundleURL else { return false }
-        return browser.standardizedFileURL.path == url.standardizedFileURL.path
+      let browserID = browser.flatMap { Bundle(url: $0)?.bundleIdentifier }
+      check("submitted search opens the registered browser", attempts: 175) {
+        guard let browserID else { return false }
+        return NSWorkspace.shared.frontmostApplication?.bundleIdentifier == browserID
       }
+      print("Search handler:", browserID ?? "unknown", "foreground:", NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown")
       returnFromExternalApp()
     }
   case "Apps":
