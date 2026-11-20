@@ -58,8 +58,9 @@ const kindIcons = {
 }
 
 const features = [
-  { icon: FolderInput, tag: 'Shelf', title: 'Catch anything without changing windows.', body: 'Drag files, paste images or text, or summon Parcel from the keyboard. Your current work stays exactly where it is.' },
-  { icon: WandSparkles, tag: 'Convert', title: 'Shift-drag into a contextual conversion wheel.', body: 'Images, PDFs, Word, text and spreadsheets turn into compatible formats, with each result saved safely inside Parcel.' },
+  { icon: Layers3, tag: 'Quiver', title: 'Hover to unfold your pinned arrows.', body: 'Choose a menu-bar mark, a notch, a floating icon, a screen edge or the Dock. Click an arrow for its tool panel.' },
+  { icon: FolderInput, tag: 'Shelf', title: 'Catch anything without changing windows.', body: 'Drag files, paste images or text, or summon Skippy from the keyboard. Your current work stays exactly where it is.' },
+  { icon: WandSparkles, tag: 'Convert', title: 'Shift-drag into a contextual conversion wheel.', body: 'Images, PDFs, Word, text and spreadsheets turn into compatible formats, with each result saved safely inside Skippy.' },
   { icon: Clipboard, tag: 'Clipboard', title: 'A visual clipboard that remembers the useful parts.', body: 'Search text, links, images and files. Drag them back out as their native content instead of hunting through old windows.' },
   { icon: Link2, tag: 'Links', title: 'Shorten a link where you already copied it.', body: 'Right-click a URL, shorten it, and the result becomes a fresh clipboard item ready to paste.' },
   { icon: Archive, tag: 'Pack', title: 'Pack once. Send anywhere.', body: 'Build a standards-based ZIP, remove common Mac clutter, add a note and drag the finished parcel into a compatible app.' },
@@ -102,9 +103,9 @@ function App() {
 function Header({ onWaitlist }: { onWaitlist: () => void }) {
   return (
     <header className="topbar">
-      <a className="brand" href="#top" aria-label="Parcel home">
+      <a className="brand" href="#top" aria-label="Skippy home">
         <img src="/media/parcel-icon.png" alt="" />
-        <span>parcel</span>
+        <span>Skippy</span>
       </a>
       <nav aria-label="Primary navigation">
         <a href="/#top">The journey</a><a href="/#try">Try it</a><a href="/#features">Features</a><a href="/pricing">Pricing</a>
@@ -115,8 +116,8 @@ function Header({ onWaitlist }: { onWaitlist: () => void }) {
 }
 
 const cinematicScenes = [
-  { number: '00', label: 'The handoff problem', title: <>Your Mac is fast.<br /><em>Moving things is not.</em></>, body: 'Files, links, screenshots and copied thoughts disappear into windows. Parcel gives everything in motion one living place.' },
-  { number: '01', label: 'Catch', title: <>Anything in.<br /><em>No detour.</em></>, body: 'Drag, paste, share or use the shortcut. Parcel appears exactly when you need it, without pulling you away from your work.' },
+  { number: '00', label: 'The quiver', title: <>One quiver.<br /><em>Everyday tools.</em></>, body: 'Hover over Skippy to unfold your pinned arrows. Open the File Shelf, a quick note or a focus timer right where you are working.' },
+  { number: '01', label: 'Catch', title: <>Anything in.<br /><em>No detour.</em></>, body: 'Drag, paste, share or use the shortcut. Skippy appears exactly when you need it, without pulling you away from your work.' },
   { number: '02', label: 'Prepare', title: <>Change the thing.<br /><em>Keep the flow.</em></>, body: 'Convert formats, resize media, shorten links and extract visible text while the item stays inside the parcel.' },
   { number: '03', label: 'Pack', title: <>Loose pieces become<br /><em>one clean handoff.</em></>, body: 'Your files fold into a standards-based ZIP with the compression, naming and cleanup you prefer.' },
   { number: '04', label: 'Send', title: <>Drop it anywhere.<br /><em>Done.</em></>, body: 'The finished parcel travels into Mail, Messages, WhatsApp, Telegram and other compatible Mac apps.' },
@@ -187,11 +188,11 @@ function CinematicExperience({ onWaitlist }: { onWaitlist: () => void }) {
       <div className="cinematic-viewport">
         <Suspense fallback={<div className="parcel-world-loading" aria-hidden="true" />}><ParcelWorld progress={progressRef} reducedMotion={reducedMotion} /></Suspense>
         <div className="cinematic-grain" aria-hidden="true" />
-        <div className="cinematic-hud" aria-hidden="true"><span>PARCEL / MAC UTILITY</span><span>LOCAL-FIRST SYSTEM</span><span>SCENE {cinematicScenes[scene].number}</span></div>
+        <div className="cinematic-hud" aria-hidden="true"><span>SKIPPY / MAC UTILITY</span><span>LOCAL-FIRST SYSTEM</span><span>SCENE {cinematicScenes[scene].number}</span></div>
         <div className="cinematic-scenes">
           {cinematicScenes.map((item, index) => <article className={`cinematic-copy ${index === scene ? 'active' : ''} cinematic-copy-${index}`} aria-hidden={index !== scene} key={item.label}><div className="cinematic-kicker"><span>{item.number}</span>{item.label}</div><h1>{item.title}</h1><p>{item.body}</p>{index === 0 && <div className="cinematic-actions"><button className="button cinematic-primary" type="button" onClick={onWaitlist}>Join waitlist <ChevronRight size={16} /></button><a href="#try">Skip to the live workspace <ArrowDown size={15} /></a></div>}</article>)}
         </div>
-        <div className="cinematic-progress" aria-label="Parcel journey scenes">{cinematicScenes.map((item, index) => <button type="button" className={index === scene ? 'active' : ''} onClick={() => jumpToScene(index)} key={item.label}><span>{item.number}</span><i /><strong>{item.label}</strong></button>)}</div>
+        <div className="cinematic-progress" aria-label="Skippy journey scenes">{cinematicScenes.map((item, index) => <button type="button" className={index === scene ? 'active' : ''} onClick={() => jumpToScene(index)} key={item.label}><span>{item.number}</span><i /><strong>{item.label}</strong></button>)}</div>
         <button className={`auto-tour ${autoTour ? 'active' : ''}`} type="button" onClick={() => setAutoTour(value => !value)} disabled={reducedMotion}><Play size={13} /> {autoTour ? 'Touring' : 'Auto tour'}</button>
         <div className="scroll-cue"><span>Scroll to move the parcel</span><i /></div>
       </div>
@@ -254,7 +255,7 @@ function InteractiveDemo() {
       size: file.size > 1_000_000 ? `${(file.size / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(file.size / 1000))} KB`,
     }))
     setFiles(current => [...current, ...additions])
-    setStatus(`${additions.length} ${additions.length === 1 ? 'file' : 'files'} parked in Parcel. Nothing was uploaded.`)
+    setStatus(`${additions.length} ${additions.length === 1 ? 'file' : 'files'} parked in Skippy. Nothing was uploaded.`)
   }
 
   const capturePaste = async () => {
@@ -308,7 +309,7 @@ function InteractiveDemo() {
         if (!text) return
         addClipboardItem({ title: 'Pasted text', detail: text, kind: text.startsWith('http') ? 'link' : 'text' })
         setPanel('clipboard'); setStatus('Pasted content captured as text.')
-      }} tabIndex={0} aria-label="Interactive Parcel product demo">
+      }} tabIndex={0} aria-label="Interactive Skippy product demo">
         <div className="mac-menu" aria-hidden="true"><span>● ● ●</span><span>Thu 9:41</span></div>
         <div className="wallpaper-glow one" /><div className="wallpaper-glow two" />
         <div className="parcel-island">
@@ -371,19 +372,25 @@ function SearchPanel({ query, setQuery, files, close, inputRef }: { query: strin
 }
 
 function Proof() {
-  return <section className="proof-section" id="proof"><div className="section-heading"><div><div className="eyebrow"><span /> Clean demo workspace</div><h2>Real interactions. Nothing personal on screen.</h2></div><p>These recordings exercise the working browser sandbox inside an isolated Parcel workspace—no desktop, notifications, accounts or private files visible.</p></div><div className="video-grid"><VideoCard src="/media/parcel-link-demo.webm" poster="/media/parcel-link-demo.png" kicker="Clipboard" title="Shorten and recapture links" /><VideoCard src="/media/parcel-magnetic-demo.webm" poster="/media/parcel-magnetic-demo.png" kicker="Drag & drop" title="Targets meet your cursor halfway" /></div></section>
+  return <section className="proof-section" id="proof">
+    <div className="section-heading"><div><h2>Skippy in motion.</h2></div>
+      <p>Watch the quiver unfold on a Mac. The shelf demos below show how to move files and links.</p>
+    </div>
+    <VideoCard src="/media/skippy-quiver.mp4" poster="/media/skippy-quiver.png" kicker="Native macOS app" title="From one mark to File Shelf and Notes" />
+    <div className="video-grid"><VideoCard src="/media/parcel-link-demo.webm" poster="/media/parcel-link-demo.png" kicker="Clipboard demo" title="Shorten and recapture links" /><VideoCard src="/media/parcel-magnetic-demo.webm" poster="/media/parcel-magnetic-demo.png" kicker="File Shelf demo" title="Move files between targets" /></div>
+  </section>
 }
 
 function VideoCard({ src, poster, kicker, title }: { src: string; poster: string; kicker: string; title: string }) {
-  return <figure className="video-card"><video controls muted playsInline preload="metadata" poster={poster}><source src={src} type="video/webm" />Your browser cannot play this recording.</video><figcaption><span>{kicker}</span><strong>{title}</strong></figcaption></figure>
+  return <figure className="video-card"><video controls muted playsInline preload="metadata" poster={poster}><source src={src} type={src.endsWith('.mp4') ? 'video/mp4' : 'video/webm'} />Your browser cannot play this recording.</video><figcaption><span>{kicker}</span><strong>{title}</strong></figcaption></figure>
 }
 
 function FeatureGrid() {
-  return <section className="features-section" id="features"><div className="section-heading"><div><div className="eyebrow"><span /> One habit, fewer interruptions</div><h2>A shelf with unusually useful pockets.</h2></div><p>Parcel keeps small utilities attached to the thing you are already moving, so “just send this” stays a ten-second task.</p></div><div className="feature-grid">{features.map(({ icon: Icon, tag, title, body }) => <SpotlightCard key={title} className="feature-card" theme="light" spotlightColor="#735a39" intensity={0.18} spotlightSize={210} borderGlow={0.4}><div className="feature-icon"><Icon size={21} /></div><span className="feature-tag">{tag}</span><h3>{title}</h3><p>{body}</p></SpotlightCard>)}</div></section>
+  return <section className="features-section" id="features"><div className="section-heading"><div><div className="eyebrow"><span /> One habit, fewer interruptions</div><h2>Inside your quiver.</h2></div><p>Pin your everyday arrows, then open them directly from the menu bar, notch or screen edge.</p></div><div className="feature-grid">{features.map(({ icon: Icon, tag, title, body }) => <SpotlightCard key={title} className="feature-card" theme="light" spotlightColor="#735a39" intensity={0.18} spotlightSize={210} borderGlow={0.4}><div className="feature-icon"><Icon size={21} /></div><span className="feature-tag">{tag}</span><h3>{title}</h3><p>{body}</p></SpotlightCard>)}</div></section>
 }
 
 function WaysToWorkSection() {
-  return <section className="keyboard-section" id="shortcuts"><div className="keyboard-copy"><div className="eyebrow light"><span /> Use Parcel your way</div><h2>Obvious with a mouse. Faster when you want it.</h2><p>Drag files into the shelf, click clear controls, paste anything, use Finder actions, or learn shortcuts over time. Parcel never expects you to change how you use your Mac.</p><a href="#try" className="text-link">Try the live shelf <ChevronRight size={15} /></a></div><div className="shortcut-board" role="list" aria-label="Optional Parcel keyboard shortcuts">{shortcuts.map(([keys, action]) => <div className="shortcut-row" role="listitem" key={keys}><kbd>{keys}</kbd><span>{action}</span></div>)}</div></section>
+  return <section className="keyboard-section" id="shortcuts"><div className="keyboard-copy"><div className="eyebrow light"><span /> Use Skippy your way</div><h2>Obvious with a mouse. Faster when you want it.</h2><p>Drag files into the shelf, click clear controls, paste anything, use Finder actions, or learn shortcuts over time. Skippy never expects you to change how you use your Mac.</p><a href="#try" className="text-link">Try the live shelf <ChevronRight size={15} /></a></div><div className="shortcut-board" role="list" aria-label="Optional Skippy keyboard shortcuts">{shortcuts.map(([keys, action]) => <div className="shortcut-row" role="listitem" key={keys}><kbd>{keys}</kbd><span>{action}</span></div>)}</div></section>
 }
 
 function AccessibilitySection() {
@@ -391,29 +398,29 @@ function AccessibilitySection() {
 }
 
 function FinalCta({ onWaitlist }: { onWaitlist: () => void }) {
-  return <section className="final-cta"><div className="cta-spark one" /><div className="cta-spark two" /><img src="/media/parcel-icon.png" alt="Parcel app icon" /><div><div className="eyebrow light"><span /> A tiny app you will use all day</div><h2>Keep the thought.<br />Move the thing.</h2><p>Parcel starts at $2.49 for one Mac. Join the waitlist for launch access—one purchase, no subscription.</p><button className="button button-light" type="button" onClick={onWaitlist}>Join the waitlist <ChevronRight size={16} /></button></div></section>
+  return <section className="final-cta"><div className="cta-spark one" /><div className="cta-spark two" /><img src="/media/parcel-icon.png" alt="Skippy app icon" /><div><div className="eyebrow light"><span /> A tiny app you will use all day</div><h2>Keep the thought.<br />Move the thing.</h2><p>Skippy starts at $2.49 for one Mac. Join the waitlist for launch access—one purchase, no subscription.</p><button className="button button-light" type="button" onClick={onWaitlist}>Join the waitlist <ChevronRight size={16} /></button></div></section>
 }
 
 function Footer() {
-  return <footer><a className="brand" href="/#top"><img src="/media/parcel-icon.png" alt="" /><span>parcel</span></a><p>Built for Mac workflows. Private, local-first and subscription-free.</p><div><a href="/#try">Live demo</a><a href="/#features">Features</a><a href="/pricing">Pricing</a></div></footer>
+  return <footer><a className="brand" href="/#top"><img src="/media/parcel-icon.png" alt="" /><span>Skippy</span></a><p>Built for Mac workflows. Private, local-first and subscription-free.</p><div><a href="/#try">Live demo</a><a href="/#features">Features</a><a href="/pricing">Pricing</a></div></footer>
 }
 
 function PricingPage() {
   const [waitlistOpen, setWaitlistOpen] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState('two')
   const plans = [
-    { id: 'single', name: 'Single Mac', price: '$2.49', note: 'one-time licence', icon: Monitor, featured: false, items: ['Use on 1 Mac', 'Every Parcel feature', 'Local conversion and OCR', 'No subscription'] },
-    { id: 'two', name: 'Two Macs', price: '$4.99', note: 'one-time licence', icon: Monitor, featured: true, items: ['Use on 2 Macs', 'Every Parcel feature', 'Clipboard and link tools', 'Version 1.x updates'] },
-    { id: 'five', name: 'Five Macs', price: '$9.99', note: 'one-time licence', icon: Users, featured: false, items: ['Use on 5 Macs', 'Every Parcel feature', 'One licence to manage', 'No subscription'] },
+    { id: 'single', name: 'Single Mac', price: '$2.49', note: 'one-time licence', icon: Monitor, featured: false, items: ['Use on 1 Mac', 'Every Skippy feature', 'Local conversion and OCR', 'No subscription'] },
+    { id: 'two', name: 'Two Macs', price: '$4.99', note: 'one-time licence', icon: Monitor, featured: true, items: ['Use on 2 Macs', 'Every Skippy feature', 'Clipboard and link tools', 'Version 1.x updates'] },
+    { id: 'five', name: 'Five Macs', price: '$9.99', note: 'one-time licence', icon: Users, featured: false, items: ['Use on 5 Macs', 'Every Skippy feature', 'One licence to manage', 'No subscription'] },
   ]
 
   return <div className="pricing-page">
-    <header className="topbar pricing-nav"><a className="brand" href="/" aria-label="Parcel home"><img src="/media/parcel-icon.png" alt="" /><span>parcel</span></a><nav aria-label="Pricing navigation"><a href="/#top">The journey</a><a href="/#features">Features</a><a href="/pricing" aria-current="page">Pricing</a></nav><a className="button button-small" href="/"><ArrowLeft size={15} /> Back to demo</a></header>
+    <header className="topbar pricing-nav"><a className="brand" href="/" aria-label="Skippy home"><img src="/media/parcel-icon.png" alt="" /><span>Skippy</span></a><nav aria-label="Pricing navigation"><a href="/#top">The journey</a><a href="/#features">Features</a><a href="/pricing" aria-current="page">Pricing</a></nav><a className="button button-small" href="/"><ArrowLeft size={15} /> Back to demo</a></header>
     <main className="pricing-main">
-      <section className="pricing-hero"><div className="eyebrow"><span /> One small purchase for a calmer Mac</div><h1>Pay once.<br /><em>Use it every day.</em></h1><p>Every plan includes the complete Parcel experience. Choose only how many Macs you want to activate.</p><div className="pricing-pills"><span><Check size={14} /> All features included</span><span><Check size={14} /> No subscription</span><span><Check size={14} /> Local-first processing</span></div></section>
-      <section className="pricing-grid" aria-label="Parcel pricing plans">{plans.map(({ id, name, price, note, icon: Icon, featured, items }) => <article className={`price-card ${featured ? 'featured' : ''}`} key={name}>{featured && <div className="popular">Best for most people</div>}<div className="price-icon"><Icon size={22} /></div><h2>{name}</h2><div className="price"><strong>{price}</strong><span>USD</span></div><p>{note}</p><ul>{items.map(item => <li key={item}><Check size={15} /> {item}</li>)}</ul><button type="button" onClick={() => { setSelectedPlan(id); setWaitlistOpen(true) }}>Join waitlist</button></article>)}</section>
-      <section className="pricing-note"><ShieldCheck size={24} /><div><h2>No payment is collected yet.</h2><p>Join the launch waitlist for your chosen Mac licence. Parcel requires a valid signed licence before its shelf, clipboard or file tools become available.</p></div><button type="button" onClick={() => setWaitlistOpen(true)}>Join waitlist <ChevronRight size={15} /></button></section>
-      <section className="pricing-faq"><div><div className="eyebrow"><span /> Practical answers</div><h2>Before you choose.</h2></div><div className="faq-list"><details open><summary>Does every plan include every feature?</summary><p>Yes. Plans differ only by the number of Macs you can activate.</p></details><details><summary>Is Parcel a subscription?</summary><p>No. These are one-time prices for Parcel version 1.x.</p></details><details><summary>Does Parcel work without a licence?</summary><p>No. Production builds open the activation screen first and unlock the app only after a signed licence is verified on your Mac.</p></details><details><summary>Where are converted files stored?</summary><p>Results stay in Parcel-owned local storage and are added back to your parcel. Originals are not modified.</p></details></div></section>
+      <section className="pricing-hero"><div className="eyebrow"><span /> One small purchase for a calmer Mac</div><h1>Pay once.<br /><em>Use it every day.</em></h1><p>Every plan includes the complete Skippy experience. Choose only how many Macs you want to activate.</p><div className="pricing-pills"><span><Check size={14} /> All features included</span><span><Check size={14} /> No subscription</span><span><Check size={14} /> Local-first processing</span></div></section>
+      <section className="pricing-grid" aria-label="Skippy pricing plans">{plans.map(({ id, name, price, note, icon: Icon, featured, items }) => <article className={`price-card ${featured ? 'featured' : ''}`} key={name}>{featured && <div className="popular">Best for most people</div>}<div className="price-icon"><Icon size={22} /></div><h2>{name}</h2><div className="price"><strong>{price}</strong><span>USD</span></div><p>{note}</p><ul>{items.map(item => <li key={item}><Check size={15} /> {item}</li>)}</ul><button type="button" onClick={() => { setSelectedPlan(id); setWaitlistOpen(true) }}>Join waitlist</button></article>)}</section>
+      <section className="pricing-note"><ShieldCheck size={24} /><div><h2>No payment is collected yet.</h2><p>Join the launch waitlist for your chosen Mac licence. Skippy requires a valid signed licence before its shelf, clipboard or file tools become available.</p></div><button type="button" onClick={() => setWaitlistOpen(true)}>Join waitlist <ChevronRight size={15} /></button></section>
+      <section className="pricing-faq"><div><div className="eyebrow"><span /> Practical answers</div><h2>Before you choose.</h2></div><div className="faq-list"><details open><summary>Does every plan include every feature?</summary><p>Yes. Plans differ only by the number of Macs you can activate.</p></details><details><summary>Is Skippy a subscription?</summary><p>No. These are one-time prices for Skippy version 1.x.</p></details><details><summary>Does Skippy work without a licence?</summary><p>No. Production builds open the activation screen first and unlock the app only after a signed licence is verified on your Mac.</p></details><details><summary>Where are converted files stored?</summary><p>Results stay in Skippy-owned local storage and are added back to your parcel. Originals are not modified.</p></details></div></section>
     </main>
     <Footer />
     {waitlistOpen && <WaitlistDialog close={() => setWaitlistOpen(false)} initialPlan={selectedPlan} />}
@@ -443,7 +450,7 @@ function WaitlistDialog({ close, initialPlan = 'two' }: { close: () => void; ini
       setState('error'); setMessage(error instanceof Error ? error.message : 'Could not join the waitlist.')
     }
   }
-  return <div className="waitlist-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) close() }}><div className="waitlist-dialog" ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="waitlist-title"><button className="waitlist-close" type="button" onClick={close} aria-label="Close waitlist">×</button>{state === 'success' ? <div className="waitlist-success"><span><Check size={24} /></span><h2 id="waitlist-title">You are on the list.</h2><p>Check your inbox for confirmation. We will let you know when Parcel is ready for your Mac.</p><button className="button button-primary" type="button" onClick={close}>Done</button></div> : <><div className="eyebrow"><span /> Early access</div><h2 id="waitlist-title">Make your Mac feel easier.</h2><p>Choose your licence and we will email you when Parcel is ready. No payment today.</p><form onSubmit={submit}><label>Name <input name="name" autoComplete="name" maxLength={80} placeholder="Your name" /></label><label>Email <input name="email" type="email" autoComplete="email" required maxLength={254} placeholder="you@example.com" /></label><label>Mac licence <select name="plan" defaultValue={initialPlan}><option value="single">1 Mac · $2.49</option><option value="two">2 Macs · $4.99</option><option value="five">5 Macs · $9.99</option></select></label><label className="honeypot" aria-hidden="true">Company website <input name="website" tabIndex={-1} autoComplete="off" /></label><label className="consent"><input name="consent" type="checkbox" value="yes" required /> Email me about Parcel's launch. I can unsubscribe at any time.</label>{state === 'error' && <p className="form-error" role="alert">{message}</p>}<button className="button button-primary" type="submit" disabled={state === 'sending'}>{state === 'sending' ? 'Joining…' : 'Join waitlist'} <ChevronRight size={15} /></button></form></>}</div></div>
+  return <div className="waitlist-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) close() }}><div className="waitlist-dialog" ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="waitlist-title"><button className="waitlist-close" type="button" onClick={close} aria-label="Close waitlist">×</button>{state === 'success' ? <div className="waitlist-success"><span><Check size={24} /></span><h2 id="waitlist-title">You are on the list.</h2><p>Check your inbox for confirmation. We will let you know when Skippy is ready for your Mac.</p><button className="button button-primary" type="button" onClick={close}>Done</button></div> : <><div className="eyebrow"><span /> Early access</div><h2 id="waitlist-title">Make your Mac feel easier.</h2><p>Choose your licence and we will email you when Skippy is ready. No payment today.</p><form onSubmit={submit}><label>Name <input name="name" autoComplete="name" maxLength={80} placeholder="Your name" /></label><label>Email <input name="email" type="email" autoComplete="email" required maxLength={254} placeholder="you@example.com" /></label><label>Mac licence <select name="plan" defaultValue={initialPlan}><option value="single">1 Mac · $2.49</option><option value="two">2 Macs · $4.99</option><option value="five">5 Macs · $9.99</option></select></label><label className="honeypot" aria-hidden="true">Company website <input name="website" tabIndex={-1} autoComplete="off" /></label><label className="consent"><input name="consent" type="checkbox" value="yes" required /> Email me about Skippy's launch. I can unsubscribe at any time.</label>{state === 'error' && <p className="form-error" role="alert">{message}</p>}<button className="button button-primary" type="submit" disabled={state === 'sending'}>{state === 'sending' ? 'Joining…' : 'Join waitlist'} <ChevronRight size={15} /></button></form></>}</div></div>
 }
 
 export default App

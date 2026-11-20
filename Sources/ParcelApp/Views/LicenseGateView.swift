@@ -16,7 +16,7 @@ struct LicenseGateView: View {
           .foregroundStyle(Ink.secondary)
       }
       VStack(alignment: .leading, spacing: 9) {
-        Text("Parcel needs a licence.").font(.custom(Ink.serif, size: 30)).foregroundStyle(Ink.green)
+        Text("Skippy needs a licence.").font(.custom(Ink.serif, size: 30)).foregroundStyle(Ink.green)
         Text("The shelf, clipboard, watched folders and file tools stay off until a signed licence is verified on this Mac.")
           .font(.system(size: 12)).foregroundStyle(Ink.secondary).lineSpacing(4)
       }
@@ -38,7 +38,7 @@ struct LicenseGateView: View {
         .scrollContentBackground(.hidden).frame(height: 105).padding(10)
         .background(Ink.canvas, in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Ink.line))
-        .accessibilityLabel("Parcel licence")
+        .accessibilityLabel("Skippy licence")
       HStack {
         Button("Activate licence") { activate() }.buttonStyle(MossButtonStyle())
           .disabled(licence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -64,7 +64,7 @@ struct LicenseGateView: View {
     do {
       try LicenseManager.shared.activate(licence)
       store.refreshLicense()
-      message = "Licence verified. Parcel is ready."
+      message = "Licence verified. Skippy is ready."
     } catch { message = error.localizedDescription }
   }
 }

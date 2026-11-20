@@ -100,7 +100,7 @@ enum WatchedFolderScan {
   func add(folder url: URL, parcelID: UUID, rule: WatchedFolderRule = .all) {
     guard url.standardizedFileURL != StoragePaths.root.standardizedFileURL,
       !FileTree.isInside(url, directory: StoragePaths.root) else {
-      message = "Parcel's own cache cannot be watched. Choose an ordinary folder to avoid import loops."; return
+      message = "Skippy's own cache cannot be watched. Choose an ordinary folder to avoid import loops."; return
     }
     guard writable, folders.count < 8, !folders.contains(where: { $0.path == url.path }) else {
       message = "Choose a different folder. Up to eight watched folders are supported."; return

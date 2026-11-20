@@ -67,11 +67,11 @@ struct NotchWidget: Codable, Identifiable, Equatable {
       let saved = try? JSONDecoder().decode([NotchWidget].self, from: data) {
       let known = Set(saved.map(\.kind))
       widgets = saved + NotchWidgetKind.allCases.filter { !known.contains($0) }
-        .map { NotchWidget(kind: $0, size: $0.defaultSize, pinned: [.music, .timer].contains($0)) }
+        .map { NotchWidget(kind: $0, size: $0.defaultSize, pinned: [.parcel, .clipboard, .notes, .timer].contains($0)) }
     } else {
-      let order: [NotchWidgetKind] = [.music, .parcel, .timer, .clipboard, .notes, .search,
+      let order: [NotchWidgetKind] = [.parcel, .clipboard, .notes, .timer, .search, .music,
         .downloads, .awake, .recent, .launcher, .extract, .color, .qr, .system, .calendar, .calculator, .screenshot, .draw]
-      widgets = order.map { NotchWidget(kind: $0, size: $0.defaultSize, pinned: [.music, .timer].contains($0)) }
+      widgets = order.map { NotchWidget(kind: $0, size: $0.defaultSize, pinned: [.parcel, .clipboard, .notes, .timer].contains($0)) }
     }
   }
 
@@ -128,9 +128,9 @@ struct NotchWidget: Codable, Identifiable, Equatable {
 
   func reset() {
     defaults.removeObject(forKey: key)
-    let order: [NotchWidgetKind] = [.music, .parcel, .timer, .clipboard, .notes, .search,
+    let order: [NotchWidgetKind] = [.parcel, .clipboard, .notes, .timer, .search, .music,
       .downloads, .awake, .recent, .launcher, .extract, .color, .qr, .system, .calendar, .calculator, .screenshot, .draw]
-    widgets = order.map { NotchWidget(kind: $0, size: $0.defaultSize, pinned: [.music, .timer].contains($0)) }
+    widgets = order.map { NotchWidget(kind: $0, size: $0.defaultSize, pinned: [.parcel, .clipboard, .notes, .timer].contains($0)) }
   }
 
   private func save() {

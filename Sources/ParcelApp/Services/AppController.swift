@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import Combine
 import ParcelCore
 import SwiftUI
@@ -8,16 +9,13 @@ import SwiftUI
   private weak var store: ParcelStore?
   private var workbench: NSWindow?
   private var preferencesWindow: NSWindow?
-  private var tutorialWindow: NSWindow?
-  private var activationWindow: NSWindow?
   private var skinObserver: AnyCancellable?
   private var licenseObserver: AnyCancellable?
   private var operationalServicesInstalled = false
   var isWorkbenchVisible: Bool { workbench?.isVisible == true }
   func restoreAccessoryPolicyIfPossible() {
-    if workbench?.isVisible != true && preferencesWindow?.isVisible != true && tutorialWindow?.isVisible != true
-      && activationWindow?.isVisible != true {
-      NSApp.setActivationPolicy(.accessory)
+    if workbench?.isVisible != true && preferencesWindow?.isVisible != true {
+      NSApp.setActivationPolicy(SkippyQuiver.shared.surface == .dock ? .regular : .accessory)
     }
   }
   func install(store: ParcelStore) {
@@ -27,8 +25,6 @@ import SwiftUI
       let appearance = NSAppearance(named: skin == .night ? .darkAqua : .aqua)
       self?.workbench?.appearance = appearance
       self?.preferencesWindow?.appearance = appearance
-      self?.tutorialWindow?.appearance = appearance
-      self?.activationWindow?.appearance = appearance
     }
     licenseObserver = store.$license.removeDuplicates().sink { [weak self, weak store] status in
       guard let self, let store else { return }
@@ -37,40 +33,20 @@ import SwiftUI
     }
   }
   private func installOperationalServices(store: ParcelStore) {
-    activationWindow?.orderOut(nil)
     guard !operationalServicesInstalled else { restoreAccessoryPolicyIfPossible(); return }
     operationalServicesInstalled = true
     WatchedFolders.shared.start(store: store)
+    SkippyQuiver.shared.install()
     DropPopupController.shared.install(store: store)
-    CourierMenuBar.shared.install(store: store)
     ParcelFileService.shared.install(store: store)
     SpotlightIndexer.shared.install(store: store)
     ClipboardHistoryStore.shared.start()
     GlobalShortcutManager.shared.install { AppController.shared.handleGlobalShortcut() }
     store.checkCacheOnStartup()
-    if store.showWelcome { DispatchQueue.main.async { AppController.shared.showTutorial() } }
   }
   func showActivation() {
     guard let store, !store.license.canUseApp else { return }
-    if activationWindow == nil {
-      let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 530),
-        styleMask: [.titled, .closable], backing: .buffered, defer: false)
-      window.title = "Activate Parcel"
-      window.delegate = self
-      window.isReleasedWhenClosed = false
-      window.isRestorable = false
-      window.titleVisibility = .hidden
-      window.titlebarAppearsTransparent = true
-      window.contentView = NSHostingView(rootView: UniversalInterface {
-        LicenseGateView().environmentObject(store)
-      })
-      window.center()
-      activationWindow = window
-    }
-    activationWindow?.appearance = NSAppearance(named: SkinStore.shared.skin == .night ? .darkAqua : .aqua)
-    activationWindow?.makeKeyAndOrderFront(nil)
-    NSApp.setActivationPolicy(.regular)
-    NSApp.activate(ignoringOtherApps: true)
+    presentSettings(initialTab: 3)
   }
   /// The drop popup appears while files are dragged; the configurable global shortcut summons it by hand.
   func toggleDropPopup() {
@@ -103,29 +79,10 @@ import SwiftUI
   }
   func showTutorial() {
     guard let store, store.license.canUseApp else { showActivation(); return }
-    store.showWelcome = true
-    if tutorialWindow == nil {
-      let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 540, height: 640),
-        styleMask: [.titled, .closable], backing: .buffered, defer: false)
-      window.title = "Welcome to Parcel"
-      window.delegate = self
-      window.isReleasedWhenClosed = false
-      window.isRestorable = false
-      window.titleVisibility = .hidden
-      window.titlebarAppearsTransparent = true
-      window.contentView = NSHostingView(rootView: UniversalInterface {
-        WelcomeView().environmentObject(store)
-      })
-      window.center()
-      tutorialWindow = window
-    }
-    tutorialWindow?.appearance = NSAppearance(named: SkinStore.shared.skin == .night ? .darkAqua : .aqua)
-    tutorialWindow?.makeKeyAndOrderFront(nil)
-    NSApp.setActivationPolicy(.regular)
-    NSApp.activate(ignoringOtherApps: true)
+    presentSettings(initialTab: 5)
   }
   func closeTutorial() {
-    tutorialWindow?.orderOut(nil)
+    preferencesWindow?.orderOut(nil)
     restoreAccessoryPolicyIfPossible()
   }
   func openBin() {
@@ -146,21 +103,25 @@ import SwiftUI
     guard store?.license.canUseApp == true else { showActivation(); return }
     DropPopupController.shared.showModule(.dashboard)
   }
-  func openPreferences() {
+  func openPreferences() { presentSettings(initialTab: nil) }
+  private func presentSettings(initialTab: Int?) {
     guard let store else { return }
     if preferencesWindow == nil {
       let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 550, height: 540),
         styleMask: [.titled, .closable], backing: .buffered, defer: false)
-      window.title = "Parcels Settings"; window.isReleasedWhenClosed = false
+      window.title = "Skippy Settings"; window.isReleasedWhenClosed = false
       window.isRestorable = false
-      window.contentView = NSHostingView(rootView: UniversalInterface { PreferencesView().environmentObject(store) })
+      window.delegate = self
       window.center(); preferencesWindow = window
+    }
+    if !(preferencesWindow?.contentView is NSHostingView<AnyView>) || initialTab != nil {
+      preferencesWindow?.contentView = NSHostingView(rootView: AnyView(UniversalInterface { PreferencesView(initialTab: initialTab ?? 0).environmentObject(store) }))
     }
     preferencesWindow?.appearance = NSAppearance(named: SkinStore.shared.skin == .night ? .darkAqua : .aqua)
     preferencesWindow?.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
   }
-  func windowWillClose(_ notification: Notification) { NSApp.setActivationPolicy(.accessory) }
+  func windowWillClose(_ notification: Notification) { DispatchQueue.main.async { self.restoreAccessoryPolicyIfPossible() } }
   func fitInterfaceWindows() {
     guard let workbench else { return }
     let scale = DropPopupController.shared.interfaceScale
@@ -174,8 +135,12 @@ import SwiftUI
 }
 
 enum FinderSelection {
+  static func hasAccess(request: Bool) -> Bool {
+    let finder = NSAppleEventDescriptor(bundleIdentifier: "com.apple.finder")
+    return AEDeterminePermissionToAutomateTarget(finder.aeDesc, typeWildCard, typeWildCard, request) == noErr
+  }
   static func urls() -> [URL] {
-    guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.finder" else { return [] }
+    guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.finder", hasAccess(request: false) else { return [] }
     let source = """
       tell application "Finder"
         set selectedPaths to ""
@@ -215,8 +180,7 @@ enum SelectionCapture {
   static func capture(_ completion: @escaping @MainActor (Bool) -> Void) -> Bool {
     guard let application = NSWorkspace.shared.frontmostApplication,
       application.bundleIdentifier != Bundle.main.bundleIdentifier else { return false }
-    let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-    guard AXIsProcessTrustedWithOptions(options) else { return false }
+    guard AXIsProcessTrusted() else { return false }
     let board = NSPasteboard.general
     let snapshot = Snapshot(board)
     let change = board.changeCount
@@ -266,8 +230,8 @@ enum SelectionCapture {
     let alert = NSAlert()
     alert.messageText = "A parcel is still being received or prepared."
     alert.informativeText =
-      "Wait for it to finish, or cancel the operation in Parcel before quitting. Your originals are safe."
-    alert.addButton(withTitle: "Keep Parcel open")
+      "Wait for it to finish, or cancel the operation in Skippy before quitting. Your originals are safe."
+    alert.addButton(withTitle: "Keep Skippy open")
     alert.runModal()
     return .terminateCancel
   }
@@ -275,8 +239,9 @@ enum SelectionCapture {
   /// Right-click the Dock icon: packed parcels fan out, anything opens directly.
   func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
     let store = ParcelRuntime.store
-    guard !store.recentParcels.isEmpty else { return nil }
-    let menu = NSMenu()
+    guard store.license.canUseApp else { return nil }
+    let menu = SkippyQuiver.shared.menu()
+    if !store.recentParcels.isEmpty { menu.addItem(.separator()) }
     for box in store.recentParcels.prefix(6) {
       let sub = NSMenu()
       for item in box.items.prefix(15) {

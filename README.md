@@ -1,28 +1,34 @@
-# Parcel
+# Skippy
 
-> Current product direction, repository details, and unverified work are documented in [P A R C E L S — project brief](PARCELS-BRIEF.md). The material below describes an earlier shelf-first revision and may be outdated.
+Skippy is a native macOS quiver. Hover over its mark to unfold your pinned tools. Click an arrow for File Shelf, Clipboard, Notes, Timer or another tool. Settings lets you attach the mark to the menu bar, notch, desktop, screen edges or Dock.
 
-A living file shelf for Mac: put files down, go where you're going, then pick them up again. Parcel lives in the menu bar and opens a glass top-center notch shelf for file drags, mouse shakes, menu-bar interaction, or its global shortcut, with native Quick Look previews, local image/video preparation and opt-in watched folders.
+[Product and feature brief](SKIPPY-BRIEF.md) · [Design and build plan](Docs/SKIPPY-PLAN.md) · [Mac checks](.github/workflows/check.yml)
 
-**This is a development build, not a notarized release.** Automated coverage includes the beginner tutorial, configurable global shortcut, App Intents metadata, Spotlight indexing, presets, per-display placement, recent-action recall, Quick Look lifetime, local search, circular scrolling, idle/Never, ZIP pickup, Finder Services and the conversion matrix. Hem's references inform native folder, catch and ribbon animations. Physical cross-app drag/drop, sharing/Services availability, multi-display and OS-accessibility acceptance still require live checks. See the [current courier revision](Docs/SIDE-COURIER.md) and [reference study](Docs/HEM-REFERENCE-STUDY.md).
+## Run from a Mac terminal
 
-## Start here
-
-For the developer taking over, read [START-HERE.md](START-HERE.md) first. It consolidates the agreed design, exact first build commands, outstanding work and release gates.
-
-Open `Preview/Parcel-preview.html` directly to inspect the visual direction, motion and working local ZIP downloads. It is self-contained and uploads nothing. The example images are original procedural artwork. Browser preview limits are documented below; it is not the Mac executable.
-
-On a Mac with Xcode installed:
+Use macOS 14 or later with Xcode selected. From the repository root, run:
 
 ```bash
-cd Parcel
 swift test
 bash Scripts/build-macos.sh
 bash Scripts/check-macos.sh
-open build/Parcel.app
+bash Scripts/apple-terminal.sh mac
 ```
 
-You can also open `Package.swift` in Xcode and choose the Parcel executable scheme. The bundle script adds the actual Info.plist, resource files, icon and signature. A raw `swift run Parcel` session is a development executable and is not suitable for distribution.
+The launcher opens `build/Skippy.app`. Use `bash Scripts/apple-terminal.sh iphone` or `bash Scripts/apple-terminal.sh ipad` on a Mac with the corresponding Xcode simulator runtime to boot a simulator. Skippy itself targets macOS. The default Mac bundle is ad-hoc signed for development.
+
+## Run on GitHub’s Mac
+
+From a terminal authenticated to this repository, dispatch the existing workflow on the Skippy branch. Each run provisions a temporary Mac, executes the build and simulator checks, and attaches the bundle, recordings and device screenshots to the run.
+
+```bash
+gh workflow run check.yml --ref skippy/quiver
+gh run list --branch skippy/quiver --limit 1
+```
+
+## Earlier shelf implementation
+
+The following notes describe the original Parcels shelf and its file pipelines. Current placement, interactions and release status are in the Skippy brief.
 
 ## Implemented workflow
 

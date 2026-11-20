@@ -5,7 +5,11 @@ import SwiftUI
 
 struct PreferencesView: View {
   @EnvironmentObject private var store: ParcelStore
+  @ObservedObject private var clipboardHistory = ClipboardHistoryStore.shared
+  @ObservedObject private var tools = NotchToolStore.shared
+  @ObservedObject private var quiver = SkippyQuiver.shared
   @State private var tab = 0
+  @State private var captureAccessMessage: String?
   @State private var licenceText = ""
   @State private var message: String?
   @StateObject private var skins = SkinStore.shared
@@ -61,6 +65,7 @@ struct PreferencesView: View {
           else if tab == 1 { keyboardShortcuts }
           else if tab == 2 { automation }
           else if tab == 3 { licence }
+          else if tab == 5 { WelcomeView().frame(maxWidth: .infinity) }
           else { about }
         }.frame(maxWidth: .infinity, alignment: .leading).padding(.trailing, 8)
       }
@@ -82,13 +87,13 @@ struct PreferencesView: View {
   private var keyboardShortcuts: some View {
     VStack(alignment: .leading, spacing: 16) {
       Text("Everything, without the mouse.").font(.custom(Ink.serif, size: 24)).foregroundStyle(Ink.green)
-      Text("Open Parcels, then use these commands anywhere in the notch. Copy sends the focused file or packed ZIP; Paste adds files, images, links or text to your single parcel.")
+      Text("Open Skippy, then use these commands anywhere in the notch. Copy sends the focused file or packed ZIP; Paste adds files, images, links or text to your single parcel.")
         .font(.system(size: 11)).foregroundStyle(Ink.secondary).lineSpacing(3)
       VStack(alignment: .leading, spacing: 10) {
         HStack {
           VStack(alignment: .leading, spacing: 3) {
-            Text("Open Parcels anywhere").font(.system(size: 13, weight: .semibold))
-            Text("In Finder or another app, this also imports the current selection.")
+            Text("Open Skippy anywhere").font(.system(size: 13, weight: .semibold))
+            Text("With selection access, this also imports highlighted files or text.")
               .font(.system(size: 10)).foregroundStyle(Ink.secondary)
           }
           Spacer()
@@ -99,7 +104,7 @@ struct PreferencesView: View {
       }.padding(14).background(Ink.canvas.opacity(0.72), in: RoundedRectangle(cornerRadius: 14))
       VStack(alignment: .leading, spacing: 8) {
         HStack {
-          Text("Parcels notch commands").font(.system(size: 13, weight: .semibold))
+          Text("Skippy notch commands").font(.system(size: 13, weight: .semibold))
           Spacer()
           Button("Reset all") { courierShortcuts.resetAll() }.font(.system(size: 10))
         }
@@ -151,7 +156,7 @@ struct PreferencesView: View {
       Divider()
       Text("Shortcuts and Spotlight").font(.system(size: 13, weight: .semibold))
       Toggle("Index parcel and file names in Spotlight", isOn: $spotlight.enabled)
-      Text("Parcels publishes actions for opening the notch, adding files, packing, and searching. File names are indexed only in your Mac's private Spotlight index.")
+      Text("Skippy publishes actions for opening the notch, adding files, packing, and searching. File names are indexed only in your Mac's private Spotlight index.")
         .font(.system(size: 11)).foregroundStyle(Ink.secondary)
     }.font(.system(size: 12))
   }
@@ -225,8 +230,22 @@ struct PreferencesView: View {
         Slider(value: Binding(get: { Double(courier.interfaceScale) }, set: { courier.interfaceScale = CGFloat($0) }),
           in: 0.75...1.5, step: 0.05).accessibilityLabel("Universal interface size")
         SkinPickerRow()
-        Toggle("Keep the notch visible", isOn: Binding(
-          get: { courier.isPersistent }, set: { courier.isPersistent = $0 }))
+        Picker("Launcher icon", selection: $quiver.emblem) {
+          ForEach(QuiverEmblem.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+        }.pickerStyle(.segmented)
+
+        Toggle("Keep local clipboard history", isOn: $clipboardHistory.captureEnabled)
+        Picker("Attach quiver to", selection: $quiver.surface) {
+          ForEach(QuiverSurface.allCases) { Text($0.rawValue).tag($0) }
+        }
+        if quiver.surface == .dock && !AXIsProcessTrusted() {
+          Button("Allow Dock hover in Accessibility…") {
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(options)
+          }
+        }
+        Text("Hover for pins. Choose More to browse the next group in place. Click an arrow to keep its panel open. Drag the floating mark to a screen edge to attach it. In the Dock, click to open or secondary-click for arrows.")
+          .font(.caption).foregroundStyle(.secondary)
         Picker("Collapse after", selection: Binding(get: { courier.idleTimeout }, set: { courier.idleTimeout = $0 })) {
           Text("5 sec").tag(TimeInterval(5)); Text("10 sec").tag(TimeInterval(10))
           Text("30 sec").tag(TimeInterval(30)); Text("1 min").tag(TimeInterval(60)); Text("Never").tag(TimeInterval(0))
@@ -234,9 +253,17 @@ struct PreferencesView: View {
       }.padding(14).background(Ink.canvas.opacity(0.72), in: RoundedRectangle(cornerRadius: 14))
       VStack(alignment: .leading, spacing: 9) {
         HStack {
-          Label("Widgets", systemImage: "square.grid.2x2").font(.system(size: 13, weight: .semibold))
+          Label("Quiver arrows", systemImage: "square.grid.2x2").font(.system(size: 13, weight: .semibold))
           Spacer()
           Button("Reset layout", action: notchWidgets.reset).font(.system(size: 10))
+        }
+        Button("Pin a Mac application…", action: tools.choosePinnedApp)
+        ForEach(tools.pinnedApps) { app in
+          HStack {
+            Text(app.name)
+            Spacer()
+            Button("Unpin") { tools.unpinApp(app) }.accessibilityLabel("Unpin " + app.name)
+          }
         }
         Text("Drag widgets to rearrange them. Every feature supports Small, Tall, Wide, Large and Full-page sizes. Scrolling snaps one complete page at a time.")
           .font(.system(size: 10)).foregroundStyle(Ink.secondary)
@@ -289,7 +316,7 @@ struct PreferencesView: View {
         Toggle("Save packed parcels to Desktop", isOn: $store.packaging.saveToDesktop)
       }.padding(14).background(Ink.canvas.opacity(0.72), in: RoundedRectangle(cornerRadius: 14))
         .disabled(store.busy).onChange(of: store.packaging) { _, _ in store.savePackaging() }
-      Text("Parcels stays over the menu bar. Hover, drag to the top, shake the pointer, or use your global shortcut to open the widget dashboard. One parcel holds every temporary file.")
+      Text("The quiver holds your pinned arrows. The File Shelf keeps temporary files ready to drag into another app.")
         .font(.system(size: 11)).foregroundStyle(Ink.secondary)
       Divider()
       Text("Finder and sharing").font(.system(size: 13, weight: .semibold))
@@ -299,9 +326,21 @@ struct PreferencesView: View {
         get: { courier.shiftConvertAppearance }, set: { courier.shiftConvertAppearance = $0 })) {
         ForEach(QuickConvertAppearance.allCases) { Text($0.label).tag($0) }
       }.pickerStyle(.segmented).disabled(!courier.shiftConvertEnabled)
-      Text("Start dragging image, PDF, video, document, or spreadsheet files, then hold Shift. Drop onto a relevant output in the compact ribbon. The current format is hidden; every result is saved in Parcel.")
+      Text("Start dragging image, PDF, video, document, or spreadsheet files, then hold Shift. Drop onto a relevant output in the compact ribbon. The current format is hidden; every result is saved in Skippy.")
         .font(.system(size: 11)).foregroundStyle(Ink.secondary)
-      Text("Right-click selected files or folders in Finder → Services → Send to Parcels. macOS controls which apps expose Services. If hidden, enable it in System Settings → Keyboard → Keyboard Shortcuts → Services.")
+      HStack {
+        Button("Enable Finder selection…") {
+          captureAccessMessage = FinderSelection.hasAccess(request: true)
+            ? "Finder selection is enabled." : "Allow Finder access in System Settings → Privacy & Security → Automation."
+        }
+        Button("Enable selection in other apps…") {
+          let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+          captureAccessMessage = AXIsProcessTrustedWithOptions(options)
+            ? "Selection capture is enabled." : "Allow Skippy in System Settings → Privacy & Security → Accessibility."
+        }
+      }.font(.caption)
+      if let captureAccessMessage { Text(captureAccessMessage).font(.caption).foregroundStyle(.secondary) }
+      Text("Right-click selected files or folders in Finder → Services → Send to Skippy. macOS controls which apps expose Services. If hidden, enable it in System Settings → Keyboard → Keyboard Shortcuts → Services.")
         .font(.system(size: 11)).foregroundStyle(Ink.secondary)
       Divider()
       Text("Watched folders").font(.system(size: 13, weight: .semibold))
@@ -357,16 +396,16 @@ struct PreferencesView: View {
             }
           }))
       Toggle(
-        "Open Parcels when dragging files or images",
+        "Open Skippy when dragging files or images",
         isOn: Binding(
           get: { DropPopupController.shared.isEnabled },
           set: { DropPopupController.shared.isEnabled = $0 })
       )
       Text(
-        "The menu-bar island, top-screen edge, file drag, mouse shake, or global shortcut opens Parcels. In Finder, the global shortcut also adds selected files. Tab changes pages; / searches; Command-P packs; Command-S opens Settings; Escape closes."
+        "The menu-bar island, top-screen edge, file drag, mouse shake, or global shortcut opens Skippy. In Finder, the global shortcut also adds selected files. Tab changes pages; / searches; Command-P packs; Command-S opens Settings; Escape closes."
       ).font(.system(size: 11)).foregroundStyle(Ink.secondary).lineSpacing(4)
       HStack {
-        Button("Open Parcels") { DropPopupController.shared.summon() }
+        Button("Open Skippy") { DropPopupController.shared.summon() }
           .buttonStyle(QuietButtonStyle())
         Spacer()
       }
@@ -430,7 +469,7 @@ struct PreferencesView: View {
           if let s = Bundle.main.object(forInfoDictionaryKey: "ParcelCheckoutURL") as? String,
             let url = URL(string: s), url.scheme == "https"
           {
-            Button("Get Parcel") { NSWorkspace.shared.open(url) }.buttonStyle(
+            Button("Get Skippy") { NSWorkspace.shared.open(url) }.buttonStyle(
               MossButtonStyle(secondary: true))
           }
         }
@@ -457,7 +496,7 @@ struct PreferencesView: View {
         }
       }
       Text(
-        "A valid signed licence is required before Parcel's shelf, clipboard and file tools become available."
+        "A valid signed licence is required before Skippy's shelf, clipboard and file tools become available."
       ).font(.system(size: 11)).foregroundStyle(Ink.secondary).lineSpacing(4)
     }
   }
@@ -468,7 +507,7 @@ struct PreferencesView: View {
         VStack(alignment: .leading, spacing: 7) {
           Text("Put down. Navigate.\nPick up.").font(.custom(Ink.serif, size: 24)).foregroundStyle(
             Ink.green)
-          Text("Parcel 1.0.0").font(.system(size: 11)).foregroundStyle(Ink.secondary)
+          Text("Skippy 1.0.0").font(.system(size: 11)).foregroundStyle(Ink.secondary)
         }
       }
       Text(

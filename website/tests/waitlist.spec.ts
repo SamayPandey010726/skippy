@@ -5,7 +5,7 @@ test('waitlist validates consent and shows a safe service message', async ({ pag
   await page.getByRole('button', { name: 'Join waitlist' }).first().click()
   await expect(page.getByRole('heading', { name: 'Make your Mac feel easier.' })).toBeVisible()
   await page.getByRole('textbox', { name: 'Email', exact: true }).fill('person@example.com')
-  const consent = page.getByLabel(/Email me about Parcel/)
+  const consent = page.getByLabel(/Email me about Skippy/)
   await expect(consent).not.toBeChecked()
   expect(await consent.evaluate((input: HTMLInputElement) => input.checkValidity())).toBe(false)
   await consent.check()

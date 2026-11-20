@@ -83,6 +83,8 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   private var hideWork: DispatchWorkItem?
   private var trackedMenus: Set<ObjectIdentifier> = []
   private var confirmingAction = false
+  private var selectingOnScreen = false
+  private var selectionEndedAt: TimeInterval = 0
   private var expandWork: DispatchWorkItem?
   private var folderWork: DispatchWorkItem?
   private var observers: [NSObjectProtocol] = []
@@ -119,11 +121,17 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   private let displayPositions: CourierDisplayPositions
   private let hoverDelay: TimeInterval
   private let folderHoverDelay: TimeInterval
+  @Published private(set) var choosingArrow = false
+  @Published private(set) var isArrowPreview = false
+  var quiverAnchor: (() -> CGRect?)?
+  var quiverPanelPointer: ((Bool) -> Void)?
+  private var quiverPointerInside = false
+  var presentationFrame: CGRect? { panel?.isVisible == true ? panel?.frame : nil }
   private var menuAnchor: CGRect?
   private var restoredAnchor: CGPoint?
   private var placementScreen: CGRect?
   private var placementPhysicalScreen: CGRect?
-  var primaryBox: ParcelBox? { store?.current ?? store?.boxes.first }
+  var primaryBox: ParcelBox? { store?.rankedBoxes.first }
   var idleTimeout: TimeInterval {
     get {
       let value = defaults.object(forKey: "parcel.idleTimeout") as? Double ?? 30
@@ -234,16 +242,22 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     let visibleScreen = placementScreen ?? panel?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
     // The notch occupies the menu bar itself; visibleFrame starts below it.
     let screen = parkedInMenuBar ? (placementPhysicalScreen ?? panel?.screen?.frame ?? NSScreen.main?.frame ?? visibleScreen) : visibleScreen
+    if expanded, let anchor = menuAnchor, quiverAnchor != nil {
+      let bounds = NSScreen.screens.first { $0.frame.intersects(anchor) }?.visibleFrame ?? visibleScreen
+      let size = CGSize(width: 460 * interfaceScale, height: 340 * interfaceScale)
+      let frame = QuiverSurface.panel(at: anchor, within: bounds, size: size)
+      return CourierPlacement(frame: frame, courier: .zero, pane: CGRect(origin: .zero, size: frame.size), side: .bottom)
+    }
     if parkedInMenuBar && !expanded {
       let ambientCount = NotchWidgetStore.shared.pinned.count + NotchToolStore.shared.pinnedApps.count
-      let size = CGSize(width: min(screen.width - 24, CGFloat(160 + ambientCount * 29) * interfaceScale),
+      let size = CGSize(width: min(screen.width - 24, CGFloat(160 + min(3, ambientCount) * 29) * interfaceScale),
         height: 36 * interfaceScale)
       let frame = CGRect(x: screen.midX - size.width / 2, y: screen.maxY - size.height,
         width: size.width, height: size.height)
       return CourierPlacement(frame: frame, courier: CGRect(origin: .zero, size: size), pane: nil, side: .bottom)
     }
     if parkedInMenuBar && expanded {
-      if toolsVisible {
+      if toolsVisible && activeModule != .parcel {
         let size = CGSize(width: min(460, max(410, screen.width * 0.24)),
           height: min(340, screen.height * 0.4))
         let frame = CGRect(x: screen.midX - size.width / 2, y: screen.maxY - size.height,
@@ -395,15 +409,22 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     })
     if let monitor = NSEvent.addGlobalMonitorForEvents(
       matching: [.leftMouseDown, .rightMouseDown],
-      handler: { [weak self] _ in Task { @MainActor in self?.collapseForOutsideClick(at: NSEvent.mouseLocation) } }) {
+      handler: { [weak self] event in
+        let timestamp = event.timestamp
+        Task { @MainActor in self?.collapseForOutsideClick(at: NSEvent.mouseLocation, timestamp: timestamp) }
+      }) {
       eventMonitors.append(monitor)
     }
     if let monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] event in
       // A local click belongs to Parcel (the notch, a child tool, Settings, or a native menu).
       // Do not infer that it was outside from the global cursor position: keyboard and
       // Accessibility-driven activation can legitimately click without moving the pointer.
+      if event.window === self?.panel { self?.isArrowPreview = false }
       self?.recordActivity()
       return event
+    }) { eventMonitors.append(monitor) }
+    if let monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
+      self?.handleEditorShortcut(event) == true ? nil : event
     }) { eventMonitors.append(monitor) }
     DragMonitor.shared.start()
     parkedInMenuBar = true
@@ -433,6 +454,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   }
 
   func restoreResident() {
+    if quiverAnchor != nil { hideIsland(); return }
     parkedInMenuBar = true
     guard isPersistent, isEnabled, let store else { hideIsland(); return }
     closeFilePreview()
@@ -483,6 +505,8 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     closeFilePreview()
     if !visible { summon() }
     activeModule = module
+    panel?.title = "Skippy · " + module.title
+    choosingArrow = false
     toolsVisible = true
     showingFolder = false
     showingBin = false
@@ -495,7 +519,13 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     beginDrop(into: primaryBox?.id, openFiles: showingFolder)
   }
   func showChoices() {
-    showModule(.dashboard)
+    if parkedInMenuBar || quiverAnchor != nil { showModule(.dashboard); return }
+    closeFilePreview()
+    focusedBox = nil
+    showingFolder = false
+    toolsVisible = false
+    expand()
+    fitContents()
   }
   func presentMediaEditor(itemID: UUID? = nil) {
     guard let store, !store.busy, !receiving else { return }
@@ -534,7 +564,8 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   }
   func summon() {
     guard !moving, !receiving, store?.busy != true else { return }
-    menuAnchor = nil
+    choosingArrow = false; isArrowPreview = false
+    menuAnchor = quiverAnchor?()
     parkedInMenuBar = true
     waitForPointerExit = false
     show(expand: true)
@@ -551,6 +582,47 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     if let host { panel?.makeFirstResponder(host) }
     Toaster.shared.tip("notch-pages", "Scroll for the next page, / to search, and Tab to move through widgets.")
   }
+  func openArrow(_ module: NotchModule, at anchor: CGRect?) {
+    if visible && expanded && activeModule == module && toolsVisible && !isArrowPreview {
+      dismiss(); return
+    }
+    presentArrow(module, at: anchor, preview: false)
+    focusForKeyboard()
+  }
+
+  func previewArrow(_ module: NotchModule, at anchor: CGRect) {
+    guard !isVisible || !expanded || isArrowPreview else { return }
+    presentArrow(module, at: anchor, preview: true)
+  }
+
+  private func presentArrow(_ module: NotchModule, at anchor: CGRect?, preview: Bool) {
+    guard !moving, !receiving, store?.busy != true else { return }
+    let wasVisible = visible
+    menuAnchor = anchor ?? quiverAnchor?()
+    parkedInMenuBar = true
+    if !wasVisible { show(expand: true) }
+    showModule(module)
+    isArrowPreview = preview
+    if !wasVisible, let panel, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+      panel.alphaValue = 0
+      NSAnimationContext.runAnimationGroup { context in
+        context.duration = 0.12
+        panel.animator().alphaValue = 1
+      }
+    }
+  }
+
+  func dismissArrowPreview() {
+    if isArrowPreview { dismiss() }
+  }
+
+  func chooseArrow() {
+    isArrowPreview = false
+    if !toolsVisible { showModule(.dashboard) }
+    focusForKeyboard()
+    choosingArrow = true
+  }
+  func cancelChoosingArrow() { choosingArrow = false; focusForKeyboard() }
   func focusForKeyboard() {
     NSApp.activate(ignoringOtherApps: true)
     panel?.makeKey()
@@ -565,7 +637,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     }
   }
   private func topEdgeHover(at point: CGPoint) {
-    guard parkedInMenuBar, !visible, !DragMonitor.shared.isDragging,
+    guard quiverAnchor == nil, parkedInMenuBar, !visible, !DragMonitor.shared.isDragging,
       let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }) else {
       topEdgeWork?.cancel(); topEdgeWork = nil; topEdgeLatched = false
       return
@@ -597,6 +669,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       panel?.orderFrontRegardless()
     } else {
       parkedInMenuBar = true
+      menuAnchor = quiverAnchor?()
       show(expand: true)
       openPrimaryFiles()
       animateNotchIn()
@@ -727,6 +800,10 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   private func trackPointer() {
     guard let panel, visible, !moving else { return }
     let inside = panel.frame.contains(NSEvent.mouseLocation)
+    if quiverPointerInside != inside {
+      quiverPointerInside = inside
+      quiverPanelPointer?(inside)
+    }
     if waitForPointerExit {
       if !inside { waitForPointerExit = false }
       pointerInside = inside
@@ -924,16 +1001,56 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       reveal += 1
     } catch { report(error.localizedDescription) }
   }
+  private func handleEditorShortcut(_ event: NSEvent) -> Bool {
+    guard event.window === panel, let editor = panel?.firstResponder as? NSTextView,
+          event.modifierFlags.intersection([.command, .shift, .control, .option]) == .command else { return false }
+    switch event.charactersIgnoringModifiers?.lowercased() {
+    case "a": editor.selectAll(nil)
+    case "c": editor.copy(nil)
+    case "x" where editor.isEditable: editor.cut(nil)
+    case "v" where editor.isEditable: editor.paste(nil)
+    default: return false
+    }
+    return true
+  }
+
   @discardableResult func handleCourierKey(_ event: NSEvent) -> Bool {
     guard visible, expanded, !showingBin, !mediaEditor,
       let command = CourierShortcutStore.shared.command(for: event) else { return false }
-    if toolsVisible {
+    if choosingArrow {
+      if command == .close || command == .chooseArrow { cancelChoosingArrow(); return true }
+      return false
+    }
+    switch command {
+    case .browsePins:
+      SkippyQuiver.shared.beginKeyboardBrowsing()
+      return true
+    case .cycleTheme:
+      SkinStore.shared.skin = SkinStore.shared.skin == .night ? .kraft : .night
+      return true
+    case .cycleEmblem:
+      let icons = QuiverEmblem.allCases
+      let index = icons.firstIndex(of: SkippyQuiver.shared.emblem) ?? 0
+      SkippyQuiver.shared.emblem = icons[(index + 1) % icons.count]
+      return true
+    case .chooseArrow: chooseArrow(); return true
+    default: break
+    }
+    if panel?.firstResponder is NSTextView {
       switch command {
+      case .search, .filters, .nextFile, .previousFile, .open, .copy, .paste: return false
+      default: break
+      }
+    }
+    if toolsVisible {
+      if (command == .copy || command == .paste) && activeModule != .parcel && activeModule != .dashboard { return false }
+      switch command {
+      case .chooseArrow, .cycleTheme, .cycleEmblem, .browsePins: break
       case .nextFile:
-        if activeModule != .dashboard { showModule(.dashboard) }
+        guard activeModule == .dashboard else { return false }
         NotificationCenter.default.post(name: .parcelsNextWidgetPage, object: nil)
       case .previousFile:
-        if activeModule != .dashboard { showModule(.dashboard) }
+        guard activeModule == .dashboard else { return false }
         NotificationCenter.default.post(name: .parcelsPreviousWidgetPage, object: nil)
       case .search: showModule(.search)
       case .filters:
@@ -948,14 +1065,16 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       case .paste:
         focusedBox = primaryBox?.id
         pasteFiles()
-      case .clipboard: showModule(.clipboard)
+      case .clipboard: showModule(activeModule == .clipboard ? .dashboard : .clipboard)
       case .tools: showModule(.dashboard)
       case .processMedia:
         focusedBox = primaryBox?.id
         presentMediaEditor()
       case .ocr: showModule(.extract)
       case .settings: AppController.shared.openPreferences()
-      case .open: showModule(.parcel)
+      case .open:
+        guard activeModule == .dashboard || activeModule == .parcel else { return false }
+        showModule(.parcel)
       case .close: dismiss()
       }
       return true
@@ -985,6 +1104,8 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     if command == .paste, panel?.firstResponder is NSTextView { return false }
     recordActivity()
     switch command {
+    case .cycleTheme, .cycleEmblem, .browsePins: break
+    case .chooseArrow: chooseArrow()
     case .nextFile: moveKeyboardFocus(1)
     case .previousFile: moveKeyboardFocus(-1)
     case .search, .filters: break
@@ -1262,8 +1383,8 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     menu.addItem(CourierMenuAction("Open files", action: openPrimaryFiles))
     menu.addItem(CourierMenuAction("Open Settings", action: openMainApp))
     menu.addItem(CourierMenuAction("Courier settings…") { AppController.shared.openPreferences() })
-    menu.addItem(CourierMenuAction("Collapse Parcels", action: parkInMenuBar))
-    menu.addItem(CourierMenuAction("Quit Parcel") { NSApp.terminate(nil) })
+    menu.addItem(CourierMenuAction("Collapse Skippy", action: parkInMenuBar))
+    menu.addItem(CourierMenuAction("Quit Skippy") { NSApp.terminate(nil) })
     return menu
   }
   func pack() {
@@ -1358,6 +1479,8 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     guard !moving, !receiving, store?.busy != true, store?.phase != .receiving,
       !DragMonitor.shared.isSending else { return }
     closeFilePreview()
+    isArrowPreview = false; choosingArrow = false
+    if quiverPointerInside { quiverPointerInside = false; quiverPanelPointer?(false) }
     awaitingSummonedPointerEntry = false
     hideClipboard()
     hideSearch()
@@ -1378,6 +1501,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     hasReceipt = false
     failed = false
     statusVisible = false
+    if quiverAnchor != nil { hideIsland(); return }
     if parkedInMenuBar, isPersistent, isEnabled {
       expanded = false
       visible = true
@@ -1431,7 +1555,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       self.idleWork = nil
       guard self.visible, self.idleTimeout > 0 else { return }
       let usingAuxiliaryPanel = self.clipboardPinnedOpen || self.searchPinnedOpen || self.optionsPinnedOpen
-      if self.receiving || self.store?.busy == true || self.confirmingAction || self.moving || !self.trackedMenus.isEmpty || DragMonitor.shared.isSending || self.filePreview.isInsidePreview || usingAuxiliaryPanel {
+      if self.receiving || self.store?.busy == true || self.confirmingAction || self.selectingOnScreen || self.moving || !self.trackedMenus.isEmpty || DragMonitor.shared.isSending || self.filePreview.isInsidePreview || usingAuxiliaryPanel {
         self.recordActivity(); return
       }
       let remaining = self.idleTimeout - (ProcessInfo.processInfo.systemUptime - self.lastActivity)
@@ -1440,6 +1564,23 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     idleWork = work
     DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
   }
+  /// A system picker owns the next click. Keep the tool's contents and uncover the target pixel.
+  func beginScreenSelection() -> @MainActor () -> Void {
+    guard isVisible else { return {} }
+    selectingOnScreen = true
+    isArrowPreview = false
+    let stamp = generation
+    panel?.orderOut(nil)
+    return { [weak self] in
+      guard let self else { return }
+      self.selectingOnScreen = false
+      self.selectionEndedAt = ProcessInfo.processInfo.systemUptime
+      guard self.visible, self.generation == stamp else { return }
+      self.panel?.orderFrontRegardless()
+      self.focusForKeyboard()
+    }
+  }
+
   func confirmationChanged(_ presented: Bool) {
     recordActivity()
     confirmingAction = presented
@@ -1515,12 +1656,13 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   private func topCenterAnchor(in frame: CGRect) -> CGPoint {
     CGPoint(x: frame.midX + physicalCourierSize.width / 2, y: frame.maxY - 12)
   }
-  private func collapseForOutsideClick(at point: CGPoint) {
+  private func collapseForOutsideClick(at point: CGPoint, timestamp: TimeInterval) {
+    guard !selectingOnScreen, timestamp > selectionEndedAt else { return }
     guard visible, expanded, !moving, !confirmingAction, trackedMenus.isEmpty,
       store?.busy != true, !receiving else { return }
     // Tool modules are explicitly opened, not hover previews. Keep them pinned until
     // Close/Escape or the configured idle policy retracts the notch.
-    if toolsVisible { return }
+    if toolsVisible && quiverAnchor == nil { return }
     let insideCourier = panel?.frame.contains(point) == true
     let insidePreview = sidePreview.panel?.frame.contains(point) == true
     let insideClipboard = clipboard.panel?.frame.contains(point) == true
@@ -1628,7 +1770,7 @@ struct DropPopupView: View {
     }
     if notchTools.mediaIsPlaying { return notchTools.mediaTitle }
     if notchTools.isPlaying { return notchTools.audioTitle }
-    return "Parcels"
+    return "Skippy"
   }
 
   var body: some View {
@@ -1637,7 +1779,7 @@ struct DropPopupView: View {
       if let pane = layout.pane {
         ZStack {
           Color.clear.contentShape(Rectangle()).onTapGesture(count: 2, perform: shelf.openMainApp)
-            .accessibilityLabel("Open Parcel settings")
+            .accessibilityLabel("Open Skippy settings")
           Group {
           if shelf.toolsVisible { NotchToolsView(shelf: shelf, skin: activeSkin) }
           else if shelf.showingBin { bin }
@@ -1660,20 +1802,22 @@ struct DropPopupView: View {
             ZStack {
               if reduceTransparency || solidSurface { palette.paper }
               else { CourierGlass(); palette.paper.opacity(activeSkin == .night ? 0.58 : 0.35) }
-            }.clipShape(ParcelNotchShape(attachedToMenuBar: shelf.parkedInMenuBar))
+            }.clipShape(ParcelNotchShape(attachedToMenuBar: shelf.parkedInMenuBar && shelf.quiverAnchor == nil))
           }
         }
         .overlay {
           if showsPaneSurface {
-            ParcelNotchShape(attachedToMenuBar: shelf.parkedInMenuBar)
+            ParcelNotchShape(attachedToMenuBar: shelf.parkedInMenuBar && shelf.quiverAnchor == nil)
               .stroke(palette.line, lineWidth: strongBorder || contrast == .increased ? 2 : 0.8)
           }
         }
         .position(x: pane.midX, y: layout.frame.height - pane.midY)
         .transition(.opacity.combined(with: .offset(x: layout.side == .left ? 8 : -8)))
       }
-      courier.frame(width: layout.courier.width, height: layout.courier.height)
-        .position(x: layout.courier.midX, y: layout.frame.height - layout.courier.midY)
+      if !layout.courier.isEmpty {
+        courier.frame(width: layout.courier.width, height: layout.courier.height)
+          .position(x: layout.courier.midX, y: layout.frame.height - layout.courier.midY)
+      }
     }
     .frame(width: layout.frame.width, height: layout.frame.height)
     .scaleEffect(shelf.interfaceScale, anchor: .topLeading)
@@ -1745,7 +1889,7 @@ struct DropPopupView: View {
         Button("Open files", action: shelf.openPrimaryFiles).disabled(locked)
         Button("Open Settings", action: shelf.openMainApp).disabled(locked)
         Button("Courier settings…") { AppController.shared.openPreferences() }
-        Button("Quit Parcel") { NSApp.terminate(nil) }
+        Button("Quit Skippy") { NSApp.terminate(nil) }
       }
     } else if !shelf.expanded {
       HStack(spacing: 4) {
@@ -1767,7 +1911,7 @@ struct DropPopupView: View {
             hover: shelf.courierHoverChanged, failure: { _ in }, beginDrop: shelf.beginPrimaryDrop,
             tracksPointer: true, dragHover: shelf.dragHoverChanged, doubleTap: shelf.openMainApp,
             courierMenu: shelf.contextMenu, archiveForDrag: shelf.preparePrimaryArchive)
-            .accessibilityLabel("Parcels. Hover to open widgets, or drop files into your parcel.")
+            .accessibilityLabel("Skippy. Hover to open widgets, or drop files into your parcel.")
         }
         if !notchWidgets.pinned.isEmpty || !notchTools.pinnedApps.isEmpty {
           ScrollView(.horizontal, showsIndicators: false) {

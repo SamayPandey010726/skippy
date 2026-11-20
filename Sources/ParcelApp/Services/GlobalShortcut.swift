@@ -132,7 +132,7 @@ struct GlobalShortcut: Equatable, Sendable {
     }
     shortcut = candidate
     candidate.save(defaults: defaults)
-    message = "Saved — \(candidate.spokenName) now opens Parcels."
+    message = "Saved — \(candidate.spokenName) now opens Skippy."
     return true
   }
 

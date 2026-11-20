@@ -2,10 +2,15 @@ import AppKit
 import Carbon
 
 enum CourierCommand: String, CaseIterable, Identifiable {
-  case nextFile, previousFile, search, filters, pack, copy, paste, clipboard, tools, processMedia, ocr, settings, open, close
+  case chooseArrow, nextFile, previousFile, search, filters, pack, copy, paste, clipboard, tools, processMedia, ocr, settings, open, close
+  case cycleTheme, cycleEmblem, browsePins
   var id: String { rawValue }
   var title: String {
     switch self {
+    case .browsePins: return "Browse pinned arrows"
+    case .cycleTheme: return "Switch light / dark"
+    case .cycleEmblem: return "Change launcher icon"
+    case .chooseArrow: return "Find an arrow"
     case .nextFile: return "Next widget page"
     case .previousFile: return "Previous widget page"
     case .search: return "Search"
@@ -19,11 +24,15 @@ enum CourierCommand: String, CaseIterable, Identifiable {
     case .ocr: return "Copy image text (OCR)"
     case .settings: return "Open settings"
     case .open: return "Open focused file"
-    case .close: return "Close Parcels"
+    case .close: return "Close Skippy"
     }
   }
   var defaultBinding: CourierKeyBinding {
     switch self {
+    case .browsePins: return .init(keyCode: UInt16(kVK_ANSI_B), modifiers: NSEvent.ModifierFlags([.option, .shift]).rawValue, keyLabel: "B")
+    case .cycleTheme: return .init(keyCode: UInt16(kVK_ANSI_T), modifiers: NSEvent.ModifierFlags([.option, .shift]).rawValue, keyLabel: "T")
+    case .cycleEmblem: return .init(keyCode: UInt16(kVK_ANSI_I), modifiers: NSEvent.ModifierFlags([.option, .shift]).rawValue, keyLabel: "I")
+    case .chooseArrow: return .init(keyCode: UInt16(kVK_ANSI_K), modifiers: NSEvent.ModifierFlags.command.rawValue, keyLabel: "K")
     case .nextFile: return .init(keyCode: UInt16(kVK_Tab), modifiers: 0, keyLabel: "Tab")
     case .previousFile: return .init(keyCode: UInt16(kVK_Tab), modifiers: NSEvent.ModifierFlags.shift.rawValue, keyLabel: "Tab")
     case .search: return .init(keyCode: UInt16(kVK_ANSI_Slash), modifiers: 0, keyLabel: "/")
@@ -92,12 +101,15 @@ struct CourierKeyBinding: Codable, Equatable {
     CourierCommand.allCases.first { binding(for: $0).matches(event) }
   }
   @discardableResult func update(_ command: CourierCommand, binding: CourierKeyBinding) -> Bool {
-    guard !bindings.contains(where: { $0.key != command && $0.value == binding }) else { return false }
+    guard !bindings.contains(where: { $0.key != command && $0.value.keyCode == binding.keyCode && $0.value.modifiers == binding.modifiers }) else { return false }
     bindings[command] = binding
     if let data = try? JSONEncoder().encode(binding) { defaults.set(data, forKey: key(command)) }
     return true
   }
   func reset(_ command: CourierCommand) { _ = update(command, binding: command.defaultBinding) }
-  func resetAll() { CourierCommand.allCases.forEach(reset) }
+  func resetAll() {
+    for command in CourierCommand.allCases { defaults.removeObject(forKey: key(command)) }
+    bindings = Dictionary(uniqueKeysWithValues: CourierCommand.allCases.map { ($0, $0.defaultBinding) })
+  }
   private func key(_ command: CourierCommand) -> String { "parcel.courierShortcut." + command.rawValue }
 }

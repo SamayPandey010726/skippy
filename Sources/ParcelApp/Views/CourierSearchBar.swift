@@ -18,7 +18,7 @@ struct FileFilterMenu: View {
       Picker("File size", selection: $store.fileSizeFilter) {
         ForEach(FileSearchSize.allCases, id: \.self) { Text($0.label).tag($0) }
       }
-      Picker("Added to Parcel", selection: $store.fileAddedFilter) {
+      Picker("Added to Skippy", selection: $store.fileAddedFilter) {
         ForEach(FileSearchAdded.allCases, id: \.self) { Text($0.label).tag($0) }
       }
       Divider()
@@ -38,7 +38,7 @@ struct CourierSearchBar: View {
         Image(systemName: "magnifyingglass").font(.system(size: 11)).accessibilityHidden(true)
         TextField("Search files · e.g. excel or numbers", text: $store.searchText)
           .textFieldStyle(.plain).font(.system(size: 11)).focused($focused).accessibilityLabel("Search files in this parcel")
-          .help("Try ‘File uploaded on 17th’, ‘excel or numbers’, ‘pdf over 10 MB’, or a filename. Dates mean added to Parcel; an ordinal day uses this month.")
+          .help("Try ‘File uploaded on 17th’, ‘excel or numbers’, ‘pdf over 10 MB’, or a filename. Dates mean added to Skippy; an ordinal day uses this month.")
           .onExitCommand(perform: store.clearFileSearch)
         if store.isSearching {
           Button(action: store.clearFileSearch) { Image(systemName: "xmark.circle.fill") }

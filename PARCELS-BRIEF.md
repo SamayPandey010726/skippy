@@ -1,3 +1,5 @@
+> This is the historical Parcels handoff. The current product and feature inventory are in [the Skippy brief](SKIPPY-BRIEF.md).
+
 # Parcels — product and development brief
 
 Updated 19 November 2026. This is the current handoff for the work in this repository. Earlier documents describe previous product directions and may no longer match the current notch design.

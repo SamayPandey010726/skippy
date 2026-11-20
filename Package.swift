@@ -8,7 +8,7 @@ var targets: [Target] = [
     .testTarget(name: "ParcelCoreTests", dependencies: ["ParcelCore", .product(name: "ZIPFoundation", package: "ZIPFoundation")])
 ]
 #if os(macOS)
-products.append(.executable(name: "Parcel", targets: ["ParcelApp"]))
+products.append(.executable(name: "Skippy", targets: ["ParcelApp"]))
 targets.append(.executableTarget(name: "ParcelApp", dependencies: ["ParcelCore", .product(name: "ZIPFoundation", package: "ZIPFoundation")], resources: [.process("Resources")]))
 targets.append(.testTarget(name: "ParcelAppTests", dependencies: ["ParcelApp", "ParcelCore", .product(name: "ZIPFoundation", package: "ZIPFoundation")]))
 #endif

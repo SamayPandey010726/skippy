@@ -90,8 +90,8 @@ struct TinyLeaf: Shape {
 struct BrandMark: View {
   var body: some View {
     HStack(spacing: 9) {
-      Image(systemName: "bag.fill").font(.system(size: 19)).foregroundStyle(Ink.green)
-      Text("parcel").font(.custom(Ink.serif, size: 27)).tracking(-1).foregroundStyle(Ink.green)
+      Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 32, height: 32).accessibilityHidden(true)
+      Text("Skippy").font(.custom(Ink.serif, size: 27)).tracking(-1).foregroundStyle(Ink.green)
     }
   }
 }

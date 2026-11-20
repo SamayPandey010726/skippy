@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 import CoreImage.CIFilterBuiltins
 import EventKit
+import PDFKit
 import SwiftUI
 import UniformTypeIdentifiers
 import UserNotifications
@@ -20,8 +21,8 @@ enum NotchModule: String, CaseIterable, Identifiable {
   var id: String { rawValue }
   var title: String {
     switch self {
-    case .dashboard: "Parcels"
-    case .parcel: "Parcel"
+    case .dashboard: "Skippy"
+    case .parcel: "File Shelf"
     case .clipboard: "Clipboard"
     case .extract: "Extract text"
     case .color: "Pick colour"
@@ -130,7 +131,6 @@ struct NotchMacro: Codable, Identifiable {
         NotchMacro(name: "Open Calculator", command: "open -a Calculator")
       ]
     super.init()
-    refreshDownloads()
   }
 
   func startTimer() {
@@ -182,7 +182,7 @@ struct NotchMacro: Codable, Identifiable {
   private func scheduleTimerNotification() {
     guard let end = timerEnd else { return }
     let content = UNMutableNotificationContent()
-    content.title = "Parcel timer"
+    content.title = "Skippy timer"
     content.body = "Time is up."
     content.sound = .default
     let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, end.timeIntervalSinceNow), repeats: false)
@@ -191,15 +191,21 @@ struct NotchMacro: Codable, Identifiable {
   }
 
   func pickColour() {
+    let restore = DropPopupController.shared.beginScreenSelection()
     NSColorSampler().show { [weak self] colour in
-      guard let colour = colour?.usingColorSpace(.sRGB) else { return }
-      let hex = String(format: "#%02X%02X%02X", Int(colour.redComponent * 255),
-        Int(colour.greenComponent * 255), Int(colour.blueComponent * 255))
       Task { @MainActor in
+        defer { restore() }
+        guard let colour, let hex = Self.hexValue(for: colour) else { return }
         self?.pickedColour = hex
         self?.copyText(hex, label: "Colour")
       }
     }
+  }
+
+  nonisolated static func hexValue(for colour: NSColor) -> String? {
+    guard let rgb = colour.usingColorSpace(.sRGB) else { return nil }
+    func byte(_ fraction: CGFloat) -> Int { Int((min(1, max(0, fraction)) * 255).rounded()) }
+    return String(format: "#%02X%02X%02X", byte(rgb.redComponent), byte(rgb.greenComponent), byte(rgb.blueComponent))
   }
 
   func extractFromClipboard() {
@@ -248,12 +254,16 @@ struct NotchMacro: Codable, Identifiable {
   func captureAnother() {
     captureScreenArea { [weak self] url in
       defer { try? FileManager.default.removeItem(at: url) }
-      guard let data = try? Data(contentsOf: url), let image = NSImage(data: data), image.isValid else {
-        self?.status = "Could not read the screenshot"; return
-      }
-      self?.captures.append(image)
-      self?.status = "Screenshot added"
+      self?.addCapture(from: url)
     }
+  }
+
+  func addCapture(from url: URL) {
+    guard let data = try? Data(contentsOf: url), let image = NSImage(data: data), image.isValid else {
+      status = "Could not read the screenshot"; return
+    }
+    captures.append(image)
+    status = "Screenshot added"
   }
 
   func captureForLens() {
@@ -295,11 +305,13 @@ struct NotchMacro: Codable, Identifiable {
 
   private func captureScreenArea(_ completion: @escaping (URL) -> Void) {
     let url = FileManager.default.temporaryDirectory.appendingPathComponent("parcels-capture-\(UUID().uuidString).png")
+    let restore = DropPopupController.shared.beginScreenSelection()
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
     process.arguments = ["-i", "-x", url.path]
     process.terminationHandler = { [weak self] process in
       DispatchQueue.main.async {
+        restore()
         guard process.terminationStatus == 0, FileManager.default.fileExists(atPath: url.path) else {
           try? FileManager.default.removeItem(at: url)
           self?.status = "Screen selection cancelled or unavailable"
@@ -309,7 +321,7 @@ struct NotchMacro: Codable, Identifiable {
       }
     }
     do { try process.run() }
-    catch { status = "Could not start screen capture" }
+    catch { restore(); status = "Could not start screen capture" }
   }
 
   func chooseImageForOCR() {
@@ -372,7 +384,16 @@ struct NotchMacro: Codable, Identifiable {
     }
   }
 
-  private func readQR(at url: URL) {
+  func scanClipboardQR() {
+    guard let image = NSImage(pasteboard: .general), let data = image.tiffRepresentation else {
+      status = "Copy an image containing a QR code first"; return
+    }
+    readQR(using: VNImageRequestHandler(data: data))
+  }
+
+  private func readQR(at url: URL) { readQR(using: VNImageRequestHandler(url: url)) }
+
+  private func readQR(using handler: VNImageRequestHandler) {
     let request = VNDetectBarcodesRequest { [weak self] request, _ in
       let value = (request.results as? [VNBarcodeObservation])?.first?.payloadStringValue
       Task { @MainActor in
@@ -382,16 +403,21 @@ struct NotchMacro: Codable, Identifiable {
       }
     }
     request.symbologies = [.qr]
-    do { try VNImageRequestHandler(url: url).perform([request]) }
+    do { try handler.perform([request]) }
     catch { status = "Could not read that image" }
   }
 
   func searchGoogle(_ query: String) {
+    if let url = Self.searchURL(for: query) { NSWorkspace.shared.open(url) }
+  }
+
+  static func searchURL(for query: String) -> URL? {
     let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !value.isEmpty else { return }
+    guard !value.isEmpty else { return nil }
     var components = URLComponents(string: "https://www.google.com/search")!
     components.queryItems = [URLQueryItem(name: "q", value: value)]
-    if let url = components.url { NSWorkspace.shared.open(url) }
+    components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+    return components.url
   }
 
   func addMacro(name: String, command: String) {
@@ -450,7 +476,7 @@ struct NotchMacro: Codable, Identifiable {
     let panel = NSOpenPanel()
     panel.allowedContentTypes = [.applicationBundle]
     panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
-    panel.message = "Choose an app to pin to Parcels"
+    panel.message = "Choose an app to pin to Skippy"
     guard panel.runModal() == .OK, let url = panel.url,
       let bundle = Bundle(url: url), let id = bundle.bundleIdentifier else { return }
     guard !pinnedApps.contains(where: { $0.bundleIdentifier == id }) else { status = "App is already pinned"; return }
@@ -479,18 +505,21 @@ struct NotchMacro: Codable, Identifiable {
     }
   }
 
-  func refreshDownloads() {
-    guard let folder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first,
-      let urls = try? FileManager.default.contentsOfDirectory(at: folder,
-        includingPropertiesForKeys: [.contentModificationDateKey, .isDirectoryKey],
-        options: [.skipsHiddenFiles]) else { downloads = []; return }
-    downloads = urls.filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) != true }
-      .sorted {
-        let left = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-        let right = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-        return left > right
-      }
-      .prefix(12).map { $0 }
+  func refreshDownloads() async {
+    guard let folder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else { return }
+    let files = await Task.detached(priority: .utility) { Self.recentDownloads(in: folder) }.value
+    if !Task.isCancelled { downloads = files }
+  }
+
+  nonisolated static func recentDownloads(in folder: URL) -> [URL] {
+    let keys: Set<URLResourceKey> = [.contentModificationDateKey, .isDirectoryKey]
+    let urls = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: Array(keys),
+                                                              options: [.skipsHiddenFiles])) ?? []
+    let dated: [(URL, Date)] = urls.compactMap { url in
+      guard let info = try? url.resourceValues(forKeys: keys), info.isDirectory == false else { return nil }
+      return (url, info.contentModificationDate ?? .distantPast)
+    }
+    return dated.sorted { $0.1 > $1.1 }.prefix(12).map { $0.0 }
   }
 
   func openDownloads() {
@@ -515,18 +544,24 @@ struct NotchMacro: Codable, Identifiable {
     let panel = NSOpenPanel()
     panel.allowedContentTypes = [.audio]
     guard panel.runModal() == .OK, let url = panel.url else { return }
+    playAudio(at: url)
+  }
+
+  func playAudio(at url: URL) {
     do {
-      player = try AVAudioPlayer(contentsOf: url)
+      let opened = try AVAudioPlayer(contentsOf: url)
+      player = opened
       player?.delegate = self
       audioTitle = url.deletingPathExtension().lastPathComponent
-      player?.play(); isPlaying = true; status = "Playing"
+      isPlaying = opened.play(); status = isPlaying ? "Playing" : "Audio output unavailable"
+      if mediaSource == nil { mediaTitle = audioTitle; mediaArtist = "Local audio" }
     } catch { status = "That audio file could not be played" }
   }
 
   func toggleAudio() {
     guard let player else { chooseAudio(); return }
     if player.isPlaying { player.pause(); isPlaying = false; status = "Paused" }
-    else { player.play(); isPlaying = true; status = "Playing" }
+    else { isPlaying = player.play(); status = isPlaying ? "Playing" : "Audio output unavailable" }
   }
 
   /// Music and Spotify expose stable AppleScript dictionaries; this avoids private MediaRemote APIs.
@@ -545,7 +580,7 @@ struct NotchMacro: Codable, Identifiable {
       } else {
         mediaSource = nil; mediaIsPlaying = false
         mediaTitle = player == nil ? "Nothing playing" : audioTitle
-        mediaArtist = player == nil ? "Music and Spotify appear here" : "Playing in Parcel"
+        mediaArtist = player == nil ? "Music and Spotify appear here" : "Playing in Skippy"
       }
     }
   }
@@ -643,39 +678,77 @@ struct NotchToolsView: View {
   @ObservedObject private var recent = RecentActionStore.shared
   @EnvironmentObject private var store: ParcelStore
   var skin: ParcelSkin
+  @ObservedObject private var shortcuts = CourierShortcutStore.shared
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @State private var feedback: String?
+  @State private var feedbackRevision = 0
   @State private var qrInput = ""
   @State private var webQuery = ""
   @State private var calculation = ""
   @State private var showingMacros = false
   @State private var macroName = ""
   @State private var macroCommand = ""
+  @State private var macReadings: MacReadings?
+  @State private var documentFonts = ""
+  @State private var deliveredAlerts = ""
   @State private var dashboardPage: Int? = 0
 
   var body: some View {
     VStack(spacing: 7) {
       header
       Group {
-        if shelf.activeModule == .dashboard { widgetDashboard }
+        if shelf.choosingArrow { ArrowFinder(shelf: shelf) }
+        else if shelf.activeModule == .dashboard { widgetDashboard }
         else { moduleBody }
       }
         .id(shelf.activeModule)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .transition(.opacity.combined(with: .offset(y: 4)))
       HStack {
-        Circle().fill(skin.palette.accent).frame(width: 5, height: 5)
-        Text(tools.status).font(.system(size: 8.5, weight: .medium)).foregroundStyle(.secondary).lineLimit(1)
+        if let feedback {
+          Text(feedback).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+        }
         Spacer()
-        Text("⌥T").font(.system(size: 8, weight: .semibold, design: .rounded)).foregroundStyle(.secondary)
+        if shelf.choosingArrow {
+          Text("↑ ↓  Select     ↩  Open     Esc  Back").font(.system(size: 11)).foregroundStyle(.secondary)
+        } else {
+          Button(action: shelf.chooseArrow) {
+            Label("Find an arrow", systemImage: "magnifyingglass")
+            Text(shortcuts.binding(for: .chooseArrow).displayName).monospaced()
+          }
+          .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(.secondary)
+          .accessibilityLabel("Find an arrow")
+        }
+
       }
     }
     .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 7)
-    .animation(Motion.layoutRelayout, value: shelf.activeModule)
-    .task(id: shelf.activeModule) {
-      if shelf.activeModule == .dashboard || shelf.activeModule == .downloads { tools.refreshDownloads() }
+    .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: shelf.activeModule)
+    .onReceive(tools.$status.dropFirst()) { status in
+      feedback = status
+      feedbackRevision += 1
+    }
+    .task(id: feedbackRevision) {
+      guard feedback != nil else { return }
+      do { try await Task.sleep(for: .seconds(3)) } catch { return }
+      feedback = nil
+    }
+    .task(id: shelf.activeModule.rawValue + (shelf.isArrowPreview ? "-preview" : "-open")) {
+      if shelf.activeModule == .system {
+        var last: MacReadings.Sample?
+        while !Task.isCancelled {
+          let current = MacReadings.Sample()
+          macReadings = MacReadings(current, previous: last)
+          last = current
+          try? await Task.sleep(for: .seconds(2))
+        }
+        return
+      }
+      if shelf.activeModule == .dashboard || shelf.activeModule == .downloads { await tools.refreshDownloads() }
       if shelf.activeModule == .calendar, EKEventStore.authorizationStatus(for: .event) == .fullAccess {
         tools.refreshCalendar()
       }
-      guard shelf.activeModule == .dashboard || shelf.activeModule == .music else { return }
+      guard !shelf.isArrowPreview, shelf.activeModule == .dashboard || shelf.activeModule == .music else { return }
       while !Task.isCancelled {
         tools.refreshMedia()
         try? await Task.sleep(for: .seconds(2))
@@ -685,17 +758,19 @@ struct NotchToolsView: View {
 
   private var header: some View {
     HStack(spacing: 7) {
-      NotchIconButton(symbol: "xmark", help: "Close Parcels", action: shelf.dismiss)
+      NotchIconButton(symbol: "xmark", help: "Close Skippy", action: shelf.dismiss)
       ZStack {
         Circle().fill(skin.palette.accent.opacity(0.18))
-        Image(systemName: shelf.activeModule.symbol).font(.system(size: 10, weight: .bold)).foregroundStyle(skin.palette.accent)
+        Image(systemName: shelf.choosingArrow ? "magnifyingglass" : shelf.activeModule.symbol).font(.system(size: 10, weight: .bold)).foregroundStyle(skin.palette.accent)
       }.frame(width: 26, height: 26)
       VStack(alignment: .leading, spacing: 0) {
-        Text(shelf.activeModule.title).font(.system(size: 11.5, weight: .semibold))
-        Text(headerSubtitle).font(.system(size: 8)).foregroundStyle(.secondary).lineLimit(1)
+        Text(shelf.choosingArrow ? "Arrows" : shelf.activeModule.title).font(.system(size: 16, weight: .semibold))
+        Text(shelf.choosingArrow ? "\(NotchModule.allCases.count - 1) tools" : headerSubtitle).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
       }
       Spacer()
-      if shelf.activeModule == .dashboard {
+      if shelf.choosingArrow {
+        NotchIconButton(symbol: "chevron.backward", help: "Back to tool", action: shelf.cancelChoosingArrow)
+      } else if shelf.activeModule == .dashboard {
         NotchIconButton(symbol: widgets.editing ? "checkmark" : "slider.horizontal.3", tint: skin.palette.accent,
           selected: widgets.editing, help: widgets.editing ? "Finish arranging" : "Arrange widgets") {
           withAnimation(Motion.layoutRelayout) { widgets.editing.toggle() }
@@ -710,7 +785,7 @@ struct NotchToolsView: View {
 
   private var headerSubtitle: String {
     switch shelf.activeModule {
-    case .dashboard: widgets.editing ? "Drag, resize and pin widgets" : "Your live workspace"
+    case .dashboard: widgets.editing ? "Drag, resize and pin widgets" : "Your quiver"
     case .parcel: "Everything ready to move"
     case .clipboard: "Your recent copies"
     case .extract: "Private, on-device OCR"
@@ -850,7 +925,7 @@ struct NotchToolsView: View {
               }
             }
           }
-          Button(widget.pinned ? "Remove from collapsed notch" : "Pin to collapsed notch") {
+          Button(widget.pinned ? "Remove from quiver" : "Pin to quiver") {
             widgets.togglePinned(widget.kind)
           }
           Button("Open") { shelf.showModule(widget.kind.module) }
@@ -918,7 +993,7 @@ struct NotchToolsView: View {
             }.frame(maxWidth: .infinity)
           }.buttonStyle(.plain).help(app.localizedName ?? "App")
             .contextMenu {
-              Button(tools.isPinned(app) ? "Remove from notch" : "Pin to notch") { tools.togglePinned(app) }
+              Button(tools.isPinned(app) ? "Remove from quiver" : "Pin to quiver") { tools.togglePinned(app) }
               Button("Open") { tools.activate(app) }
             }
         }
@@ -990,26 +1065,32 @@ struct NotchToolsView: View {
           awake: true, celebration: shelf.reveal, skin: skin)
           .frame(width: 44, height: 44).allowsHitTesting(false)
         VStack(alignment: .leading, spacing: 2) {
-          Text("PARCEL").font(.system(size: 8, weight: .bold)).tracking(0.8).foregroundStyle(skin.palette.accent)
           Text(shelf.primaryBox?.name ?? "My parcel").font(.system(size: 14, weight: .semibold)).lineLimit(1)
+          Text("\(shelf.primaryBox?.items.count ?? 0) items").font(.caption).foregroundStyle(.secondary)
         }
         Spacer()
-        Text("\(shelf.primaryBox?.items.count ?? 0) items").font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
+      }
+      HStack(spacing: 8) {
+        NotchActionButton(title: "Add", symbol: "plus", tint: skin.palette.accent) {
+          if let id = shelf.primaryBox?.id { store.selectBox(id) }
+          store.addFilesPanel()
+        }
         NotchActionButton(title: "Paste", symbol: "doc.on.clipboard", tint: skin.palette.accent,
           action: shelf.pasteFiles)
         NotchActionButton(title: "Pack", symbol: "archivebox", tint: skin.palette.accent,
           action: shelf.pack)
+        Spacer()
       }
       Divider().opacity(0.45)
       ScrollView(.horizontal, showsIndicators: false) {
-        LazyHStack(spacing: 9) {
+        LazyHStack(alignment: .top, spacing: 9) {
           ForEach(shelf.primaryBox?.items ?? []) { item in
             Button { NSWorkspace.shared.open(item.effectiveURL) } label: {
               VStack(spacing: 5) {
                 Image(nsImage: NSWorkspace.shared.icon(forFile: item.effectiveURL.path))
-                  .resizable().aspectRatio(contentMode: .fit).frame(width: 34, height: 34)
-                Text(item.effectiveName).font(.system(size: 8.5, weight: .medium)).lineLimit(1)
-                  .frame(width: 66)
+                  .resizable().aspectRatio(contentMode: .fit).frame(width: 42, height: 42)
+                Text(item.effectiveName).font(.caption).lineLimit(2)
+                  .frame(width: 100, alignment: .center)
               }.padding(7).background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 11))
             }.buttonStyle(.plain).help(item.effectiveName)
               .overlay {
@@ -1020,10 +1101,10 @@ struct NotchToolsView: View {
             Label("Drop or paste files here", systemImage: "arrow.down.doc")
               .font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary).padding(18)
           }
-        }
+        }.frame(maxHeight: .infinity, alignment: .topLeading)
       }
     }
-    .padding(10)
+    .padding(12)
     .background(skin.palette.accent.opacity(0.075), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     .background {
       FileDropSurface(enabled: !store.busy, receive: { _ in }, receiving: { _ in }, hover: { _ in },
@@ -1040,21 +1121,19 @@ struct NotchToolsView: View {
         .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
       ScrollView {
         LazyVStack(spacing: 4) {
-          ForEach(clipboard.filtered.prefix(80)) { entry in
-            HStack(spacing: 8) {
-              Image(systemName: entry.kind.symbol).font(.system(size: 10, weight: .bold))
-                .foregroundStyle(skin.palette.accent).frame(width: 26, height: 26)
-                .background(skin.palette.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 8))
-              VStack(alignment: .leading, spacing: 1) {
-                Text(entry.title).lineLimit(1).font(.system(size: 10.5, weight: .medium))
-                Text(entry.detail).lineLimit(1).font(.system(size: 8)).foregroundStyle(skin.palette.secondary)
-              }
-              Spacer()
-              Image(systemName: "doc.on.doc").font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+          if clipboard.filtered.isEmpty {
+            ContentUnavailableView {
+              Label(clipboard.search.isEmpty ? (clipboard.captureEnabled ? "Clipboard is empty" : "Capture is paused")
+                                             : "No matching copies", systemImage: "list.clipboard")
+            } description: {
+              Text(clipboard.search.isEmpty ? (clipboard.captureEnabled ? "Copy text, an image or a file to see it here."
+                                                                       : "Resume clipboard capture in Settings.")
+                                            : "Try a different search.")
             }
-            .padding(.horizontal, 8).frame(height: 39)
-            .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .contentShape(Rectangle()).onTapGesture { clipboard.copy(entry) }
+          }
+          ForEach(clipboard.filtered) { entry in
+            ClipboardHistoryRow(entry: entry, history: clipboard, skin: skin,
+                                addToParcel: shelf.addClipboardEntry, processImage: shelf.processClipboardImage)
           }
         }
       }
@@ -1070,6 +1149,10 @@ struct NotchToolsView: View {
             Image(systemName: "text.viewfinder").font(.system(size: 29, weight: .light)).foregroundStyle(skin.palette.accent)
           }
           Text("Text extraction").font(.system(size: 12, weight: .semibold))
+          Button("Inspect fonts in a PDF…", action: inspectFonts)
+          if !documentFonts.isEmpty {
+            ScrollView { Text(documentFonts).font(.caption).textSelection(.enabled) }.frame(maxHeight: 50)
+          }
           Text("Vision reads images locally. Nothing is uploaded.").font(.system(size: 8.5)).multilineTextAlignment(.center).foregroundStyle(.secondary)
           HStack(spacing: 5) {
             NotchActionButton(title: "Screen", symbol: "viewfinder", tint: skin.palette.accent, action: tools.extractFromScreen)
@@ -1089,6 +1172,25 @@ struct NotchToolsView: View {
           }
         }
       }
+    }
+  }
+
+  private func inspectFonts() {
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [.pdf]
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    Task {
+      documentFonts = await Task.detached(priority: .userInitiated) {
+        guard let document = PDFDocument(url: url), !document.isLocked else { return "The PDF could not be read." }
+        var names = Set<String>()
+        for page in 0..<document.pageCount {
+          guard let text = document.page(at: page)?.attributedString else { continue }
+          text.enumerateAttribute(.font, in: NSRange(location: 0, length: text.length)) { value, _, _ in
+            if let font = value as? NSFont { names.insert(font.fontName) }
+          }
+        }
+        return names.isEmpty ? "No selectable text with font information." : names.sorted().joined(separator: ", ")
+      }.value
     }
   }
 
@@ -1134,7 +1236,7 @@ struct NotchToolsView: View {
             NotchActionButton(title: "Stop", symbol: "stop.fill", tint: .red, action: tools.stopTimer)
           }
         }
-        Text("The countdown stays visible when Parcel collapses.").font(.system(size: 8.5)).foregroundStyle(.secondary)
+        Text("Reopen the Timer arrow to check your countdown.").font(.system(size: 8.5)).foregroundStyle(.secondary)
       }
     }.frame(maxWidth: .infinity, maxHeight: .infinity)
   }
@@ -1153,7 +1255,7 @@ struct NotchToolsView: View {
     HStack(spacing: 8) {
       VStack(spacing: 6) {
         HStack { NotchSectionTitle(title: "Quick note", symbol: "note.text"); Text("Saved automatically").font(.system(size: 8)).foregroundStyle(.secondary) }
-        TextEditor(text: $tools.note).font(.system(size: 10.5)).scrollContentBackground(.hidden)
+        TextEditor(text: $tools.note).accessibilityLabel("Quick note").font(.body).scrollContentBackground(.hidden)
           .padding(9).background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
       }
       VStack(spacing: 7) {
@@ -1193,6 +1295,9 @@ struct NotchToolsView: View {
         HStack(spacing: 6) {
           NotchActionButton(title: "Copy QR", symbol: "doc.on.doc", tint: skin.palette.accent) { tools.copyQR(qrInput) }
           NotchActionButton(title: "Scan screen", symbol: "viewfinder", tint: skin.palette.accent, action: tools.scanScreenQR)
+        }
+        HStack(spacing: 6) {
+          NotchActionButton(title: "Scan clipboard", symbol: "doc.on.clipboard", tint: skin.palette.accent, action: tools.scanClipboardQR)
           NotchActionButton(title: "Image", symbol: "photo", tint: skin.palette.accent, action: tools.scanQR)
         }
         if !tools.qrText.isEmpty {
@@ -1221,7 +1326,7 @@ struct NotchToolsView: View {
       HStack(spacing: 6) {
         suggestion("parcel workflows"); suggestion("convert PDF on Mac"); suggestion("share files securely")
       }
-      Text("Your query opens in the default browser. Parcels never records it.").font(.system(size: 8.5)).foregroundStyle(.secondary)
+      Text("Your query opens in the default browser. Skippy never records it.").font(.system(size: 8.5)).foregroundStyle(.secondary)
       Spacer()
     }.frame(maxWidth: 390)
   }
@@ -1260,25 +1365,26 @@ struct NotchToolsView: View {
       }
       LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 9) {
         ForEach(tools.launchableApps, id: \.processIdentifier) { app in
-          Button { tools.activate(app) } label: {
-            VStack(spacing: 5) {
-              ZStack(alignment: .topTrailing) {
+          ZStack(alignment: .topTrailing) {
+            Button { tools.activate(app) } label: {
+              VStack(spacing: 5) {
                 Image(nsImage: app.icon ?? NSImage()).resizable().frame(width: 34, height: 34)
-                  .shadow(color: .black.opacity(0.16), radius: 4, y: 2)
-                if tools.isPinned(app) {
-                  Image(systemName: "pin.fill").font(.system(size: 6, weight: .bold)).foregroundStyle(skin.palette.accent)
-                    .padding(3).background(.regularMaterial, in: Circle()).offset(x: 4, y: -3)
-                }
+                Text(app.localizedName ?? "App").font(.system(size: 8.5, weight: .medium)).lineLimit(1)
               }
-              Text(app.localizedName ?? "App").font(.system(size: 8.5, weight: .medium)).lineLimit(1)
-            }
-            .frame(maxWidth: .infinity).padding(.vertical, 5)
-            .background(Color.primary.opacity(0.001), in: RoundedRectangle(cornerRadius: 11))
-          }.buttonStyle(.plain)
-            .contextMenu {
-              Button(tools.isPinned(app) ? "Remove from notch" : "Pin to notch") { tools.togglePinned(app) }
-              Button("Open") { tools.activate(app) }
-            }
+              .frame(maxWidth: .infinity).padding(.vertical, 5)
+              .background(Color.primary.opacity(0.001), in: RoundedRectangle(cornerRadius: 11))
+            }.buttonStyle(.plain)
+              .contextMenu {
+                Button(tools.isPinned(app) ? "Remove from quiver" : "Pin to quiver") { tools.togglePinned(app) }
+                Button("Open") { tools.activate(app) }
+              }
+            Button { tools.togglePinned(app) } label: {
+              Image(systemName: tools.isPinned(app) ? "pin.fill" : "pin")
+                .font(.system(size: 10, weight: .semibold)).frame(width: 20, height: 20)
+                .background(.regularMaterial, in: Circle())
+            }.buttonStyle(.plain)
+              .accessibilityLabel((tools.isPinned(app) ? "Unpin " : "Pin ") + (app.localizedName ?? "application"))
+          }
         }
       }
     }
@@ -1405,7 +1511,7 @@ struct NotchToolsView: View {
     VStack(spacing: 12) {
       Image(systemName: "pencil.tip.crop.circle").font(.system(size: 40)).foregroundStyle(skin.palette.accent)
       Text("Draw over your screen").font(.system(size: 14, weight: .semibold))
-      Text("Use a pen, highlighter, lines and shapes. Your drawing disappears when you finish.")
+      Text("Draw, erase or save the annotation layer as a transparent PNG.")
         .font(.system(size: 10)).foregroundStyle(.secondary).multilineTextAlignment(.center)
       NotchActionButton(title: "Start drawing", symbol: "pencil.tip", tint: skin.palette.accent) {
         shelf.dismiss()
@@ -1476,7 +1582,7 @@ struct NotchToolsView: View {
   private var screenshotView: some View {
     VStack(alignment: .leading, spacing: 8) {
       HStack {
-        Text("\(tools.captures.count) regions").font(.system(size: 12, weight: .semibold))
+        Text(tools.captures.count == 1 ? "1 region" : "\(tools.captures.count) regions").font(.system(size: 12, weight: .semibold))
         Spacer()
         NotchActionButton(title: "Add region", symbol: "plus", tint: skin.palette.accent, action: tools.captureAnother)
         NotchActionButton(title: "Copy joined", symbol: "doc.on.doc", tint: skin.palette.accent, action: tools.copyCombinedCaptures)
@@ -1509,7 +1615,20 @@ struct NotchToolsView: View {
         metric("Cores", "\(info.activeProcessorCount)", "cpu")
         metric("Uptime", uptime(info.systemUptime), "clock.arrow.circlepath")
       }
-      HStack { NotchSectionTitle(title: "Recent Parcel activity", symbol: "clock.arrow.circlepath"); Text(info.operatingSystemVersionString).font(.system(size: 8)).foregroundStyle(.secondary) }
+      HStack(spacing: 7) {
+        metric("CPU use", macReadings?.cpu ?? "…", "cpu")
+        metric("Active + wired + compressed", macReadings?.memory ?? "…", "memorychip")
+        metric("Disk available", macReadings?.availableDisk ?? "…", "internaldrive")
+      }
+      Text(macReadings?.network ?? "Sampling network…").font(.caption).monospacedDigit()
+      Button("Show Skippy notifications") {
+        Task {
+          let alerts = await UNUserNotificationCenter.current().deliveredNotifications()
+          deliveredAlerts = alerts.isEmpty ? "No delivered Skippy alerts." : alerts.map { $0.request.content.title }.joined(separator: " · ")
+        }
+      }
+      if !deliveredAlerts.isEmpty { Text(deliveredAlerts).font(.caption).lineLimit(2) }
+      HStack { NotchSectionTitle(title: "Recent Skippy activity", symbol: "clock.arrow.circlepath"); Text(info.operatingSystemVersionString).font(.system(size: 8)).foregroundStyle(.secondary) }
       if recent.actions.isEmpty { Text("Your recent conversions, copies and packs appear here.").font(.system(size: 9)).foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity) }
       else {
         ForEach(recent.actions.prefix(3)) { action in
@@ -1570,5 +1689,104 @@ private extension NSColor {
     guard value.count == 6, let number = Int(value, radix: 16) else { return nil }
     self.init(srgbRed: CGFloat((number >> 16) & 0xff) / 255,
       green: CGFloat((number >> 8) & 0xff) / 255, blue: CGFloat(number & 0xff) / 255, alpha: 1)
+  }
+}
+
+/// Type a tool name, move through matching tools with the arrow keys, and press Return.
+private struct ArrowFinder: View {
+  @ObservedObject var shelf: DropPopupController
+  @State private var query = ""
+  @State private var index = 0
+  private var matches: [NotchModule] {
+    NotchModule.allCases.filter { $0 != .dashboard && (query.isEmpty || $0.title.localizedCaseInsensitiveContains(query)) }
+  }
+  var body: some View {
+    VStack(spacing: 8) {
+      ArrowSearchField(query: $query, move: { step in
+        index = min(max(0, index + step), max(0, matches.count - 1))
+      }, submit: {
+        if matches.indices.contains(index) { select(matches[index]) }
+      }, cancel: shelf.cancelChoosingArrow)
+      .frame(height: 28)
+      if matches.isEmpty {
+        Text("No matching arrows").foregroundStyle(.secondary)
+        Spacer()
+      } else {
+        ScrollViewReader { scroll in
+          ScrollView {
+            VStack(spacing: 2) {
+              ForEach(Array(matches.enumerated()), id: \.element.id) { position, module in
+                Button { select(module) } label: {
+                  HStack {
+                    Image(systemName: module.symbol).frame(width: 22)
+                    Text(module.title)
+                    Spacer()
+                    if index == position { Image(systemName: "return").foregroundStyle(.secondary) }
+                  }
+                  .padding(.horizontal, 8).frame(height: 27).contentShape(Rectangle())
+                  .background(index == position ? Color.primary.opacity(0.1) : .clear,
+                              in: RoundedRectangle(cornerRadius: 6))
+                }.buttonStyle(.plain).id(module.id)
+              }
+            }
+          }
+          .onChange(of: index) { _, i in if matches.indices.contains(i) { scroll.scrollTo(matches[i].id) } }
+        }
+      }
+    }
+    .onChange(of: query) { _, _ in index = 0 }
+  }
+  private func select(_ module: NotchModule) {
+    shelf.showModule(module)
+    shelf.focusForKeyboard()
+  }
+}
+
+private struct ArrowSearchField: NSViewRepresentable {
+  @Binding var query: String
+  var move: (Int) -> Void
+  var submit: () -> Void
+  var cancel: () -> Void
+
+  final class Field: NSSearchField {
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      guard window != nil else { return }
+      DispatchQueue.main.async { [weak self] in
+        guard let self, let window = self.window else { return }
+        window.makeFirstResponder(self)
+      }
+    }
+  }
+
+  final class Coordinator: NSObject, NSSearchFieldDelegate {
+    var parent: ArrowSearchField
+    init(_ parent: ArrowSearchField) { self.parent = parent }
+    func controlTextDidChange(_ notification: Notification) {
+      guard let field = notification.object as? NSSearchField else { return }
+      parent.query = field.stringValue
+    }
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy command: Selector) -> Bool {
+      switch command {
+      case #selector(NSResponder.moveDown(_:)): parent.move(1)
+      case #selector(NSResponder.moveUp(_:)): parent.move(-1)
+      case #selector(NSResponder.insertNewline(_:)): parent.submit()
+      case #selector(NSResponder.cancelOperation(_:)): parent.cancel()
+      default: return false
+      }
+      return true
+    }
+  }
+  func makeCoordinator() -> Coordinator { Coordinator(self) }
+  func makeNSView(context: Context) -> Field {
+    let field = Field()
+    field.placeholderString = "Find an arrow"
+    field.setAccessibilityLabel("Find an arrow")
+    field.delegate = context.coordinator
+    return field
+  }
+  func updateNSView(_ field: Field, context: Context) {
+    context.coordinator.parent = self
+    if field.stringValue != query { field.stringValue = query }
   }
 }

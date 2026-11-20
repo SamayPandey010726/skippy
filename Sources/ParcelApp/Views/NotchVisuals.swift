@@ -51,6 +51,7 @@ struct NotchIconButton: View {
         .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
     }
     .buttonStyle(.plain)
+    .accessibilityLabel(help)
     .help(help)
     .onHover { hovering = $0 }
     .animation(Motion.hoverLift, value: hovering)
@@ -76,6 +77,7 @@ struct NotchActionButton: View {
       .scaleEffect(hovering ? 1.025 : 1)
     }
     .buttonStyle(.plain)
+    .accessibilityLabel(title)
     .onHover { hovering = $0 }
     .animation(Motion.hoverLift, value: hovering)
   }

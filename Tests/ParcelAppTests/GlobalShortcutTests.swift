@@ -67,7 +67,7 @@ final class GlobalShortcutTests: XCTestCase {
     XCTAssertEqual(store.binding(for: .clipboard).displayName, "⌥C")
     XCTAssertEqual(store.binding(for: .tools).displayName, "⌥T")
     XCTAssertEqual(store.binding(for: .ocr).displayName, "⇧⌘O")
-    let custom = CourierKeyBinding(keyCode: UInt16(kVK_ANSI_K), modifiers: NSEvent.ModifierFlags.command.rawValue, keyLabel: "K")
+    let custom = CourierKeyBinding(keyCode: UInt16(kVK_ANSI_J), modifiers: NSEvent.ModifierFlags.command.rawValue, keyLabel: "J")
     XCTAssertTrue(store.update(.pack, binding: custom))
     XCTAssertFalse(store.update(.copy, binding: custom))
     XCTAssertEqual(CourierShortcutStore(defaults: defaults).binding(for: .pack), custom)

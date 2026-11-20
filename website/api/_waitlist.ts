@@ -16,7 +16,7 @@ export async function joinWaitlist(input: unknown, environment: Environment, req
   const email = typeof values.email === 'string' ? values.email.trim().toLowerCase() : ''
   const name = typeof values.name === 'string' ? values.name.trim().slice(0, 80) : ''
   const plan = typeof values.plan === 'string' && values.plan in plans ? values.plan as WaitlistPlan : 'two'
-  if (values.consent !== 'yes') return failure(400, 'Please agree to receive Parcel launch email.')
+  if (values.consent !== 'yes') return failure(400, 'Please agree to receive Skippy launch email.')
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return failure(400, 'Enter a valid email address.')
 
   const apiKey = environment.RESEND_API_KEY
@@ -38,7 +38,7 @@ export async function joinWaitlist(input: unknown, environment: Environment, req
       from,
       to: [email],
       reply_to: environment.RESEND_REPLY_TO || undefined,
-      subject: 'You are on the Parcel waitlist',
+      subject: 'You are on the Skippy waitlist',
       html: confirmationEmail(name, choice.label, choice.price),
     }),
   })
@@ -47,7 +47,7 @@ export async function joinWaitlist(input: unknown, environment: Environment, req
 
 function confirmationEmail(name: string, macs: string, price: string) {
   const greeting = name ? `Hi ${escapeHtml(name)},` : 'Hi,'
-  return `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;max-width:560px;margin:auto;padding:32px;color:#25251f"><h1 style="font-size:32px;letter-spacing:-1.4px">You are on the Parcel waitlist.</h1><p>${greeting}</p><p>Thanks for joining. You chose the <strong>${macs} licence at ${price}</strong>. We will email you when Parcel is ready.</p><p>Parcel gives your Mac one calm place for files, clipboard items, conversions and quick handoffs.</p><p style="margin-top:30px;color:#737264">— Parcel</p></div>`
+  return `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;max-width:560px;margin:auto;padding:32px;color:#25251f"><h1 style="font-size:32px;letter-spacing:-1.4px">You are on the Skippy waitlist.</h1><p>${greeting}</p><p>Thanks for joining. You chose the <strong>${macs} licence at ${price}</strong>. We will email you when Skippy is ready.</p><p>Skippy gives your Mac one calm place for files, clipboard items, conversions and quick handoffs.</p><p style="margin-top:30px;color:#737264">— Skippy</p></div>`
 }
 
 function escapeHtml(value: string) {
@@ -59,5 +59,5 @@ async function digest(value: string) {
   return Array.from(new Uint8Array(data)).slice(0, 12).map(byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
-function success(): WaitlistResult { return { status: 200, body: { message: 'You are on the Parcel waitlist.' } } }
+function success(): WaitlistResult { return { status: 200, body: { message: 'You are on the Skippy waitlist.' } } }
 function failure(status: number, message: string): WaitlistResult { return { status, body: { message } } }

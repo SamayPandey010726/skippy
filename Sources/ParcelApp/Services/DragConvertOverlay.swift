@@ -347,7 +347,7 @@ struct DragConvertGeometry {
     switch state {
     case .choosing: drawChoices()
     case .working(let text): drawCenter(symbol: "arrow.triangle.2.circlepath", title: "Converting", detail: text, color: .systemOrange)
-    case .success(let count): drawCenter(symbol: "checkmark.circle.fill", title: "Ready", detail: "\(count) \(count == 1 ? "copy" : "copies") added to Parcel", color: .systemGreen)
+    case .success(let count): drawCenter(symbol: "checkmark.circle.fill", title: "Ready", detail: "\(count) \(count == 1 ? "copy" : "copies") added to Skippy", color: .systemGreen)
     case .failure(let text): drawCenter(symbol: "exclamationmark.triangle.fill", title: "Needs a look", detail: text, color: .systemOrange)
     }
   }

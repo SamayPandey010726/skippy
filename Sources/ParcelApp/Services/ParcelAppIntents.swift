@@ -10,18 +10,18 @@ private enum ParcelIntentError: LocalizedError {
 }
 
 struct SummonParcelCourierIntent: AppIntent {
-  static let title: LocalizedStringResource = "Open Parcels"
-  static let description = IntentDescription("Opens the Parcels widget dashboard at the top of the screen.")
+  static let title: LocalizedStringResource = "Open Skippy"
+  static let description = IntentDescription("Opens the Skippy widget dashboard at the top of the screen.")
   static var openAppWhenRun = false
 
   @MainActor func perform() async throws -> some IntentResult & ProvidesDialog {
     DropPopupController.shared.summon()
-    return .result(dialog: "Parcels is open.")
+    return .result(dialog: "Skippy is open.")
   }
 }
 
 struct AddFilesToParcelIntent: AppIntent {
-  static let title: LocalizedStringResource = "Add Files to Parcel"
+  static let title: LocalizedStringResource = "Add Files to File Shelf"
   static let description = IntentDescription("Adds files to your parcel.")
   static var openAppWhenRun = false
 
@@ -37,7 +37,7 @@ struct AddFilesToParcelIntent: AppIntent {
     ParcelRuntime.store.ingest(urls, into: destination)
     let after = ParcelRuntime.store.boxes.first(where: { $0.id == destination })?.items.count ?? before
     let added = max(0, after - before)
-    return .result(dialog: "Added \(added) file\(added == 1 ? "" : "s") to Parcel.")
+    return .result(dialog: "Added \(added) file\(added == 1 ? "" : "s") to File Shelf.")
   }
 }
 
@@ -59,8 +59,8 @@ struct PackParcelIntent: AppIntent {
 }
 
 struct SearchParcelsIntent: AppIntent {
-  static let title: LocalizedStringResource = "Search Parcels"
-  static let description = IntentDescription("Opens Parcel and searches parcel names and file metadata.")
+  static let title: LocalizedStringResource = "Search Skippy"
+  static let description = IntentDescription("Opens Skippy and searches parcel names and file metadata.")
   static var openAppWhenRun = true
 
   @Parameter(title: "Search") var query: String
@@ -69,7 +69,7 @@ struct SearchParcelsIntent: AppIntent {
     ParcelRuntime.store.searchText = query
     DropPopupController.shared.summon()
     DropPopupController.shared.showSearch()
-    return .result(dialog: "Searching Parcel for \(query).")
+    return .result(dialog: "Searching Skippy for \(query).")
   }
 }
 
@@ -78,7 +78,7 @@ struct ParcelShortcuts: AppShortcutsProvider {
     AppShortcut(
       intent: SummonParcelCourierIntent(),
       phrases: ["Open \(.applicationName)", "Show \(.applicationName) widgets"],
-      shortTitle: "Open Parcels", systemImageName: "square.grid.2x2")
+      shortTitle: "Open Skippy", systemImageName: "square.grid.2x2")
     AppShortcut(
       intent: AddFilesToParcelIntent(),
       phrases: ["Add files to \(.applicationName)", "Put files in my \(.applicationName) parcel"],
@@ -90,7 +90,7 @@ struct ParcelShortcuts: AppShortcutsProvider {
     AppShortcut(
       intent: SearchParcelsIntent(),
       phrases: ["Search my \(.applicationName) parcels", "Find files in \(.applicationName)"],
-      shortTitle: "Search Parcels", systemImageName: "magnifyingglass")
+      shortTitle: "Search Skippy", systemImageName: "magnifyingglass")
   }
 
   static var shortcutTileColor: ShortcutTileColor { .orange }

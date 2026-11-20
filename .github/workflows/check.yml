@@ -1,22 +1,94 @@
-name: Parcel checks
+name: Skippy checks
 on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
 jobs:
   native-macos:
     runs-on: macos-15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
-      - name: Compiler and core tests
-        run: swift test
-      - name: Compile and bundle the native app
-        run: bash Scripts/build-macos.sh
-      - name: Native image smoke checks
-        run: bash Scripts/check-macos.sh
-      - name: Preserve app executable permissions in ZIP
-        run: ditto -c -k --keepParent build/Parcel.app build/Parcel-developer.zip
-      - name: Upload unsigned review build
-        uses: actions/upload-artifact@v4
+      - name: Enable normal system motion on the disposable test desktop
+        run: |
+          defaults write com.apple.universalaccess reduceMotion -bool false
+          defaults read com.apple.universalaccess reduceMotion
+      - name: Compiler and native tests
+        run: PARCEL_PREVIEW_DIRECTORY="$RUNNER_TEMP/skippy-layout-review" swift test
+      - name: Compile and bundle Skippy
+        if: ${{ !cancelled() }}
+        run: |
+          bash Scripts/build-macos.sh --universal
+          lipo -info build/Skippy.app/Contents/MacOS/Skippy
+          lipo build/Skippy.app/Contents/MacOS/Skippy -verify_arch arm64 x86_64
+      - name: Native smoke checks and launch
+        if: ${{ !cancelled() }}
+        run: |
+          bash Scripts/check-macos.sh
+          defaults write com.yourcompany.parcel hasSeenWelcome -bool YES
+          defaults write com.yourcompany.parcel skippy.surface -string Floating
+          defaults write com.yourcompany.parcel skippy.x -float 0.58
+          defaults write com.yourcompany.parcel skippy.y -float 0.80
+          defaults write com.yourcompany.parcel parcel.notch.note -string "Review the launch sketches and send the handoff."
+          defaults write com.yourcompany.parcel parcel-skin -string moss
+          bash Scripts/apple-terminal.sh mac
+          sleep 3
+          pgrep -x Skippy
+          open -a "$PWD/build/Skippy.app" "$PWD/Samples/Launch notes.txt" "$PWD/Samples/A little place.png"
+          sleep 2
+      - name: Record the launched Mac application
+        if: ${{ !cancelled() }}
+        run: |
+          swiftc -parse-as-library -target "$(uname -m)-apple-macos15.0" Scripts/record-display.swift -o build/display-recorder
+          swiftc -target "$(uname -m)-apple-macos14.0" Scripts/record-quiver.swift -o build/recorder
+          build/recorder build/frames "$(pgrep -x Skippy | head -1)"
+          mkdir -p build/recordings
+          if ! command -v ffmpeg >/dev/null; then brew install ffmpeg; fi
+          ffmpeg -loglevel error -i build/frames/WindowServer.mp4 -c copy -movflags +faststart build/recordings/Skippy.mp4
+          ffmpeg -loglevel error -i build/recordings/Skippy.mp4 -filter_complex 'fps=15,scale=600:-1,split[a][b];[a]palettegen[p];[b][p]paletteuse' build/recordings/Skippy.gif
+          cp build/frames/File-Shelf.png build/recordings/File-Shelf.png
+      - name: Exercise all arrows through the running application
+        if: ${{ !cancelled() }}
+        run: |
+          pkill -x Skippy || true
+          while pgrep -x Skippy >/dev/null; do sleep 0.1; done
+          bash Scripts/apple-terminal.sh mac
+          sleep 2
+          swift Scripts/check-arrow-navigation.swift "$(pgrep -x Skippy | head -1)"
+      - name: Check real menu-bar hover and pointer handoff
+        if: ${{ !cancelled() }}
+        run: |
+          pkill -x Skippy
+          defaults write com.yourcompany.parcel skippy.surface -string "Menu bar"
+          bash Scripts/apple-terminal.sh mac
+          sleep 2
+          swift Scripts/check-menu-hover.swift "$(pgrep -x Skippy | head -1)"
+      - name: Save pointer diagnostics after a failure
+        if: failure()
+        run: |
+          mkdir -p build/diagnostics
+          if [[ -f build/frames/File-Shelf.png ]]; then cp build/frames/File-Shelf.png build/diagnostics/; fi
+      - name: Archive developer build
+        if: ${{ !cancelled() }}
+        run: codesign --verify --strict build/Skippy.app && ditto -c -k --keepParent build/Skippy.app build/Skippy-developer.zip
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
         with:
-          name: Parcel-developer-build
-          path: build/Parcel-developer.zip
+          name: Skippy-Mac
+          path: |
+            build/Skippy-developer.zip
+            build/recordings/
+            build/diagnostics/
+  simulators:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Boot iPhone and iPad
+        run: |
+          mkdir -p build/devices
+          SKIPPY_SIM_CAPTURE=build/devices/iPhone.png bash Scripts/apple-terminal.sh iphone
+          SKIPPY_SIM_CAPTURE=build/devices/iPad.png bash Scripts/apple-terminal.sh ipad
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Apple-simulators
+          path: build/devices

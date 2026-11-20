@@ -1,3 +1,4 @@
+import Combine
 import AppKit
 import ParcelCore
 import UniformTypeIdentifiers
@@ -93,12 +94,17 @@ final class CourierRefinementTests: XCTestCase {
     let preview = CourierHoverPreview(enterDelay: .milliseconds(10))
     let first = ParcelItem(sourcePath: "/first.txt", displayName: "First")
     let second = ParcelItem(sourcePath: "/second.txt", displayName: "Second")
+    let firstShown = expectation(description: "First file is previewed")
+    let secondShown = expectation(description: "Preview switches to second file")
+    let firstObservation = preview.$item.first { $0?.id == first.id }.sink { _ in firstShown.fulfill() }
+    let secondObservation = preview.$item.first { $0?.id == second.id }.sink { _ in secondShown.fulfill() }
+    defer { firstObservation.cancel(); secondObservation.cancel() }
     preview.hover(first, inside: true)
-    try await Task.sleep(for: .milliseconds(40))
+    await fulfillment(of: [firstShown], timeout: 2)
     XCTAssertEqual(preview.item?.id, first.id)
     preview.hover(second, inside: true)
     preview.hover(first, inside: false)
-    try await Task.sleep(for: .milliseconds(40))
+    await fulfillment(of: [secondShown], timeout: 2)
     XCTAssertEqual(preview.item?.id, second.id)
     preview.hover(second, inside: false)
     try await Task.sleep(for: .milliseconds(300))
@@ -114,17 +120,22 @@ final class CourierRefinementTests: XCTestCase {
   @MainActor func testPreviewHandoffCancelsExpiryUntilPointerLeavesPreview() async throws {
     let preview = CourierHoverPreview(enterDelay: .milliseconds(5), exitDelay: .milliseconds(90))
     let item = ParcelItem(sourcePath: "/handoff.csv", displayName: "Handoff.csv")
+    let shown = expectation(description: "File preview is on screen before pointer handoff")
+    let observed = preview.$item.first { $0?.id == item.id }.sink { _ in shown.fulfill() }
+    defer { observed.cancel() }
     preview.hover(item, inside: true)
-    try await Task.sleep(for: .milliseconds(25))
+    await fulfillment(of: [shown], timeout: 2)
     preview.hover(item, inside: false)
     preview.previewHover(true)
     try await Task.sleep(for: .milliseconds(140))
     XCTAssertEqual(preview.item?.id, item.id)
     XCTAssertTrue(preview.isInsidePreview)
+    let hidden = expectation(description: "Preview expires after leaving")
+    let removed = preview.$item.first { $0 == nil }.sink { _ in hidden.fulfill() }
+    defer { removed.cancel() }
     preview.previewHover(false)
-    try await Task.sleep(for: .milliseconds(35))
     XCTAssertNotNil(preview.item)
-    try await Task.sleep(for: .milliseconds(100))
+    await fulfillment(of: [hidden], timeout: 2)
     XCTAssertNil(preview.item)
     preview.clear()
     XCTAssertFalse(preview.isInsidePreview)
@@ -515,7 +526,7 @@ final class CourierRefinementTests: XCTestCase {
     XCTAssertTrue(titles.contains("Copy text with OCR"))
   }
 
-  @MainActor func testClipboardShortcutTogglesFromCourierChoices() throws {
+  @MainActor func testClipboardShortcutTogglesBetweenArrowAndDashboard() throws {
     let store = ParcelStore(persist: false)
     let shelf = DropPopupController(store: store)
     shelf.summon()
@@ -526,9 +537,9 @@ final class CourierRefinementTests: XCTestCase {
       context: nil, characters: "c", charactersIgnoringModifiers: "c", isARepeat: false,
       keyCode: binding.keyCode))
     XCTAssertTrue(shelf.handleCourierKey(event))
-    XCTAssertTrue(shelf.isClipboardVisible)
+    XCTAssertEqual(shelf.activeModule, .clipboard)
     XCTAssertTrue(shelf.handleCourierKey(event))
-    XCTAssertFalse(shelf.isClipboardVisible)
+    XCTAssertEqual(shelf.activeModule, .dashboard)
     shelf.dismiss()
   }
 
