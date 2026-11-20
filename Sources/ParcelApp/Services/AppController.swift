@@ -83,6 +83,7 @@ import SwiftUI
   }
   func closeTutorial() {
     preferencesWindow?.orderOut(nil)
+    SkippyQuiver.shared.setSettingsPresented(false)
     restoreAccessoryPolicyIfPossible()
   }
   func openBin() {
@@ -119,10 +120,16 @@ import SwiftUI
     }
     preferencesWindow?.appearance = NSAppearance(named: SkinStore.shared.skin == .night ? .darkAqua : .aqua)
     DropPopupController.shared.dismiss()
+    SkippyQuiver.shared.setSettingsPresented(true)
     preferencesWindow?.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
   }
-  func windowWillClose(_ notification: Notification) { DispatchQueue.main.async { self.restoreAccessoryPolicyIfPossible() } }
+  func windowWillClose(_ notification: Notification) {
+    if let window = notification.object as? NSWindow, window === preferencesWindow {
+      SkippyQuiver.shared.setSettingsPresented(false)
+    }
+    DispatchQueue.main.async { self.restoreAccessoryPolicyIfPossible() }
+  }
   func fitInterfaceWindows() {
     guard let workbench else { return }
     let scale = DropPopupController.shared.interfaceScale

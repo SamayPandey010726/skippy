@@ -28,6 +28,7 @@ enum QuiverEmblem: String, CaseIterable {
   private var foldWork: DispatchWorkItem?
   private var dockHover: DockHover?
   private var dockTile: CGRect?
+  private var settingsPresented = false
   private var installed = false
   private var dragging = false
   private var progress: CGFloat = 0
@@ -107,7 +108,7 @@ enum QuiverEmblem: String, CaseIterable {
     if surface == .dock {
       NSApp.setActivationPolicy(.regular)
       dockHover = DockHover(entered: { [weak self] tile in
-        guard let self else { return }
+        guard let self, !self.settingsPresented else { return }
         self.dockTile = tile
         self.hover(true); self.layout(); self.floating?.orderFrontRegardless()
       }, left: { [weak self] in self?.hover(false) })
@@ -126,7 +127,7 @@ enum QuiverEmblem: String, CaseIterable {
       p.contentView = strip; floating = p
     }
     layout()
-    if surface != .dock, let panel = floating {
+    if surface != .dock, !settingsPresented, let panel = floating {
       let animate = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
       panel.alphaValue = animate ? 0 : 1
       panel.orderFrontRegardless()
@@ -139,8 +140,21 @@ enum QuiverEmblem: String, CaseIterable {
     }
   }
 
+  func setSettingsPresented(_ shown: Bool) {
+    settingsPresented = shown
+    guard installed else { return }
+    if shown {
+      endKeyboardBrowsing()
+      previewWork?.cancel(); foldWork?.cancel()
+      setUnfolded(false)
+      floating?.orderOut(nil)
+    } else if surface != .dock {
+      floating?.orderFrontRegardless()
+    }
+  }
+
   func hover(_ inside: Bool) {
-    guard !dragging, keyboardMonitor == nil else { return }
+    guard !settingsPresented, !dragging, keyboardMonitor == nil else { return }
     foldWork?.cancel()
     if inside {
       if !unfolded { setUnfolded(true) }

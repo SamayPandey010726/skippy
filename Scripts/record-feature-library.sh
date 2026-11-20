@@ -4,7 +4,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v ffmpeg >/dev/null
 command -v ffprobe >/dev/null
-bash Scripts/build-macos.sh
+if [[ "${SKIPPY_UNIVERSAL:-false}" == true ]]; then
+  bash Scripts/build-macos.sh --universal
+else
+  bash Scripts/build-macos.sh
+fi
 run_dir="$(mktemp -d "$PWD/build/feature-review.XXXXXX")"
 mkdir -p "$run_dir/build/recordings" "$run_dir/Review"
 ln -s "$PWD/Samples" "$run_dir/Samples"

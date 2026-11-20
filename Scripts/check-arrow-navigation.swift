@@ -387,6 +387,10 @@ if filming && (batch == "all" || batch == "preferences") {
   try finishFilm()
   key(kVK_ANSI_S, flags: .maskCommand)
   check("Settings is the standalone window") { panels().contains { $0[kCGWindowName as String] as? String == "Skippy Settings" } }
+  check("launcher clears the settings controls") {
+    let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
+    return !windows.contains { $0[kCGWindowOwnerPID as String] as? Int == pid && $0[kCGWindowName as String] as? String == "Skippy quiver" }
+  }
   try startFilm("Settings")
   beat(1.5)
   check("open shortcut settings") { press("Shortcuts") }

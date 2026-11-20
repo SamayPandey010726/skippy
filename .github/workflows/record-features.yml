@@ -1,5 +1,11 @@
 name: Record Skippy on Mac
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      preferences_only:
+        type: boolean
+        default: false
+        description: Recheck Settings and archive the universal build
 
 permissions:
   contents: read
@@ -9,10 +15,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        batch: [wheel, files, utilities, system, capture, preferences]
+        batch: ${{ fromJSON(inputs.preferences_only && '["preferences"]' || '["wheel","files","utilities","system","capture","preferences"]') }}
     name: Film ${{ matrix.batch }}
     env:
       SKIPPY_FILM_BATCH: ${{ matrix.batch }}
+      SKIPPY_UNIVERSAL: ${{ inputs.preferences_only }}
     runs-on: macos-15
     timeout-minutes: 40
     steps:
@@ -31,7 +38,19 @@ jobs:
           name: footage-${{ matrix.batch }}
           path: build/feature-review.*/build/feature-captures/
           if-no-files-found: ignore
+      - name: Verify and archive tested universal app
+        if: inputs.preferences_only
+        run: |
+          lipo build/Skippy.app/Contents/MacOS/Skippy -verify_arch arm64 x86_64
+          codesign --verify --strict build/Skippy.app
+          ditto -c -k --keepParent build/Skippy.app build/Skippy-developer.zip
+      - uses: actions/upload-artifact@v4
+        if: inputs.preferences_only
+        with:
+          name: Skippy-tested-universal
+          path: build/Skippy-developer.zip
   package:
+    if: ${{ !inputs.preferences_only }}
     needs: record
     runs-on: ubuntu-latest
     steps:
