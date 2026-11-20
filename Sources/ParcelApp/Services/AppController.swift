@@ -9,15 +9,12 @@ import SwiftUI
   private weak var store: ParcelStore?
   private var workbench: NSWindow?
   private var preferencesWindow: NSWindow?
-  private var tutorialWindow: NSWindow?
-  private var activationWindow: NSWindow?
   private var skinObserver: AnyCancellable?
   private var licenseObserver: AnyCancellable?
   private var operationalServicesInstalled = false
   var isWorkbenchVisible: Bool { workbench?.isVisible == true }
   func restoreAccessoryPolicyIfPossible() {
-    if workbench?.isVisible != true && preferencesWindow?.isVisible != true && tutorialWindow?.isVisible != true
-      && activationWindow?.isVisible != true {
+    if workbench?.isVisible != true && preferencesWindow?.isVisible != true {
       NSApp.setActivationPolicy(SkippyQuiver.shared.surface == .dock ? .regular : .accessory)
     }
   }
@@ -28,8 +25,6 @@ import SwiftUI
       let appearance = NSAppearance(named: skin == .night ? .darkAqua : .aqua)
       self?.workbench?.appearance = appearance
       self?.preferencesWindow?.appearance = appearance
-      self?.tutorialWindow?.appearance = appearance
-      self?.activationWindow?.appearance = appearance
     }
     licenseObserver = store.$license.removeDuplicates().sink { [weak self, weak store] status in
       guard let self, let store else { return }
@@ -38,7 +33,6 @@ import SwiftUI
     }
   }
   private func installOperationalServices(store: ParcelStore) {
-    activationWindow?.orderOut(nil)
     guard !operationalServicesInstalled else { restoreAccessoryPolicyIfPossible(); return }
     operationalServicesInstalled = true
     WatchedFolders.shared.start(store: store)
@@ -49,29 +43,10 @@ import SwiftUI
     ClipboardHistoryStore.shared.start()
     GlobalShortcutManager.shared.install { AppController.shared.handleGlobalShortcut() }
     store.checkCacheOnStartup()
-    if store.showWelcome { DispatchQueue.main.async { AppController.shared.showTutorial() } }
   }
   func showActivation() {
     guard let store, !store.license.canUseApp else { return }
-    if activationWindow == nil {
-      let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 530),
-        styleMask: [.titled, .closable], backing: .buffered, defer: false)
-      window.title = "Activate Skippy"
-      window.delegate = self
-      window.isReleasedWhenClosed = false
-      window.isRestorable = false
-      window.titleVisibility = .hidden
-      window.titlebarAppearsTransparent = true
-      window.contentView = NSHostingView(rootView: UniversalInterface {
-        LicenseGateView().environmentObject(store)
-      })
-      window.center()
-      activationWindow = window
-    }
-    activationWindow?.appearance = NSAppearance(named: SkinStore.shared.skin == .night ? .darkAqua : .aqua)
-    activationWindow?.makeKeyAndOrderFront(nil)
-    NSApp.setActivationPolicy(.regular)
-    NSApp.activate(ignoringOtherApps: true)
+    presentSettings(initialTab: 3)
   }
   /// The drop popup appears while files are dragged; the configurable global shortcut summons it by hand.
   func toggleDropPopup() {
@@ -104,29 +79,10 @@ import SwiftUI
   }
   func showTutorial() {
     guard let store, store.license.canUseApp else { showActivation(); return }
-    store.showWelcome = true
-    if tutorialWindow == nil {
-      let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 540, height: 640),
-        styleMask: [.titled, .closable], backing: .buffered, defer: false)
-      window.title = "Welcome to Skippy"
-      window.delegate = self
-      window.isReleasedWhenClosed = false
-      window.isRestorable = false
-      window.titleVisibility = .hidden
-      window.titlebarAppearsTransparent = true
-      window.contentView = NSHostingView(rootView: UniversalInterface {
-        WelcomeView().environmentObject(store)
-      })
-      window.center()
-      tutorialWindow = window
-    }
-    tutorialWindow?.appearance = NSAppearance(named: SkinStore.shared.skin == .night ? .darkAqua : .aqua)
-    tutorialWindow?.makeKeyAndOrderFront(nil)
-    NSApp.setActivationPolicy(.regular)
-    NSApp.activate(ignoringOtherApps: true)
+    presentSettings(initialTab: 5)
   }
   func closeTutorial() {
-    tutorialWindow?.orderOut(nil)
+    preferencesWindow?.orderOut(nil)
     restoreAccessoryPolicyIfPossible()
   }
   func openBin() {
@@ -147,15 +103,19 @@ import SwiftUI
     guard store?.license.canUseApp == true else { showActivation(); return }
     DropPopupController.shared.showModule(.dashboard)
   }
-  func openPreferences() {
+  func openPreferences() { presentSettings(initialTab: nil) }
+  private func presentSettings(initialTab: Int?) {
     guard let store else { return }
     if preferencesWindow == nil {
       let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 550, height: 540),
         styleMask: [.titled, .closable], backing: .buffered, defer: false)
       window.title = "Skippy Settings"; window.isReleasedWhenClosed = false
       window.isRestorable = false
-      window.contentView = NSHostingView(rootView: UniversalInterface { PreferencesView().environmentObject(store) })
+      window.delegate = self
       window.center(); preferencesWindow = window
+    }
+    if !(preferencesWindow?.contentView is NSHostingView<AnyView>) || initialTab != nil {
+      preferencesWindow?.contentView = NSHostingView(rootView: AnyView(UniversalInterface { PreferencesView(initialTab: initialTab ?? 0).environmentObject(store) }))
     }
     preferencesWindow?.appearance = NSAppearance(named: SkinStore.shared.skin == .night ? .darkAqua : .aqua)
     preferencesWindow?.makeKeyAndOrderFront(nil)

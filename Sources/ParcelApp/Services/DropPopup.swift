@@ -1021,7 +1021,18 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       if command == .close || command == .chooseArrow { cancelChoosingArrow(); return true }
       return false
     }
-    if command == .chooseArrow { chooseArrow(); return true }
+    switch command {
+    case .cycleTheme:
+      SkinStore.shared.skin = SkinStore.shared.skin == .night ? .kraft : .night
+      return true
+    case .cycleEmblem:
+      let icons = QuiverEmblem.allCases
+      let index = icons.firstIndex(of: SkippyQuiver.shared.emblem) ?? 0
+      SkippyQuiver.shared.emblem = icons[(index + 1) % icons.count]
+      return true
+    case .chooseArrow: chooseArrow(); return true
+    default: break
+    }
     if panel?.firstResponder is NSTextView {
       switch command {
       case .search, .filters, .nextFile, .previousFile, .open, .copy, .paste: return false
@@ -1031,7 +1042,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     if toolsVisible {
       if (command == .copy || command == .paste) && activeModule != .parcel && activeModule != .dashboard { return false }
       switch command {
-      case .chooseArrow: break
+      case .chooseArrow, .cycleTheme, .cycleEmblem: break
       case .nextFile:
         guard activeModule == .dashboard else { return false }
         NotificationCenter.default.post(name: .parcelsNextWidgetPage, object: nil)
@@ -1090,6 +1101,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     if command == .paste, panel?.firstResponder is NSTextView { return false }
     recordActivity()
     switch command {
+    case .cycleTheme, .cycleEmblem: break
     case .chooseArrow: chooseArrow()
     case .nextFile: moveKeyboardFocus(1)
     case .previousFile: moveKeyboardFocus(-1)

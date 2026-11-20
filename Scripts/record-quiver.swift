@@ -67,9 +67,9 @@ guard let mark = windows().first(where: { (26...42).contains($0.width) && (24...
   print("Skippy windows:", windows()); throw RecordingError.missingWindow
 }
 let center = CGPoint(x: mark.midX, y: mark.midY)
-let width = min(screen.width, 700), height = min(screen.height, 470)
+let width = min(screen.width, 700), height = min(screen.height, 540)
 let region = CGRect(x: min(max(0, mark.midX - width * 0.62), screen.maxX - width),
-  y: min(max(0, mark.midY - 52), screen.maxY - height), width: width, height: height).integral
+  y: min(max(0, mark.midY - 92), screen.maxY - height), width: width, height: height).integral
 let live = Process()
 let stop = Pipe()
 live.standardInput = stop
@@ -101,11 +101,10 @@ func glide(_ from: CGPoint, _ to: CGPoint) throws {
 let away = CGPoint(x: center.x - 140, y: center.y + 65)
 pointer(away); pause(0.65)
 try glide(away, center); pause(0.7)
-guard let strip = windows().first(where: { $0.width > 75 && $0.height <= 44 }) else {
+guard let strip = windows().first(where: { (120...150).contains($0.width) && (120...150).contains($0.height) }) else {
   print("After hover:", windows()); throw RecordingError.hoverFailed
 }
-let direction: CGFloat = strip.midX < center.x ? -1 : 1
-let shelf = CGPoint(x: center.x + 31 * direction, y: center.y)
+let shelf = CGPoint(x: strip.midX, y: strip.midY - 51)
 try glide(center, shelf)
 pause(0.85)
 try saveShelfImage()
@@ -115,7 +114,7 @@ guard NSWorkspace.shared.frontmostApplication?.processIdentifier == baselineFocu
   throw RecordingError.focusChanged
 }
 print("PASS hovering preserved foreground application")
-let notes = CGPoint(x: center.x + 93 * direction, y: center.y)
+let notes = CGPoint(x: strip.midX + sin(4 * Double.pi / 5) * 51, y: strip.midY - cos(4 * Double.pi / 5) * 51)
 try glide(shelf, notes)
 pause(0.55)
 pointer(notes, .leftMouseDown); pointer(notes, .leftMouseUp); pause(0.65)

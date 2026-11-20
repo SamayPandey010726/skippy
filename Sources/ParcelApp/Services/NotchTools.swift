@@ -384,7 +384,16 @@ struct NotchMacro: Codable, Identifiable {
     }
   }
 
-  private func readQR(at url: URL) {
+  func scanClipboardQR() {
+    guard let image = NSImage(pasteboard: .general), let data = image.tiffRepresentation else {
+      status = "Copy an image containing a QR code first"; return
+    }
+    readQR(using: VNImageRequestHandler(data: data))
+  }
+
+  private func readQR(at url: URL) { readQR(using: VNImageRequestHandler(url: url)) }
+
+  private func readQR(using handler: VNImageRequestHandler) {
     let request = VNDetectBarcodesRequest { [weak self] request, _ in
       let value = (request.results as? [VNBarcodeObservation])?.first?.payloadStringValue
       Task { @MainActor in
@@ -394,7 +403,7 @@ struct NotchMacro: Codable, Identifiable {
       }
     }
     request.symbologies = [.qr]
-    do { try VNImageRequestHandler(url: url).perform([request]) }
+    do { try handler.perform([request]) }
     catch { status = "Could not read that image" }
   }
 
@@ -1285,6 +1294,9 @@ struct NotchToolsView: View {
         HStack(spacing: 6) {
           NotchActionButton(title: "Copy QR", symbol: "doc.on.doc", tint: skin.palette.accent) { tools.copyQR(qrInput) }
           NotchActionButton(title: "Scan screen", symbol: "viewfinder", tint: skin.palette.accent, action: tools.scanScreenQR)
+        }
+        HStack(spacing: 6) {
+          NotchActionButton(title: "Scan clipboard", symbol: "doc.on.clipboard", tint: skin.palette.accent, action: tools.scanClipboardQR)
           NotchActionButton(title: "Image", symbol: "photo", tint: skin.palette.accent, action: tools.scanQR)
         }
         if !tools.qrText.isEmpty {

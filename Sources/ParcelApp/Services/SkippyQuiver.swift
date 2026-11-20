@@ -7,6 +7,9 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
   var id: Self { self }
 
   static func snapped(at point: CGPoint, screen: CGRect, visible: CGRect) -> Self {
+    if (visible.minY - screen.minY > 6 && point.y < visible.minY) ||
+       (visible.minX - screen.minX > 6 && point.x < visible.minX) ||
+       (screen.maxX - visible.maxX > 6 && point.x > visible.maxX) { return .dock }
     if point.y >= visible.maxY - 12 {
       if abs(point.x - screen.midX) < 75 { return .notch }
       if point.x >= screen.maxX - 100 { return .menu }
@@ -27,6 +30,39 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
   }
 }
 
+enum QuiverEmblem: String, CaseIterable {
+  case scout = "Scout", spark = "Spark", arrows = "Quiver"
+}
+
+struct QuiverGeometry {
+  let frame: CGRect
+  let mark: CGRect
+  let buttons: [CGRect]
+
+  init(surface: QuiverSurface, center: CGPoint, bounds: CGRect, count: Int, progress: CGFloat, height: CGFloat, growsRight: Bool) {
+    let cell: CGFloat = 31
+    let wheel = surface == .floating
+    let vertical = surface == .left || surface == .right
+    let radius: CGFloat = 51
+    let width = wheel ? cell + 2 * radius * progress : (vertical ? cell : cell * (1 + CGFloat(count) * progress))
+    let h = wheel ? height + 2 * radius * progress : (vertical ? height + cell * CGFloat(count) * progress : height)
+    let up = center.y <= bounds.midY
+    let mx = wheel ? (width - cell) / 2 : (vertical || growsRight ? 0 : width - cell)
+    let my = wheel ? (h - height) / 2 : (vertical && !up ? h - height : 0)
+    frame = CGRect(x: min(max(center.x - cell / 2 - mx, bounds.minX), bounds.maxX - width),
+                   y: min(max(center.y - height / 2 - my, bounds.minY), bounds.maxY - h),
+                   width: width.rounded(), height: h.rounded())
+    mark = CGRect(x: mx.rounded(), y: my.rounded(), width: cell, height: height)
+    buttons = (0..<count).map { i in
+      let angle = CGFloat.pi / 2 - 2 * .pi * CGFloat(i) / CGFloat(max(1, count))
+      let delta = cell * CGFloat(i+1) * progress
+      let dx = wheel ? cos(angle) * radius * progress : (vertical ? 0 : (growsRight ? delta : -delta))
+      let dy = wheel ? sin(angle) * radius * progress : (vertical ? (up ? delta : -delta) : 0)
+      return CGRect(x: (mx + dx).rounded(), y: (my + dy).rounded(), width: cell, height: height)
+    }
+  }
+}
+
 /// The same native strip lives in the NSStatusItem or in a floating NSPanel.
 /// Keep the primary mark at the outside end when the secondary buttons appear.
 @MainActor final class SkippyQuiver: NSObject, ObservableObject {
@@ -34,6 +70,11 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
   @Published var surface: QuiverSurface {
     didSet { defaults.set(surface.rawValue, forKey: "skippy.surface"); if installed { attach() } }
   }
+  @Published var emblem: QuiverEmblem {
+    didSet { defaults.set(emblem.rawValue, forKey: "skippy.emblem"); mark?.emblem = emblem; mark?.needsDisplay = true }
+  }
+  private(set) var page = 0
+  private(set) var pageCount = 1
   private(set) var unfolded = false
   private(set) var strip = QuiverStrip()
   private var status: NSStatusItem?
@@ -66,7 +107,8 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
   }
   init(defaults: UserDefaults, shelf: DropPopupController, widgets: NotchWidgetStore, tools: NotchToolStore) {
     self.defaults = defaults; self.shelf = shelf; self.widgets = widgets; self.tools = tools
-    surface = QuiverSurface(rawValue: defaults.string(forKey: "skippy.surface") ?? "") ?? .menu
+    emblem = QuiverEmblem(rawValue: defaults.string(forKey: "skippy.emblem") ?? "") ?? .scout
+    surface = QuiverSurface(rawValue: defaults.string(forKey: "skippy.surface") ?? "") ?? .floating
     super.init()
   }
 
@@ -82,6 +124,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     strip.pointer = { [weak self] in self?.hover($0) }
     strip.pointerMoved = { [weak self] in self?.trackArrow() }
     attach()
+    SkinStore.shared.$skin.dropFirst().receive(on: RunLoop.main).sink { [weak self] _ in self?.layout() }.store(in: &subscriptions)
     widgets.$widgets.combineLatest(tools.$pinnedApps).receive(on: RunLoop.main).sink { [weak self] _ in self?.layout() }.store(in: &subscriptions)
     NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
       .receive(on: RunLoop.main).sink { [weak self] _ in self?.layout() }.store(in: &subscriptions)
@@ -102,7 +145,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
   private func attach() {
     foldWork?.cancel(); previewWork?.cancel(); motion?.invalidate()
     if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor); self.pointerMonitor = nil }
-    unfolded = false; progress = 0
+    unfolded = false; progress = 0; page = 0
     shelf.dismiss()
     strip.removeFromSuperview()
     if let status { NSStatusBar.system.removeStatusItem(status); self.status = nil }
@@ -213,7 +256,7 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
       guard let self, let button, let window = button.window, self.unfolded else { return }
       let rect = window.convertToScreen(button.convert(button.bounds, to: nil))
       guard rect.contains(NSEvent.mouseLocation) else { return }
-      self.shelf.previewArrow(module, at: rect)
+      self.shelf.previewArrow(module, at: self.toolAnchor(rect))
     }
     previewWork = work
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.23, execute: work)
@@ -221,7 +264,12 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
 
   private func show(_ module: NotchModule, from view: NSView? = nil) {
     let rect = view.flatMap { v in v.window.map { $0.convertToScreen(v.convert(v.bounds, to: nil)) } } ?? anchor
-    shelf.openArrow(module, at: rect)
+    shelf.openArrow(module, at: rect.map(toolAnchor))
+  }
+
+  func toolAnchor(_ button: CGRect) -> CGRect {
+    guard surface == .floating, let f = floating?.frame else { return button }
+    return CGRect(x: button.minX, y: f.minY, width: button.width, height: f.height)
   }
 
   func menu() -> NSMenu {
@@ -280,34 +328,68 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     screenBounds = visible
     center.x = min(max(center.x, visible.minX + cell / 2), visible.maxX - cell / 2)
     center.y = min(max(center.y, screen.frame.minY + height / 2), screen.frame.maxY - height / 2)
+    if surface == .floating {
+      center.x = min(max(center.x, visible.minX + 67), visible.maxX - 67)
+      center.y = min(max(center.y, visible.minY + 68), visible.maxY - 68)
+    }
     strip.wantsLayer = true
     strip.layer?.masksToBounds = true
     strip.layer?.cornerRadius = surface == .menu ? 5 : height / 2
     strip.layer?.backgroundColor = surface == .menu ? NSColor.clear.cgColor : NSColor(calibratedRed: 0.075, green: 0.13, blue: 0.115, alpha: 0.97).cgColor
     strip.subviews.forEach { $0.removeFromSuperview() }
     icons.removeAll(); arrowModules.removeAll(); previewTarget = nil
-    for widget in widgets.pinned.prefix(5) {
-      let module = widget.kind.module
-      let button = strip.addIcon(module.title, image: NSImage(systemSymbolName: module.symbol, accessibilityDescription: nil),
-        frame: .zero, inMenu: surface == .menu) { [weak self] view in self?.show(module, from: view) }
-      button.toolTip = nil
-      arrowModules[button] = module
-      icons.append(button)
+    enum Entry { case tool(NotchWidget), app(PinnedNotchApp) }
+    let pins = widgets.pinned.map(Entry.tool) + tools.pinnedApps.map(Entry.app)
+    let other = Array(pins.dropFirst(6)) + widgets.widgets.filter { !$0.pinned }.map(Entry.tool)
+    pageCount = 1 + (other.count + 5) / 6
+    page = min(page, pageCount - 1)
+    let entries = page == 0 ? Array(pins.prefix(6)) : Array(other.dropFirst((page-1)*6).prefix(6))
+    for entry in entries {
+      switch entry {
+      case .tool(let widget):
+        let module = widget.kind.module
+        let button = strip.addIcon(module.title, image: NSImage(systemSymbolName: module.symbol, accessibilityDescription: nil),
+          frame: .zero, inMenu: surface == .menu) { [weak self] view in self?.show(module, from: view) }
+        button.toolTip = module.title
+        arrowModules[button] = module
+        icons.append(button)
+      case .app(let app):
+        icons.append(strip.addIcon(app.name, image: tools.icon(for: app), frame: .zero, inMenu: surface == .menu) {
+          [weak self] _ in self?.tools.launch(app)
+        })
+      }
     }
-    for app in tools.pinnedApps.prefix(5 - icons.count) {
-      icons.append(strip.addIcon(app.name, image: tools.icon(for: app), frame: .zero, inMenu: surface == .menu) {
-        [weak self] _ in self?.tools.launch(app)
-      })
+    if pageCount > 1 {
+      let last = page == pageCount - 1
+      icons.append(strip.addIcon(last ? "Back to pins" : "More arrows",
+        image: NSImage(systemSymbolName: last ? "arrow.uturn.backward" : "ellipsis", accessibilityDescription: nil),
+        frame: .zero, inMenu: surface == .menu) { [weak self] _ in self?.nextPage() })
     }
-    if widgets.pinned.count + tools.pinnedApps.count > 5 {
-      icons.append(strip.addIcon("More arrows", image: NSImage(systemSymbolName: "ellipsis", accessibilityDescription: nil),
-        frame: .zero, inMenu: surface == .menu) { [weak self] v in self?.menu().popUp(positioning: nil, at: .zero, in: v) })
+    let dark = SkinStore.shared.skin == .night
+    let ink = dark ? NSColor(white: 0.94, alpha: 1) : NSColor(calibratedRed: 0.15, green: 0.23, blue: 0.21, alpha: 1)
+    for icon in icons {
+      icon.contentTintColor = surface == .menu ? .labelColor : ink
+      if surface == .floating {
+        icon.wantsLayer = true
+        icon.layer?.cornerRadius = 15
+        icon.layer?.backgroundColor = ink.withAlphaComponent(0.085).cgColor
+      }
     }
+    strip.layer?.backgroundColor = surface == .menu ? NSColor.clear.cgColor :
+      (dark ? NSColor(calibratedRed: 0.095, green: 0.12, blue: 0.135, alpha: 0.97) : NSColor(calibratedRed: 0.97, green: 0.975, blue: 0.945, alpha: 0.98)).cgColor
+    strip.layer?.borderWidth = surface == .menu ? 0 : 0.8
+    strip.layer?.borderColor = ink.withAlphaComponent(0.18).cgColor
     let mark = QuiverMark(frame: .zero)
     self.mark = mark
+    mark.emblem = emblem
+    mark.ink = ink
     mark.inMenu = surface == .menu
     mark.setAccessibilityLabel("Open Skippy")
-    mark.tap = { [weak self, weak mark] in self?.show(.dashboard, from: mark) }
+    mark.tap = { [weak self] in
+      guard let self else { return }
+      if self.page != 0 { self.page = 0; self.layout() }
+      else { self.nextPage() }
+    }
     mark.courierMenu = { [weak self] _ in self?.menu() ?? NSMenu() }
     mark.beginDrop = { [weak self] in self?.shelf.beginPrimaryDrop() }
     mark.dragHover = { [weak self] inside in self?.hover(inside) }
@@ -331,24 +413,28 @@ enum QuiverSurface: String, CaseIterable, Identifiable {
     render()
   }
 
+  func nextPage() {
+    shelf.dismiss()
+    if !unfolded { setUnfolded(true) }
+    page = (page + 1) % pageCount
+    layout()
+  }
+
   private func render() {
-    let width = cell + (cell * CGFloat(icons.count) * progress).rounded()
-    if let status, status.length != width { status.length = width }
-    let markX = growsRight ? 0 : width - cell
-    let origin = CGPoint(x: min(max(center.x - cell / 2 - markX, screenBounds.minX), screenBounds.maxX - width),
-                         y: center.y - height / 2)
-    let size = CGSize(width: width, height: height)
-    let frame = CGRect(origin: origin, size: size)
-    if let floating, floating.frame != frame { floating.setFrame(frame, display: false) }
-    strip.frame = CGRect(origin: .zero, size: size)
-    mark?.frame = CGRect(x: markX, y: 0, width: cell, height: height)
+    let geometry = QuiverGeometry(surface: surface, center: center, bounds: screenBounds, count: icons.count,
+                                  progress: progress, height: height, growsRight: growsRight)
+    if let status, status.length != geometry.frame.width { status.length = geometry.frame.width }
+    if let floating, floating.frame != geometry.frame { floating.setFrame(geometry.frame, display: false) }
+    strip.frame = CGRect(origin: .zero, size: geometry.frame.size)
+    strip.layer?.cornerRadius = surface == .menu ? 5 : min(strip.frame.width, strip.frame.height) / 2
+    mark?.frame = geometry.mark
     for (i, icon) in icons.enumerated() {
-      let offset = (cell * CGFloat(i + 1) * progress).rounded()
-      icon.frame = CGRect(x: markX + (growsRight ? offset : -offset), y: 0, width: cell, height: height)
+      icon.frame = geometry.buttons[i]
       icon.alphaValue = progress
       icon.isHidden = progress == 0
       icon.isEnabled = progress > 0.9
     }
+    if progress == 0 && !unfolded && page != 0 { page = 0; layout() }
   }
 }
 
@@ -405,8 +491,31 @@ final class ArrowButton: NSButton {
 }
 final class QuiverMark: FileDropSurface.ReceivingView {
   var inMenu = false
+  var emblem: QuiverEmblem = .scout
+  var ink = NSColor.labelColor
   override func draw(_ dirtyRect: NSRect) {
-    let color = inMenu ? NSColor.labelColor : NSColor(calibratedRed: 0.84, green: 0.94, blue: 0.66, alpha: 1)
+    let color = inMenu ? NSColor.labelColor : ink
+    if emblem == .scout {
+      let body = CGRect(x: bounds.midX - 10, y: bounds.midY - 8, width: 20, height: 15)
+      color.setFill(); NSBezierPath(roundedRect: body, xRadius: 6, yRadius: 6).fill()
+      let antenna = NSBezierPath(); antenna.move(to: CGPoint(x: body.midX, y: body.maxY-1))
+      antenna.line(to: CGPoint(x: body.midX+3, y: body.maxY+3)); color.setStroke(); antenna.lineWidth = 1.5; antenna.stroke()
+      (inMenu ? NSColor.windowBackgroundColor : (SkinStore.shared.skin == .night ? NSColor.black : NSColor.white)).setFill()
+      for dx: CGFloat in [-4, 4] {
+        NSBezierPath(roundedRect: CGRect(x: body.midX + dx - 1.4, y: body.midY-2, width: 2.8, height: 5), xRadius: 1.4, yRadius: 1.4).fill()
+      }
+      return
+    }
+    if emblem == .spark {
+      let path = NSBezierPath()
+      for i in 0..<8 {
+        let a = CGFloat(i) * .pi / 4
+        let radius: CGFloat = i.isMultiple(of: 2) ? 10 : 3.6
+        let pt = CGPoint(x: bounds.midX + radius * cos(a), y: bounds.midY + radius * sin(a))
+        if i == 0 { path.move(to: pt) } else { path.line(to: pt) }
+      }
+      path.close(); color.setFill(); path.fill(); return
+    }
     color.setFill()
     let x = bounds.midX - 10, y = bounds.midY - 8
     for (dx, dy, length) in [(0.0, 7.0, 8.0), (2.0, 1.0, 13.0)] {

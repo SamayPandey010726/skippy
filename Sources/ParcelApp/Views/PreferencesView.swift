@@ -6,6 +6,7 @@ import SwiftUI
 struct PreferencesView: View {
   @EnvironmentObject private var store: ParcelStore
   @ObservedObject private var clipboardHistory = ClipboardHistoryStore.shared
+  @ObservedObject private var tools = NotchToolStore.shared
   @ObservedObject private var quiver = SkippyQuiver.shared
   @State private var tab = 0
   @State private var captureAccessMessage: String?
@@ -64,6 +65,7 @@ struct PreferencesView: View {
           else if tab == 1 { keyboardShortcuts }
           else if tab == 2 { automation }
           else if tab == 3 { licence }
+          else if tab == 5 { WelcomeView().frame(maxWidth: .infinity) }
           else { about }
         }.frame(maxWidth: .infinity, alignment: .leading).padding(.trailing, 8)
       }
@@ -228,6 +230,10 @@ struct PreferencesView: View {
         Slider(value: Binding(get: { Double(courier.interfaceScale) }, set: { courier.interfaceScale = CGFloat($0) }),
           in: 0.75...1.5, step: 0.05).accessibilityLabel("Universal interface size")
         SkinPickerRow()
+        Picker("Launcher icon", selection: $quiver.emblem) {
+          ForEach(QuiverEmblem.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+        }.pickerStyle(.segmented)
+
         Toggle("Keep local clipboard history", isOn: $clipboardHistory.captureEnabled)
         Picker("Attach quiver to", selection: $quiver.surface) {
           ForEach(QuiverSurface.allCases) { Text($0.rawValue).tag($0) }
@@ -238,7 +244,7 @@ struct PreferencesView: View {
             _ = AXIsProcessTrustedWithOptions(options)
           }
         }
-        Text("Hover to unfold pinned arrows. Click an arrow to open its panel. Drag the floating mark to a screen edge to attach it. In the Dock, click to open or secondary-click for arrows.")
+        Text("Hover for pins. Choose More to browse the next group in place. Click an arrow to keep its panel open. Drag the floating mark to a screen edge to attach it. In the Dock, click to open or secondary-click for arrows.")
           .font(.caption).foregroundStyle(.secondary)
         Picker("Collapse after", selection: Binding(get: { courier.idleTimeout }, set: { courier.idleTimeout = $0 })) {
           Text("5 sec").tag(TimeInterval(5)); Text("10 sec").tag(TimeInterval(10))
@@ -250,6 +256,14 @@ struct PreferencesView: View {
           Label("Quiver arrows", systemImage: "square.grid.2x2").font(.system(size: 13, weight: .semibold))
           Spacer()
           Button("Reset layout", action: notchWidgets.reset).font(.system(size: 10))
+        }
+        Button("Pin a Mac application…", action: tools.choosePinnedApp)
+        ForEach(tools.pinnedApps) { app in
+          HStack {
+            Text(app.name)
+            Spacer()
+            Button("Unpin") { tools.unpinApp(app) }.accessibilityLabel("Unpin " + app.name)
+          }
         }
         Text("Drag widgets to rearrange them. Every feature supports Small, Tall, Wide, Large and Full-page sizes. Scrolling snaps one complete page at a time.")
           .font(.system(size: 10)).foregroundStyle(Ink.secondary)

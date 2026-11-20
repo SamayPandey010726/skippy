@@ -3,9 +3,12 @@ import Carbon
 
 enum CourierCommand: String, CaseIterable, Identifiable {
   case chooseArrow, nextFile, previousFile, search, filters, pack, copy, paste, clipboard, tools, processMedia, ocr, settings, open, close
+  case cycleTheme, cycleEmblem
   var id: String { rawValue }
   var title: String {
     switch self {
+    case .cycleTheme: return "Switch light / dark"
+    case .cycleEmblem: return "Change launcher icon"
     case .chooseArrow: return "Find an arrow"
     case .nextFile: return "Next widget page"
     case .previousFile: return "Previous widget page"
@@ -25,6 +28,8 @@ enum CourierCommand: String, CaseIterable, Identifiable {
   }
   var defaultBinding: CourierKeyBinding {
     switch self {
+    case .cycleTheme: return .init(keyCode: UInt16(kVK_ANSI_T), modifiers: NSEvent.ModifierFlags([.option, .shift]).rawValue, keyLabel: "T")
+    case .cycleEmblem: return .init(keyCode: UInt16(kVK_ANSI_I), modifiers: NSEvent.ModifierFlags([.option, .shift]).rawValue, keyLabel: "I")
     case .chooseArrow: return .init(keyCode: UInt16(kVK_ANSI_K), modifiers: NSEvent.ModifierFlags.command.rawValue, keyLabel: "K")
     case .nextFile: return .init(keyCode: UInt16(kVK_Tab), modifiers: 0, keyLabel: "Tab")
     case .previousFile: return .init(keyCode: UInt16(kVK_Tab), modifiers: NSEvent.ModifierFlags.shift.rawValue, keyLabel: "Tab")

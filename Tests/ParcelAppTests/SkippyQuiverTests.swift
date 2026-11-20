@@ -28,7 +28,7 @@ final class SkippyQuiverTests: XCTestCase {
       (.init(x: -720, y: 1098), .notch), (.init(x: -20, y: 1098), .menu),
       (.init(x: -1040, y: 1098), .top), (.init(x: -720, y: 231), .bottom),
       (.init(x: -1433, y: 650), .left), (.init(x: -4, y: 650), .right),
-      (.init(x: -500, y: 600), .floating)]
+      (.init(x: -720, y: 204), .dock), (.init(x: -500, y: 600), .floating)]
     for (point, expected) in cases {
       XCTAssertEqual(QuiverSurface.snapped(at: point, screen: screen, visible: visible), expected)
       let anchor = CGRect(origin: point, size: CGSize(width: 30, height: 24))
@@ -74,13 +74,22 @@ final class SkippyQuiverTests: XCTestCase {
     let screen = try XCTUnwrap(button.window?.screen)
     XCTAssertTrue(screen.visibleFrame.contains(panel))
     let anchor = try XCTUnwrap(button.window).convertToScreen(button.convert(button.bounds, to: nil))
-    let expected = QuiverSurface.panel(at: anchor, within: screen.visibleFrame, size: panel.size)
+    let expected = QuiverSurface.panel(at: quiver.toolAnchor(anchor), within: screen.visibleFrame, size: panel.size)
     // WindowServer aligns window origins to physical pixels.
     let pixel = 1 / screen.backingScaleFactor
     XCTAssertEqual(panel.minX, expected.minX, accuracy: pixel)
     XCTAssertEqual(panel.minY, expected.minY, accuracy: pixel)
     shelf.dismiss()
     XCTAssertFalse(shelf.isVisible)
+    let window = quiver.strip.window
+    var titles = Set<String>()
+    for _ in 0..<quiver.pageCount {
+      titles.formUnion(quiver.strip.subviews.compactMap { ($0 as? NSButton)?.accessibilityLabel() })
+      quiver.nextPage()
+      XCTAssertTrue(quiver.strip.window === window)
+    }
+    XCTAssertEqual(quiver.page, 0)
+    XCTAssertTrue(widgets.widgets.allSatisfy { titles.contains($0.kind.module.title) })
     quiver.hover(false)
     try await Task.sleep(for: .seconds(2))
     XCTAssertFalse(quiver.unfolded)
