@@ -6,7 +6,13 @@ permissions:
 
 jobs:
   record:
-    name: Test and film the Mac application
+    strategy:
+      fail-fast: false
+      matrix:
+        batch: [wheel, files, utilities, system, capture, preferences]
+    name: Film ${{ matrix.batch }}
+    env:
+      SKIPPY_FILM_BATCH: ${{ matrix.batch }}
     runs-on: macos-15
     timeout-minutes: 40
     steps:
@@ -19,18 +25,30 @@ jobs:
           if ! command -v ffmpeg >/dev/null; then brew install ffmpeg; fi
       - name: Record native interactions
         run: bash Scripts/record-feature-library.sh
-      - name: Upload verified feature videos and review index
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: footage-${{ matrix.batch }}
+          path: build/feature-review.*/build/feature-captures/
+          if-no-files-found: ignore
+  package:
+    needs: record
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: footage-*
+          path: footage
+      - name: Verify and package films
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y ffmpeg
+          mkdir captures
+          find footage -name WindowServer.mp4 -print0 | while IFS= read -r -d '' movie; do
+            ln -s "$PWD/$(dirname "$movie")" "captures/$(basename "$(dirname "$movie")")"
+          done
+          python3 Scripts/package-feature-films.py captures Review
+      - uses: actions/upload-artifact@v4
         with:
           name: Skippy-feature-library
-          path: build/feature-review.*/Review/
-          if-no-files-found: error
-      - name: Save capture diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Skippy-recording-diagnostics
-          path: |
-            build/feature-review.*/build/Skippy.log
-            build/feature-review.*/build/feature-captures/
-          if-no-files-found: ignore
+          path: Review

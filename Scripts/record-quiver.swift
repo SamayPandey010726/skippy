@@ -107,7 +107,10 @@ guard let strip = windows().first(where: { (120...150).contains($0.width) && (12
 }
 let shelf = CGPoint(x: strip.midX, y: strip.midY - 51)
 try glide(center, shelf)
-pause(0.85)
+for _ in 0..<50 {
+  if windows().contains(where: { $0.width >= 300 && $0.height >= 160 }) { break }
+  pause(0.1)
+}
 try saveShelfImage()
 guard windows().contains(where: { $0.width >= 300 && $0.height >= 160 }) else { print("Preview missing", windows(), "mark", mark, "strip", strip, "pointer", shelf); fflush(stdout); throw RecordingError.panelFailed }
 guard NSWorkspace.shared.frontmostApplication?.processIdentifier == baselineFocus else {

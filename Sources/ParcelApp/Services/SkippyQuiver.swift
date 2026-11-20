@@ -376,6 +376,7 @@ enum QuiverEmblem: String, CaseIterable {
     }
     strip.addSubview(mark)
     render()
+    if unfolded { trackArrow() }
   }
 
   func beginKeyboardBrowsing() {

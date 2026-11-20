@@ -323,7 +323,17 @@ check("Escape cancels search and preserves the current tool") {
 }
 let arrows = ["File Shelf", "Clipboard", "Extract text", "Pick colour", "Timer", "Notes", "QR tools", "Search",
               "Apps", "Music", "Downloads", "Stay awake", "Recent actions", "Mac", "Calendar", "Calculator", "Screenshots", "Draw on screen"]
-for name in arrows {
+let batch = ProcessInfo.processInfo.environment["SKIPPY_FILM_BATCH"] ?? "all"
+let selected: [String]
+switch batch {
+case "files": selected = Array(arrows[0..<6])
+case "utilities": selected = Array(arrows[6..<10])
+case "system": selected = Array(arrows[10..<16])
+case "capture": selected = Array(arrows[16...])
+case "preferences": selected = []
+default: selected = arrows
+}
+for name in selected {
   // A system sampler or capture tool may still be restoring the prior panel.
   for _ in 0..<12 where panels().isEmpty { Thread.sleep(forTimeInterval: 0.08) }
   if panels().isEmpty {
@@ -357,7 +367,7 @@ for name in arrows {
   }
   checkingControls = false
 }
-if filming {
+if filming && (batch == "all" || batch == "preferences") {
   try startFilm("Keyboard and themes")
   beat(1)
   key(kVK_ANSI_T, flags: [.maskAlternate, .maskShift])
@@ -382,8 +392,12 @@ if filming {
   Thread.sleep(forTimeInterval: 0.3)
   key(kVK_Escape)
 }
+if !panels().isEmpty {
+  key(kVK_Escape)
+  check("dismiss the current tool") { panels().isEmpty }
+}
 key(kVK_ANSI_P, flags: [.maskControl, .maskAlternate, .maskCommand])
-check("summon again after leaving drawing") { !panels().isEmpty }
+check("summon again after leaving the tool") { !panels().isEmpty }
 key(kVK_Escape)
 check("Escape dismisses the final tool") { panels().isEmpty }
 

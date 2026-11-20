@@ -26,7 +26,13 @@ trap 'kill "$app_pid" 2>/dev/null || true' EXIT
 sleep 2
 open -a "$app_path" "$PWD/Samples/Launch notes.txt" "$PWD/Samples/A little place.png"
 sleep 2
-build/record-quiver "build/feature-captures/Floating wheel" "$app_pid"
-SKIPPY_FEATURE_FILMS=1 build/check-arrows "$app_pid"
+batch="${SKIPPY_FILM_BATCH:-all}"
+if [[ "$batch" == all || "$batch" == wheel ]]; then
+  build/record-quiver "build/feature-captures/Floating wheel" "$app_pid"
+fi
+if [[ "$batch" != wheel ]]; then
+  SKIPPY_FEATURE_FILMS=1 build/check-arrows "$app_pid"
+fi
+if [[ "$batch" != all ]]; then exit 0; fi
 python3 "$renderer" build/feature-captures Review
 echo "Feature library: $PWD/Review/index.html"
