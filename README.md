@@ -2,7 +2,7 @@
 
 Skippy is a native macOS quiver. Hover over its mark to unfold your pinned tools. Click an arrow for File Shelf, Clipboard, Notes, Timer or another tool. Settings lets you attach the mark to the menu bar, notch, desktop, screen edges or Dock.
 
-[Product and feature brief](SKIPPY-BRIEF.md) · [Design and build plan](Docs/SKIPPY-PLAN.md) · [Mac checks](.github/workflows/check.yml)
+[Local Mac handoff and 22-film recording guide](HANDOFF.md) · [Product and feature brief](SKIPPY-BRIEF.md) · [Design and build plan](Docs/SKIPPY-PLAN.md) · [Mac checks](.github/workflows/check.yml)
 
 ## Run from a Mac terminal
 
@@ -19,11 +19,11 @@ The launcher opens `build/Skippy.app`. Use `bash Scripts/apple-terminal.sh iphon
 
 ## Run on GitHub’s Mac
 
-From a terminal authenticated to this repository, dispatch the existing workflow on the Skippy branch. Each run provisions a temporary Mac, executes the build and simulator checks, and attaches the bundle, recordings and device screenshots to the run.
+From a terminal authenticated to this repository, dispatch the existing workflow on main. Each run provisions a temporary Mac, executes the build and simulator checks, and attaches the bundle, recordings and device screenshots to the run.
 
 ```bash
-gh workflow run check.yml --ref skippy/quiver
-gh run list --branch skippy/quiver --limit 1
+gh workflow run check.yml --ref main
+gh run list --branch main --limit 1
 ```
 
 ## Earlier shelf implementation

@@ -1,0 +1,143 @@
+warning: 'zipfoundation': found 1 file(s) which are unhandled; explicitly declare them as resources or exclude from the target
+    /tmp/skippy-core-build/checkouts/ZIPFoundation/Sources/ZIPFoundation/Resources/PrivacyInfo.xcprivacy
+[0/1] Planning build
+Building for debugging...
+[0/3] Write swift-version--4FC3C1EE3687CF0E.txt
+Build complete! (0.66s)
+Test Suite 'All tests' started at 2026-11-20 05:46:06.694
+Test Suite 'debug.xctest' started at 2026-11-20 05:46:06.708
+Test Suite 'CourierCompactTests' started at 2026-11-20 05:46:06.708
+Test Case 'CourierCompactTests.testCompactDialPlacementKeepsCourierAndPaneOnScreenAcrossScaleAndDirections' started at 2026-11-20 05:46:06.708
+Test Case 'CourierCompactTests.testCompactDialPlacementKeepsCourierAndPaneOnScreenAcrossScaleAndDirections' passed (0.001 seconds)
+Test Case 'CourierCompactTests.testDeliberateHorizontalAndVerticalShakesRestoreButSlowMovementJitterAndDraggingDoNot' started at 2026-11-20 05:46:06.709
+Test Case 'CourierCompactTests.testDeliberateHorizontalAndVerticalShakesRestoreButSlowMovementJitterAndDraggingDoNot' passed (0.101 seconds)
+Test Case 'CourierCompactTests.testMenuDialIsOneStraightRowBelowMenuAcrossCountsAndScale' started at 2026-11-20 05:46:06.810
+Test Case 'CourierCompactTests.testMenuDialIsOneStraightRowBelowMenuAcrossCountsAndScale' passed (0.101 seconds)
+Test Case 'CourierCompactTests.testPreviewPrefersAvailableSideMovesOnlyWhenNecessaryAndDeclinesImpossibleFit' started at 2026-11-20 05:46:06.911
+Test Case 'CourierCompactTests.testPreviewPrefersAvailableSideMovesOnlyWhenNecessaryAndDeclinesImpossibleFit' passed (0.001 seconds)
+Test Case 'CourierCompactTests.testSemiCircleCentersStayAtConstantRadiusFromCourierAndUseChosenHalf' started at 2026-11-20 05:46:06.911
+Test Case 'CourierCompactTests.testSemiCircleCentersStayAtConstantRadiusFromCourierAndUseChosenHalf' passed (0.0 seconds)
+Test Case 'CourierCompactTests.testSidePreviewNeverOverlapsAcrossEdgesDirectionsScreensAndScales' started at 2026-11-20 05:46:06.912
+Test Case 'CourierCompactTests.testSidePreviewNeverOverlapsAcrossEdgesDirectionsScreensAndScales' passed (0.0 seconds)
+Test Suite 'CourierCompactTests' passed at 2026-11-20 05:46:06.912
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.204 (0.204) seconds
+Test Suite 'FileSearchTests' started at 2026-11-20 05:46:06.912
+Test Case 'FileSearchTests.testClickableTypeSizeAndDateFiltersIntersectTextQuery' started at 2026-11-20 05:46:06.912
+Test Case 'FileSearchTests.testClickableTypeSizeAndDateFiltersIntersectTextQuery' passed (0.004 seconds)
+Test Case 'FileSearchTests.testDateEndIsExclusiveAndLastWeekContainsSevenCalendarDays' started at 2026-11-20 05:46:06.916
+Test Case 'FileSearchTests.testDateEndIsExclusiveAndLastWeekContainsSevenCalendarDays' passed (0.0 seconds)
+Test Case 'FileSearchTests.testISODateRelativeDaysAndInvalidDatesAreNotSilentlyGuessed' started at 2026-11-20 05:46:06.916
+Test Case 'FileSearchTests.testISODateRelativeDaysAndInvalidDatesAreNotSilentlyGuessed' passed (0.003 seconds)
+Test Case 'FileSearchTests.testNaturalExcelOrNumbersQueryUnionsTypesIncludingNumbersPackages' started at 2026-11-20 05:46:06.919
+Test Case 'FileSearchTests.testNaturalExcelOrNumbersQueryUnionsTypesIncludingNumbersPackages' passed (0.001 seconds)
+Test Case 'FileSearchTests.testNaturalSizeAndFilenameConstraintsCombineWithoutChangingPayloads' started at 2026-11-20 05:46:06.920
+Test Case 'FileSearchTests.testNaturalSizeAndFilenameConstraintsCombineWithoutChangingPayloads' passed (0.001 seconds)
+Test Case 'FileSearchTests.testQuotedNamesStayLiteralAndPreparedSizesAreSearched' started at 2026-11-20 05:46:06.920
+Test Case 'FileSearchTests.testQuotedNamesStayLiteralAndPreparedSizesAreSearched' passed (0.0 seconds)
+Test Case 'FileSearchTests.testUploadedOrdinalUsesAddedDateInCurrentMonthAndExplainsIt' started at 2026-11-20 05:46:06.921
+Test Case 'FileSearchTests.testUploadedOrdinalUsesAddedDateInCurrentMonthAndExplainsIt' passed (0.001 seconds)
+Test Suite 'FileSearchTests' passed at 2026-11-20 05:46:06.922
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.01 (0.01) seconds
+Test Suite 'NameAndPersistenceTests' started at 2026-11-20 05:46:06.922
+Test Case 'NameAndPersistenceTests.testBinRoundTripRetainsWholeParcelAndExactExpiry' started at 2026-11-20 05:46:06.922
+Test Case 'NameAndPersistenceTests.testBinRoundTripRetainsWholeParcelAndExactExpiry' passed (0.001 seconds)
+Test Case 'NameAndPersistenceTests.testCorruptLibraryIsReportedNotSilentlyReplaced' started at 2026-11-20 05:46:06.923
+Test Case 'NameAndPersistenceTests.testCorruptLibraryIsReportedNotSilentlyReplaced' passed (0.002 seconds)
+Test Case 'NameAndPersistenceTests.testDocumentRoundTripRetainsMissingReferencesAndPreparedState' started at 2026-11-20 05:46:06.925
+Test Case 'NameAndPersistenceTests.testDocumentRoundTripRetainsMissingReferencesAndPreparedState' passed (0.002 seconds)
+Test Case 'NameAndPersistenceTests.testLongCollisionSuffixRemainsWithinLimit' started at 2026-11-20 05:46:06.927
+Test Case 'NameAndPersistenceTests.testLongCollisionSuffixRemainsWithinLimit' passed (0.0 seconds)
+Test Case 'NameAndPersistenceTests.testNamesUseCanonicalUnicodeAndCaseInsensitiveCollisionPolicy' started at 2026-11-20 05:46:06.927
+Test Case 'NameAndPersistenceTests.testNamesUseCanonicalUnicodeAndCaseInsensitiveCollisionPolicy' passed (0.0 seconds)
+Test Case 'NameAndPersistenceTests.testOldLibrariesLoadWithEmptyBinAndLegacyParcelPins' started at 2026-11-20 05:46:06.927
+Test Case 'NameAndPersistenceTests.testOldLibrariesLoadWithEmptyBinAndLegacyParcelPins' passed (0.001 seconds)
+Test Case 'NameAndPersistenceTests.testRejectsTraversalAndInvalidComponents' started at 2026-11-20 05:46:06.928
+Test Case 'NameAndPersistenceTests.testRejectsTraversalAndInvalidComponents' passed (0.0 seconds)
+Test Case 'NameAndPersistenceTests.testStackIdentityAndCompactNameSurviveCoding' started at 2026-11-20 05:46:06.929
+Test Case 'NameAndPersistenceTests.testStackIdentityAndCompactNameSurviveCoding' passed (0.0 seconds)
+Test Suite 'NameAndPersistenceTests' passed at 2026-11-20 05:46:06.929
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.007 (0.007) seconds
+Test Suite 'PackagingTests' started at 2026-11-20 05:46:06.929
+Test Case 'PackagingTests.testCancellationAfterStagingDoesNotLeaveArchive' started at 2026-11-20 05:46:06.929
+Test Case 'PackagingTests.testCancellationAfterStagingDoesNotLeaveArchive' passed (0.006 seconds)
+Test Case 'PackagingTests.testCancellationDoesNotPublishOutput' started at 2026-11-20 05:46:06.935
+Test Case 'PackagingTests.testCancellationDoesNotPublishOutput' passed (0.002 seconds)
+Test Case 'PackagingTests.testCleanupOnlyRemovesExplicitMacClutter' started at 2026-11-20 05:46:06.937
+Test Case 'PackagingTests.testCleanupOnlyRemovesExplicitMacClutter' passed (0.009 seconds)
+Test Case 'PackagingTests.testDefaultBuildOmitsManifest' started at 2026-11-20 05:46:06.946
+Test Case 'PackagingTests.testDefaultBuildOmitsManifest' passed (0.003 seconds)
+Test Case 'PackagingTests.testDestinationCreatedDuringJobIsNotOverwritten' started at 2026-11-20 05:46:06.949
+Test Case 'PackagingTests.testDestinationCreatedDuringJobIsNotOverwritten' passed (0.004 seconds)
+Test Case 'PackagingTests.testDoesNotOverwriteDestination' started at 2026-11-20 05:46:06.954
+Test Case 'PackagingTests.testDoesNotOverwriteDestination' passed (0.002 seconds)
+Test Case 'PackagingTests.testEmptyFolderSurvives' started at 2026-11-20 05:46:06.955
+Test Case 'PackagingTests.testEmptyFolderSurvives' passed (0.004 seconds)
+Test Case 'PackagingTests.testFailureDoesNotPublishOrLeavePartialArchive' started at 2026-11-20 05:46:06.959
+Test Case 'PackagingTests.testFailureDoesNotPublishOrLeavePartialArchive' passed (0.001 seconds)
+Test Case 'PackagingTests.testManifestNameCollisionDoesNotClobberInput' started at 2026-11-20 05:46:06.960
+Test Case 'PackagingTests.testManifestNameCollisionDoesNotClobberInput' passed (0.006 seconds)
+Test Case 'PackagingTests.testMetadataCleanupCanBeDisabled' started at 2026-11-20 05:46:06.967
+Test Case 'PackagingTests.testMetadataCleanupCanBeDisabled' passed (0.004 seconds)
+Test Case 'PackagingTests.testPackagePreservesOriginalsAndExtractsWithCorrectContents' started at 2026-11-20 05:46:06.971
+Test Case 'PackagingTests.testPackagePreservesOriginalsAndExtractsWithCorrectContents' passed (0.007 seconds)
+Test Case 'PackagingTests.testRejectsOutputInsideInputFolder' started at 2026-11-20 05:46:06.978
+Test Case 'PackagingTests.testRejectsOutputInsideInputFolder' passed (0.001 seconds)
+Test Case 'PackagingTests.testRejectsSymbolicLinksIncludingNestedLinks' started at 2026-11-20 05:46:06.979
+Test Case 'PackagingTests.testRejectsSymbolicLinksIncludingNestedLinks' passed (0.002 seconds)
+Test Case 'PackagingTests.testTopLevelMacClutterIsExcludedWithoutDeletingOriginal' started at 2026-11-20 05:46:06.981
+Test Case 'PackagingTests.testTopLevelMacClutterIsExcludedWithoutDeletingOriginal' passed (0.004 seconds)
+Test Case 'PackagingTests.testUnicodeNamesAndEmojiRoundTrip' started at 2026-11-20 05:46:06.985
+Test Case 'PackagingTests.testUnicodeNamesAndEmojiRoundTrip' passed (0.004 seconds)
+Test Suite 'PackagingTests' passed at 2026-11-20 05:46:06.990
+	 Executed 15 tests, with 0 failures (0 unexpected) in 0.06 (0.06) seconds
+Test Suite 'QuiverGeometryTests' started at 2026-11-20 05:46:06.990
+Test Case 'QuiverGeometryTests.testDockSnapDistinguishesReservedDockSpaceFromDesktopEdge' started at 2026-11-20 05:46:06.990
+Test Case 'QuiverGeometryTests.testDockSnapDistinguishesReservedDockSpaceFromDesktopEdge' passed (0.0 seconds)
+Test Case 'QuiverGeometryTests.testSideBarsHaveOneColumnAndOpenTheirToolIntoTheDisplay' started at 2026-11-20 05:46:06.990
+Test Case 'QuiverGeometryTests.testSideBarsHaveOneColumnAndOpenTheirToolIntoTheDisplay' passed (0.0 seconds)
+Test Case 'QuiverGeometryTests.testWheelKeepsItsMarkStillAndSeparatesAllSevenTargets' started at 2026-11-20 05:46:06.990
+Test Case 'QuiverGeometryTests.testWheelKeepsItsMarkStillAndSeparatesAllSevenTargets' passed (0.101 seconds)
+Test Suite 'QuiverGeometryTests' passed at 2026-11-20 05:46:07.091
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.101 (0.101) seconds
+Test Suite 'ShelfInteractionTests' started at 2026-11-20 05:46:07.091
+Test Case 'ShelfInteractionTests.testAdjustableIconSizingAlwaysReservesLargeControlsAndRejectsInvalidValues' started at 2026-11-20 05:46:07.091
+Test Case 'ShelfInteractionTests.testAdjustableIconSizingAlwaysReservesLargeControlsAndRejectsInvalidValues' passed (0.0 seconds)
+Test Case 'ShelfInteractionTests.testCloseAndExpandScaleIndependentlyWithTheMainIconWithoutOverlapping' started at 2026-11-20 05:46:07.091
+Test Case 'ShelfInteractionTests.testCloseAndExpandScaleIndependentlyWithTheMainIconWithoutOverlapping' passed (0.0 seconds)
+Test Case 'ShelfInteractionTests.testCompactShelfSizesGrowOnlyForVisibleContentsAndBoundLongLists' started at 2026-11-20 05:46:07.091
+Test Case 'ShelfInteractionTests.testCompactShelfSizesGrowOnlyForVisibleContentsAndBoundLongLists' passed (0.0 seconds)
+Test Case 'ShelfInteractionTests.testDialLoopsBothWaysWithoutDuplicatingCardsIncludingTinyAndHugeParcels' started at 2026-11-20 05:46:07.091
+Test Case 'ShelfInteractionTests.testDialLoopsBothWaysWithoutDuplicatingCardsIncludingTinyAndHugeParcels' passed (0.0 seconds)
+Test Case 'ShelfInteractionTests.testDialWheelCoalescesTrackpadDeltasIntoBoundedDetents' started at 2026-11-20 05:46:07.092
+Test Case 'ShelfInteractionTests.testDialWheelCoalescesTrackpadDeltasIntoBoundedDetents' passed (0.0 seconds)
+Test Case 'ShelfInteractionTests.testExpansionKeepsAvatarAnchorAndFitsDisplaysIncludingNegativeOrigins' started at 2026-11-20 05:46:07.092
+Test Case 'ShelfInteractionTests.testExpansionKeepsAvatarAnchorAndFitsDisplaysIncludingNegativeOrigins' passed (0.0 seconds)
+Test Case 'ShelfInteractionTests.testExplicitParcelPinOverridesLegacyPieceRankingAndSurvivesCoding' started at 2026-11-20 05:46:07.092
+Test Case 'ShelfInteractionTests.testExplicitParcelPinOverridesLegacyPieceRankingAndSurvivesCoding' passed (0.0 seconds)
+Test Case 'ShelfInteractionTests.testFanIsBoundedMirroredAndOnlyKeepsSevenCardsForHugeParcels' started at 2026-11-20 05:46:07.092
+Test Case 'ShelfInteractionTests.testFanIsBoundedMirroredAndOnlyKeepsSevenCardsForHugeParcels' passed (0.0 seconds)
+Test Case 'ShelfInteractionTests.testFourWayPlacementHonorsDirectionAtEveryDisplayEdge' started at 2026-11-20 05:46:07.092
+Test Case 'ShelfInteractionTests.testFourWayPlacementHonorsDirectionAtEveryDisplayEdge' passed (0.0 seconds)
+Test Case 'ShelfInteractionTests.testMainPinIsNeverDuplicatedAmongTheSingleRecentSideOption' started at 2026-11-20 05:46:07.093
+Test Case 'ShelfInteractionTests.testMainPinIsNeverDuplicatedAmongTheSingleRecentSideOption' passed (0.0 seconds)
+Test Case 'ShelfInteractionTests.testNewOptionAlwaysSitsBelowRightRegardlessOfFileViewDirection' started at 2026-11-20 05:46:07.093
+Test Case 'ShelfInteractionTests.testNewOptionAlwaysSitsBelowRightRegardlessOfFileViewDirection' passed (0.1 seconds)
+Test Case 'ShelfInteractionTests.testOwnDragSuppressionResetsAfterMouseRelease' started at 2026-11-20 05:46:07.193
+Test Case 'ShelfInteractionTests.testOwnDragSuppressionResetsAfterMouseRelease' passed (0.0 seconds)
+Test Case 'ShelfInteractionTests.testPinMigrationKeepsOnlyFirstRankedPinWithoutChangingPieceRetention' started at 2026-11-20 05:46:07.194
+Test Case 'ShelfInteractionTests.testPinMigrationKeepsOnlyFirstRankedPinWithoutChangingPieceRetention' passed (0.0 seconds)
+Test Case 'ShelfInteractionTests.testRanksPinnedBeforeRecentAndKeepsTiesStable' started at 2026-11-20 05:46:07.194
+Test Case 'ShelfInteractionTests.testRanksPinnedBeforeRecentAndKeepsTiesStable' passed (0.0 seconds)
+Test Case 'ShelfInteractionTests.testStalePasteboardDoesNotTurnTextSelectionIntoAFileDrag' started at 2026-11-20 05:46:07.194
+Test Case 'ShelfInteractionTests.testStalePasteboardDoesNotTurnTextSelectionIntoAFileDrag' passed (0.0 seconds)
+Test Case 'ShelfInteractionTests.testVerticalFansMirrorAndKeepUprightCardCentersInsideThePane' started at 2026-11-20 05:46:07.194
+Test Case 'ShelfInteractionTests.testVerticalFansMirrorAndKeepUprightCardCentersInsideThePane' passed (0.0 seconds)
+Test Suite 'ShelfInteractionTests' passed at 2026-11-20 05:46:07.194
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.103 (0.103) seconds
+Test Suite 'debug.xctest' passed at 2026-11-20 05:46:07.194
+	 Executed 55 tests, with 0 failures (0 unexpected) in 0.486 (0.486) seconds
+Test Suite 'All tests' passed at 2026-11-20 05:46:07.194
+	 Executed 55 tests, with 0 failures (0 unexpected) in 0.486 (0.486) seconds
+◇ Test run started.
+↳ Testing Library Version: 6.0.3 (18c42c19cac3faf)
+✔ Test run with 0 tests passed after 0.001 seconds.
