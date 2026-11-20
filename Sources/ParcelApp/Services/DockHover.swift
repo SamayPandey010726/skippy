@@ -6,18 +6,29 @@ import ApplicationServices
   private let entered: (CGRect) -> Void
   private let left: () -> Void
   private var monitor: Any?
-  private var lastProbe = Date.distantPast
+  private var pendingProbe: DispatchWorkItem?
   private var overTile = false
   init(entered: @escaping (CGRect) -> Void, left: @escaping () -> Void) {
     self.entered = entered; self.left = left
     monitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
-      MainActor.assumeIsolated { self?.moved() }
+      MainActor.assumeIsolated { self?.scheduleProbe() }
     }
   }
-  func stop() { if let monitor { NSEvent.removeMonitor(monitor) }; monitor = nil }
+  func stop() {
+    if let monitor { NSEvent.removeMonitor(monitor) }
+    monitor = nil
+    pendingProbe?.cancel(); pendingProbe = nil
+  }
+  private func scheduleProbe() {
+    guard pendingProbe == nil else { return }
+    let work = DispatchWorkItem { [weak self] in
+      self?.pendingProbe = nil
+      self?.moved()
+    }
+    pendingProbe = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.04, execute: work)
+  }
   private func moved() {
-    guard Date().timeIntervalSince(lastProbe) > 0.05 else { return }
-    lastProbe = Date()
     let mouse = NSEvent.mouseLocation
     guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }),
       (mouse.y < screen.visibleFrame.minY + 64 || mouse.x < screen.visibleFrame.minX + 64 || mouse.x > screen.visibleFrame.maxX - 64),
@@ -38,7 +49,7 @@ import ApplicationServices
       return AXUIElementCopyAttributeValue(item, name as CFString, &value) == .success ? value : nil
     }
     guard let url = attribute(kAXURLAttribute) as? URL,
-      url.standardizedFileURL == Bundle.main.bundleURL.standardizedFileURL,
+      url.resolvingSymlinksInPath().standardizedFileURL.path == Bundle.main.bundleURL.resolvingSymlinksInPath().standardizedFileURL.path,
       let pos = attribute(kAXPositionAttribute), let dim = attribute(kAXSizeAttribute),
       CFGetTypeID(pos) == AXValueGetTypeID(), CFGetTypeID(dim) == AXValueGetTypeID() else { return nil }
     var origin = CGPoint.zero, size = CGSize.zero

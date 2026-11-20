@@ -68,8 +68,16 @@ recorder.arguments = [temp.path] + [crop.minX, crop.minY, width, height].map { S
 try recorder.run()
 let _: Bool = require("capture started") { FileManager.default.fileExists(atPath: temp.appendingPathComponent("capture.ready").path) ? true : nil }
 let start = Date()
+print("Surface", surface, "mark", mark, "display", display)
+if surface == "Dock" {
+  let pointer = CGPoint(x: mark.midX, y: min(mark.midY, display.maxY-1))
+  move(pointer)
+  wait(0.7)
+  print("Dock tile after reveal", String(describing: dockTile()))
+}
 wait(1)
-move(CGPoint(x: mark.midX, y: mark.midY))
+let target = surface == "Dock" ? (dockTile() ?? mark) : mark
+move(CGPoint(x: target.midX, y: target.midY))
 let vertical = ["Left edge", "Right edge"].contains(surface)
 let expanded: CGRect = require("pointer unfolds launcher") {
   guard let pane = launcher(), (vertical ? pane.height : pane.width) > 115 else { return nil }
