@@ -134,4 +134,5 @@ pause(max(0, 17.2 - Date().timeIntervalSince(captureStart)))
 try stop.fileHandleForWriting.close()
 live.waitUntilExit()
 guard live.terminationStatus == 0 else { throw RecordingError.captureFailed }
+NSRunningApplication(processIdentifier: baselineFocus)?.hide()
 print("Recorded the running Mac app with ScreenCaptureKit. Collapsed, unfolded, opened tools and folded.")

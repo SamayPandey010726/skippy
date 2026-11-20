@@ -54,7 +54,7 @@ final class FeatureFilm {
       .appendingPathComponent(title, isDirectory: true)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let screen = CGDisplayBounds(CGMainDisplayID())
-    let width = min(1024, screen.width, screen.height * 16 / 9)
+    let width = min(880, screen.width, screen.height * 16 / 9)
     let height = width * 9 / 16
     region = CGRect(x: min(max(0, panel.midX - width / 2), screen.width - width),
                     y: min(max(0, panel.midY - height / 2 - 24), screen.height - height),
@@ -239,7 +239,11 @@ func verifyContent(_ name: String) {
       board.clearContents(); board.setString("/System/Library/Sounds/Glass.aiff", forType: .string)
       key(kVK_ANSI_V, flags: .maskCommand)
       Thread.sleep(forTimeInterval: 0.45); key(kVK_Return)
-      Thread.sleep(forTimeInterval: 0.5); key(kVK_Return)
+      check("confirm selected audio file in Open panel") {
+        guard contains("Glass.aiff"), let button = control(kAXButtonRole, "Open"),
+              attribute(button, kAXEnabledAttribute) as? Bool == true else { return false }
+        return press("Open")
+      }
       check("open system audio in local player") { contains("Glass") }
     }
   case "Downloads":
