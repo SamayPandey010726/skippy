@@ -67,14 +67,14 @@ guard let mark = windows().first(where: { (26...42).contains($0.width) && (24...
   print("Skippy windows:", windows()); throw RecordingError.missingWindow
 }
 let center = CGPoint(x: mark.midX, y: mark.midY)
-let width = min(screen.width, 700), height = min(screen.height, 540)
-let region = CGRect(x: min(max(0, mark.midX - width * 0.62), screen.maxX - width),
+let width = min(960, screen.width, screen.height * 16 / 9), height = width * 9 / 16
+let region = CGRect(x: min(max(0, mark.midX - width * 0.5), screen.maxX - width),
   y: min(max(0, mark.midY - 92), screen.maxY - height), width: width, height: height).integral
 let live = Process()
 let stop = Pipe()
 live.standardInput = stop
 live.executableURL = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent().appendingPathComponent("display-recorder")
-live.arguments = [out.path] + [region.minX, region.minY, region.width, region.height].map { String(Double($0)) }
+live.arguments = [out.path] + [region.minX, region.minY, region.width, region.height].map { String(Double($0)) } + ["HD"]
 try live.run()
 for _ in 0..<100 {
   if FileManager.default.fileExists(atPath: out.appendingPathComponent("capture.ready").path) { break }
@@ -83,6 +83,7 @@ for _ in 0..<100 {
 }
 guard FileManager.default.fileExists(atPath: out.appendingPathComponent("capture.ready").path) else { throw RecordingError.captureFailed }
 print("ScreenCaptureKit recording with Reduce Motion =", NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+let captureStart = Date()
 func saveShelfImage() throws {
   guard let image = CGWindowListCreateImage(region, .optionOnScreenOnly, kCGNullWindowID, [.bestResolution]),
         let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else {
@@ -119,10 +120,17 @@ try glide(shelf, notes)
 pause(0.55)
 pointer(notes, .leftMouseDown); pointer(notes, .leftMouseUp); pause(0.65)
 try glide(notes, center)
-pointer(center, .leftMouseDown); pointer(center, .leftMouseUp); pause(1.6)
+pointer(center, .leftMouseDown); pointer(center, .leftMouseUp); pause(1.2)
+guard windows().contains(where: { abs($0.width-strip.width) <= 1 && abs($0.height-strip.height) <= 1 }),
+      !windows().contains(where: { $0.width >= 300 && $0.height >= 160 }) else {
+  throw RecordingError.panelFailed
+}
+print("PASS More shares the wheel and dismisses the previous tool")
+pointer(center, .leftMouseDown); pointer(center, .leftMouseUp); pause(0.8)
 escape()
 try glide(center, away); pause(2.45)
 guard windows().contains(where: { $0.width == mark.width && $0.height == mark.height }) else { throw RecordingError.foldFailed }
+pause(max(0, 17.2 - Date().timeIntervalSince(captureStart)))
 try stop.fileHandleForWriting.close()
 live.waitUntilExit()
 guard live.terminationStatus == 0 else { throw RecordingError.captureFailed }

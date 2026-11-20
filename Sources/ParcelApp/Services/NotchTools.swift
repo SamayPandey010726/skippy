@@ -554,6 +554,7 @@ struct NotchMacro: Codable, Identifiable {
       player?.delegate = self
       audioTitle = url.deletingPathExtension().lastPathComponent
       isPlaying = opened.play(); status = isPlaying ? "Playing" : "Audio output unavailable"
+      if mediaSource == nil { mediaTitle = audioTitle; mediaArtist = "Local audio" }
     } catch { status = "That audio file could not be played" }
   }
 
@@ -1364,25 +1365,26 @@ struct NotchToolsView: View {
       }
       LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 9) {
         ForEach(tools.launchableApps, id: \.processIdentifier) { app in
-          Button { tools.activate(app) } label: {
-            VStack(spacing: 5) {
-              ZStack(alignment: .topTrailing) {
+          ZStack(alignment: .topTrailing) {
+            Button { tools.activate(app) } label: {
+              VStack(spacing: 5) {
                 Image(nsImage: app.icon ?? NSImage()).resizable().frame(width: 34, height: 34)
-                  .shadow(color: .black.opacity(0.16), radius: 4, y: 2)
-                if tools.isPinned(app) {
-                  Image(systemName: "pin.fill").font(.system(size: 6, weight: .bold)).foregroundStyle(skin.palette.accent)
-                    .padding(3).background(.regularMaterial, in: Circle()).offset(x: 4, y: -3)
-                }
+                Text(app.localizedName ?? "App").font(.system(size: 8.5, weight: .medium)).lineLimit(1)
               }
-              Text(app.localizedName ?? "App").font(.system(size: 8.5, weight: .medium)).lineLimit(1)
-            }
-            .frame(maxWidth: .infinity).padding(.vertical, 5)
-            .background(Color.primary.opacity(0.001), in: RoundedRectangle(cornerRadius: 11))
-          }.buttonStyle(.plain)
-            .contextMenu {
-              Button(tools.isPinned(app) ? "Remove from quiver" : "Pin to quiver") { tools.togglePinned(app) }
-              Button("Open") { tools.activate(app) }
-            }
+              .frame(maxWidth: .infinity).padding(.vertical, 5)
+              .background(Color.primary.opacity(0.001), in: RoundedRectangle(cornerRadius: 11))
+            }.buttonStyle(.plain)
+              .contextMenu {
+                Button(tools.isPinned(app) ? "Remove from quiver" : "Pin to quiver") { tools.togglePinned(app) }
+                Button("Open") { tools.activate(app) }
+              }
+            Button { tools.togglePinned(app) } label: {
+              Image(systemName: tools.isPinned(app) ? "pin.fill" : "pin")
+                .font(.system(size: 10, weight: .semibold)).frame(width: 20, height: 20)
+                .background(.regularMaterial, in: Circle())
+            }.buttonStyle(.plain)
+              .accessibilityLabel((tools.isPinned(app) ? "Unpin " : "Pin ") + (app.localizedName ?? "application"))
+          }
         }
       }
     }

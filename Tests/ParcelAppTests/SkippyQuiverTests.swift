@@ -1,3 +1,4 @@
+import ParcelCore
 import AppKit
 import XCTest
 @testable import ParcelApp

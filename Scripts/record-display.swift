@@ -28,6 +28,8 @@ final class RecordingDelegate: NSObject, SCRecordingOutputDelegate {
     let config = SCStreamConfiguration()
     config.sourceRect = crop
     config.width = Int(crop.width) / 2 * 2; config.height = Int(crop.height) / 2 * 2
+    if args.last == "HD" { config.width = 1920; config.height = 1080 }
+    print("Recording display", display.width, "×", display.height, "points, crop", crop, "output", config.width, "×", config.height)
     config.showsCursor = true; config.capturesAudio = false
     config.minimumFrameInterval = CMTime(value: 1, timescale: 60)
     let stream = SCStream(filter: SCContentFilter(display: display, excludingWindows: []), configuration: config, delegate: nil)

@@ -4,6 +4,11 @@ import Carbon
 import CoreGraphics
 
 let pid = Int(CommandLine.arguments[1])!
+let filming = ProcessInfo.processInfo.environment["SKIPPY_FEATURE_FILMS"] == "1"
+func beat(_ seconds: Double) {
+  if filming { Thread.sleep(forTimeInterval: seconds) }
+}
+
 func key(_ code: Int, flags: CGEventFlags = [], character: Character? = nil) {
   for down in [true, false] {
     let event = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(code), keyDown: down)!
@@ -25,7 +30,7 @@ func typeText(_ value: String) {
   for c in value {
     let code = codes[Character(String(c).lowercased())] ?? (c == "/" ? kVK_ANSI_Slash : kVK_ANSI_A)
     key(code, flags: c.isUppercase ? .maskShift : [], character: c)
-    Thread.sleep(forTimeInterval: 0.02)
+    Thread.sleep(forTimeInterval: filming ? 0.10 : 0.02)
   }
 }
 func panels() -> [[String: Any]] {
@@ -37,6 +42,55 @@ func panels() -> [[String: Any]] {
     return rect.width >= 300 && rect.height >= 160
   }
 }
+// The source is a live region of the macOS display. Capture begins before the finder opens.
+final class FeatureFilm {
+  let recorder = Process()
+  let signal = Pipe()
+  let directory: URL
+  let start: Date
+  let region: CGRect
+  init(_ title: String, about panel: CGRect) throws {
+    directory = URL(fileURLWithPath: "build/feature-captures", isDirectory: true)
+      .appendingPathComponent(title, isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let screen = CGDisplayBounds(CGMainDisplayID())
+    let width = min(1024, screen.width, screen.height * 16 / 9)
+    let height = width * 9 / 16
+    region = CGRect(x: min(max(0, panel.midX - width / 2), screen.width - width),
+                    y: min(max(0, panel.midY - height / 2 - 24), screen.height - height),
+                    width: width, height: height)
+    recorder.executableURL = URL(fileURLWithPath: "build/display-recorder")
+    recorder.arguments = [directory.path] + [region.minX, region.minY, region.width, region.height].map { String(Double($0)) } + ["HD"]
+    recorder.standardInput = signal
+    try recorder.run()
+    let ready = directory.appendingPathComponent("capture.ready").path
+    for _ in 0..<200 where !FileManager.default.fileExists(atPath: ready) && recorder.isRunning {
+      Thread.sleep(forTimeInterval: 0.05)
+    }
+    guard FileManager.default.fileExists(atPath: ready), recorder.isRunning else { throw CocoaError(.fileWriteUnknown) }
+    start = Date()
+  }
+  func finish() throws {
+    Thread.sleep(forTimeInterval: max(0, 17.2 - Date().timeIntervalSince(start)))
+    try signal.fileHandleForWriting.close()
+    recorder.waitUntilExit()
+    guard recorder.terminationStatus == 0 else { throw CocoaError(.fileWriteUnknown) }
+  }
+}
+var film: FeatureFilm?
+func startFilm(_ title: String) throws {
+  guard filming else { return }
+  guard let b = panels().first?[kCGWindowBounds as String] as? NSDictionary,
+        let pane = CGRect(dictionaryRepresentation: b as CFDictionary) else { throw CocoaError(.fileNoSuchFile) }
+  film = try FeatureFilm(title, about: pane)
+  beat(0.6)
+}
+func finishFilm() throws { try film?.finish(); film = nil }
+func demonstrationPoint(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+  guard let region = film?.region else { return CGPoint(x: x, y: y) }
+  return CGPoint(x: region.minX + x, y: region.minY + y)
+}
+
 var controlFailures: [String] = []
 var checkingControls = false
 func check(_ label: String, until predicate: () -> Bool) {
@@ -84,8 +138,16 @@ func control(_ role: String, _ label: String? = nil) -> AXUIElement? {
   }
 }
 func contains(_ text: String) -> Bool { descendants().contains { labels($0).contains(text) } }
+func center(of node: AXUIElement) -> CGPoint? {
+  guard let position = attribute(node, kAXPositionAttribute),
+        let size = attribute(node, kAXSizeAttribute) else { return nil }
+  var p = CGPoint.zero, sz = CGSize.zero
+  guard AXValueGetValue(position as! AXValue, .cgPoint, &p), AXValueGetValue(size as! AXValue, .cgSize, &sz) else { return nil }
+  return CGPoint(x: p.x + sz.width / 2, y: p.y + sz.height / 2)
+}
 @discardableResult func press(_ title: String) -> Bool {
   guard let button = control(kAXButtonRole, title) else { return false }
+  if filming, let point = center(of: button) { mouse(.mouseMoved, point); beat(0.75) }
   return AXUIElementPerformAction(button, kAXPressAction as CFString) == .success
 }
 func enter(_ string: String, role: String = kAXTextFieldRole) {
@@ -115,6 +177,11 @@ func verifyContent(_ name: String) {
   switch name {
   case "File Shelf":
     check("files opened into shelf") { contains("Launch notes.txt") }
+    let file = URL(fileURLWithPath: "Samples/Garden sketch.svg")
+    board.clearContents(); board.writeObjects([file as NSURL])
+    check("paste a file into Parcels") { press("Paste") }
+    check("pasted file appears in the shelf") { contains("Garden sketch.svg") }
+
   case "Extract text":
     let image = NSImage(size: NSSize(width: 420, height: 110))
     image.lockFocus()
@@ -128,13 +195,14 @@ func verifyContent(_ name: String) {
     board.clearContents()
     check("open system pixel sampler") { press("Pick a pixel") }
     Thread.sleep(forTimeInterval: 0.65)
-    let point = CGPoint(x: 80, y: 180)
+    let point = demonstrationPoint(80, 180)
     mouse(.mouseMoved, point); mouse(.leftMouseDown, point); mouse(.leftMouseUp, point)
     check("sample actual screen pixel into pasteboard") {
       board.string(forType: .string)?.range(of: "^#[0-9A-F]{6}$", options: .regularExpression) != nil
     }
   case "Timer":
     check("start timer") { press("Start") }
+    beat(3)
     check("stop active countdown") { press("Stop") }
     check("timer returns to start") { control(kAXButtonRole, "Start") != nil }
   case "Notes":
@@ -156,12 +224,27 @@ func verifyContent(_ name: String) {
     enter("Skippy native"); check("edit web query") { contains("Skippy native") }
   case "Apps":
     check("list running Finder") { contains("Finder") }
+    check("pin Finder") { press("Pin Finder") }
+    check("unpin Finder") { press("Unpin Finder") }
+    check("pin state restored") { control(kAXButtonRole, "Pin Finder") != nil }
   case "Music":
     check("local playback picker available") { control(kAXButtonRole, "Play a local file") != nil }
+    if let button = control(kAXButtonRole, "Play a local file"), let point = center(of: button) {
+      mouse(.mouseMoved, point); mouse(.leftMouseDown, point); mouse(.leftMouseUp, point)
+      Thread.sleep(forTimeInterval: 0.7)
+      key(kVK_ANSI_G, flags: [.maskCommand, .maskShift])
+      Thread.sleep(forTimeInterval: 0.35)
+      board.clearContents(); board.setString("/System/Library/Sounds/Glass.aiff", forType: .string)
+      key(kVK_ANSI_V, flags: .maskCommand)
+      Thread.sleep(forTimeInterval: 0.45); key(kVK_Return)
+      Thread.sleep(forTimeInterval: 0.5); key(kVK_Return)
+      check("open system audio in local player") { contains("Glass") }
+    }
   case "Downloads":
     check("recent download fixture") { contains("Skippy QA.txt") }
   case "Stay awake":
     check("acquire sleep assertion") { press("Stay awake") }
+    beat(1.8)
     check("release sleep assertion") { press("Allow sleep") }
   case "Recent actions":
     check("recent activity or empty state") { contains("No recent actions") || contains("Launch notes.txt") || descendants().contains { node in
@@ -179,7 +262,7 @@ func verifyContent(_ name: String) {
     check("empty capture sequence") { contains("0 regions") }
     check("start screen region capture") { press("Add region") }
     Thread.sleep(forTimeInterval: 0.85)
-    stroke(from: CGPoint(x: 80, y: 160), to: CGPoint(x: 180, y: 230))
+    stroke(from: demonstrationPoint(80, 160), to: demonstrationPoint(180, 230))
     check("region appears in sequence") { contains("1 regions") || contains("1 region") }
     check("copy joined regions") { press("Copy joined") }
     check("joined region on pasteboard") { NSImage(pasteboard: board) != nil }
@@ -187,7 +270,7 @@ func verifyContent(_ name: String) {
   case "Draw on screen":
     check("open drawing overlay") { press("Start drawing") }
     check("drawing toolbar") { control(kAXButtonRole, "Done") != nil }
-    stroke(from: CGPoint(x: 120, y: 180), to: CGPoint(x: 210, y: 245))
+    stroke(from: demonstrationPoint(120, 180), to: demonstrationPoint(210, 245))
     check("stroke enables undo") {
       guard let button = control(kAXButtonRole, "Undo") else { return false }
       return attribute(button, kAXEnabledAttribute) as? Bool == true
@@ -242,19 +325,56 @@ for name in arrows {
     key(kVK_ANSI_P, flags: [.maskControl, .maskAlternate, .maskCommand])
     check("recover dashboard before " + name) { !panels().isEmpty }
   }
+  try startFilm(name == "QR tools" ? "QR generator" : name)
   key(kVK_ANSI_K, flags: .maskCommand)
   check("finder accepts keyboard focus") {
     guard let value = attribute(application, kAXFocusedUIElementAttribute), CFGetTypeID(value) == AXUIElementGetTypeID() else { return false }
     return labels(value as! AXUIElement).contains("Find an arrow")
   }
+  beat(1.3)
   typeText(name.lowercased())
+  beat(0.9)
   key(kVK_Return)
   check("open " + name) { panels().contains { $0[kCGWindowName as String] as? String == "Skippy · " + name } }
   Thread.sleep(forTimeInterval: 0.18)
   captureArrow(name)
   checkingControls = true
+  beat(1.5)
   verifyContent(name)
+  try finishFilm()
+  if name == "QR tools" {
+    try startFilm("QR scanner")
+    beat(2)
+    check("scan the generated QR image from the clipboard") { press("Scan clipboard") }
+    check("Vision decodes original payload into the clipboard") { NSPasteboard.general.string(forType: .string) == "Skippy QA" }
+    try finishFilm()
+  }
   checkingControls = false
+}
+if filming {
+  try startFilm("Keyboard and themes")
+  beat(1)
+  key(kVK_ANSI_T, flags: [.maskAlternate, .maskShift])
+  beat(2)
+  key(kVK_ANSI_I, flags: [.maskAlternate, .maskShift])
+  beat(1)
+  key(kVK_ANSI_B, flags: [.maskAlternate, .maskShift])
+  beat(1.2)
+  key(kVK_RightArrow); beat(0.8); key(kVK_RightArrow); beat(0.8); key(kVK_Return)
+  check("select Notes from the wheel by keyboard") { panels().contains { $0[kCGWindowName as String] as? String == "Skippy · Notes" } }
+  key(kVK_ANSI_T, flags: [.maskAlternate, .maskShift])
+  try finishFilm()
+  try startFilm("Settings")
+  key(kVK_ANSI_S, flags: .maskCommand)
+  check("Settings is the standalone window") { panels().contains { $0[kCGWindowName as String] as? String == "Skippy Settings" } }
+  beat(1.5)
+  check("open shortcut settings") { press("Shortcuts") }
+  beat(3)
+  check("return to Everyday settings") { press("Everyday") }
+  try finishFilm()
+  key(kVK_ANSI_W, flags: .maskCommand)
+  Thread.sleep(forTimeInterval: 0.3)
+  key(kVK_Escape)
 }
 key(kVK_ANSI_P, flags: [.maskControl, .maskAlternate, .maskCommand])
 check("summon again after leaving drawing") { !panels().isEmpty }

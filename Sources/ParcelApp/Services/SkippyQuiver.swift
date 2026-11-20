@@ -1,66 +1,11 @@
 import AppKit
+import Carbon
 import Combine
 
-enum QuiverSurface: String, CaseIterable, Identifiable {
-  case menu = "Menu bar", notch = "Notch", floating = "Floating", left = "Left edge"
-  case right = "Right edge", top = "Top edge", bottom = "Bottom edge", dock = "Dock"
-  var id: Self { self }
-
-  static func snapped(at point: CGPoint, screen: CGRect, visible: CGRect) -> Self {
-    if (visible.minY - screen.minY > 6 && point.y < visible.minY) ||
-       (visible.minX - screen.minX > 6 && point.x < visible.minX) ||
-       (screen.maxX - visible.maxX > 6 && point.x > visible.maxX) { return .dock }
-    if point.y >= visible.maxY - 12 {
-      if abs(point.x - screen.midX) < 75 { return .notch }
-      if point.x >= screen.maxX - 100 { return .menu }
-      return .top
-    }
-    if point.x < visible.minX + 16 { return .left }
-    if point.x > visible.maxX - 16 { return .right }
-    if point.y < visible.minY + 16 { return .bottom }
-    return .floating
-  }
-
-  static func panel(at anchor: CGRect, within bounds: CGRect, size: CGSize) -> CGRect {
-    let w = min(size.width, bounds.width), h = min(size.height, bounds.height)
-    let below = anchor.minY - h - 3
-    let y = below >= bounds.minY ? below : anchor.maxY + 3
-    return CGRect(x: min(max(anchor.midX - w / 2, bounds.minX), bounds.maxX - w),
-      y: min(max(y, bounds.minY), bounds.maxY - h), width: w, height: h)
-  }
-}
+import ParcelCore
 
 enum QuiverEmblem: String, CaseIterable {
   case scout = "Scout", spark = "Spark", arrows = "Quiver"
-}
-
-struct QuiverGeometry {
-  let frame: CGRect
-  let mark: CGRect
-  let buttons: [CGRect]
-
-  init(surface: QuiverSurface, center: CGPoint, bounds: CGRect, count: Int, progress: CGFloat, height: CGFloat, growsRight: Bool) {
-    let cell: CGFloat = 31
-    let wheel = surface == .floating
-    let vertical = surface == .left || surface == .right
-    let radius: CGFloat = 51
-    let width = wheel ? cell + 2 * radius * progress : (vertical ? cell : cell * (1 + CGFloat(count) * progress))
-    let h = wheel ? height + 2 * radius * progress : (vertical ? height + cell * CGFloat(count) * progress : height)
-    let up = center.y <= bounds.midY
-    let mx = wheel ? (width - cell) / 2 : (vertical || growsRight ? 0 : width - cell)
-    let my = wheel ? (h - height) / 2 : (vertical && !up ? h - height : 0)
-    frame = CGRect(x: min(max(center.x - cell / 2 - mx, bounds.minX), bounds.maxX - width),
-                   y: min(max(center.y - height / 2 - my, bounds.minY), bounds.maxY - h),
-                   width: width.rounded(), height: h.rounded())
-    mark = CGRect(x: mx.rounded(), y: my.rounded(), width: cell, height: height)
-    buttons = (0..<count).map { i in
-      let angle = CGFloat.pi / 2 - 2 * .pi * CGFloat(i) / CGFloat(max(1, count))
-      let delta = cell * CGFloat(i+1) * progress
-      let dx = wheel ? cos(angle) * radius * progress : (vertical ? 0 : (growsRight ? delta : -delta))
-      let dy = wheel ? sin(angle) * radius * progress : (vertical ? (up ? delta : -delta) : 0)
-      return CGRect(x: (mx + dx).rounded(), y: (my + dy).rounded(), width: cell, height: height)
-    }
-  }
 }
 
 /// The same native strip lives in the NSStatusItem or in a floating NSPanel.
@@ -88,6 +33,8 @@ struct QuiverGeometry {
   private var progress: CGFloat = 0
   private var motion: Timer?
   private var pointerMonitor: Any?
+  private var keyboardMonitor: Any?
+  private var focusedIndex = 0
   private var previewWork: DispatchWorkItem?
   private weak var previewTarget: NSButton?
   private var arrowModules: [NSButton: NotchModule] = [:]
@@ -126,6 +73,11 @@ struct QuiverGeometry {
     attach()
     SkinStore.shared.$skin.dropFirst().receive(on: RunLoop.main).sink { [weak self] _ in self?.layout() }.store(in: &subscriptions)
     widgets.$widgets.combineLatest(tools.$pinnedApps).receive(on: RunLoop.main).sink { [weak self] _ in self?.layout() }.store(in: &subscriptions)
+    NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)
+      .sink { [weak self] _ in
+        guard let self, self.keyboardMonitor != nil else { return }
+        self.endKeyboardBrowsing(); self.setUnfolded(false)
+      }.store(in: &subscriptions)
     NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
       .receive(on: RunLoop.main).sink { [weak self] _ in self?.layout() }.store(in: &subscriptions)
   }
@@ -143,6 +95,7 @@ struct QuiverGeometry {
   }
 
   private func attach() {
+    endKeyboardBrowsing()
     foldWork?.cancel(); previewWork?.cancel(); motion?.invalidate()
     if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor); self.pointerMonitor = nil }
     unfolded = false; progress = 0; page = 0
@@ -165,7 +118,7 @@ struct QuiverGeometry {
       item.button?.setAccessibilityLabel("Skippy quiver")
       status = item
     } else {
-      let p = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+      let p = ShelfPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
       p.title = "Skippy quiver"; p.level = .statusBar; p.hidesOnDeactivate = false
       p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
       p.isOpaque = false; p.backgroundColor = .clear; p.hasShadow = true; p.isReleasedWhenClosed = false
@@ -173,11 +126,21 @@ struct QuiverGeometry {
       p.contentView = strip; floating = p
     }
     layout()
-    if surface != .dock { floating?.orderFrontRegardless() }
+    if surface != .dock, let panel = floating {
+      let animate = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+      panel.alphaValue = animate ? 0 : 1
+      panel.orderFrontRegardless()
+      if animate {
+        NSAnimationContext.runAnimationGroup { context in
+          context.duration = 0.14
+          panel.animator().alphaValue = 1
+        }
+      }
+    }
   }
 
   func hover(_ inside: Bool) {
-    guard !dragging else { return }
+    guard !dragging, keyboardMonitor == nil else { return }
     foldWork?.cancel()
     if inside {
       if !unfolded { setUnfolded(true) }
@@ -243,7 +206,7 @@ struct QuiverGeometry {
   }
 
   private func trackArrow() {
-    guard unfolded, let window = strip.window else { return }
+    guard unfolded, keyboardMonitor == nil, let window = strip.window else { return }
     let point = strip.convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
     let button = icons.first { !$0.isHidden && $0.isEnabled && $0.frame.contains(point) }
     guard previewTarget !== button else { return }
@@ -264,11 +227,14 @@ struct QuiverGeometry {
 
   private func show(_ module: NotchModule, from view: NSView? = nil) {
     let rect = view.flatMap { v in v.window.map { $0.convertToScreen(v.convert(v.bounds, to: nil)) } } ?? anchor
+    endKeyboardBrowsing()
     shelf.openArrow(module, at: rect.map(toolAnchor))
   }
 
   func toolAnchor(_ button: CGRect) -> CGRect {
-    guard surface == .floating, let f = floating?.frame else { return button }
+    guard let f = floating?.frame else { return button }
+    if surface == .left || surface == .right { return f }
+    guard surface == .floating else { return button }
     return CGRect(x: button.minX, y: f.minY, width: button.width, height: f.height)
   }
 
@@ -335,7 +301,6 @@ struct QuiverGeometry {
     strip.wantsLayer = true
     strip.layer?.masksToBounds = true
     strip.layer?.cornerRadius = surface == .menu ? 5 : height / 2
-    strip.layer?.backgroundColor = surface == .menu ? NSColor.clear.cgColor : NSColor(calibratedRed: 0.075, green: 0.13, blue: 0.115, alpha: 0.97).cgColor
     strip.subviews.forEach { $0.removeFromSuperview() }
     icons.removeAll(); arrowModules.removeAll(); previewTarget = nil
     enum Entry { case tool(NotchWidget), app(PinnedNotchApp) }
@@ -384,7 +349,7 @@ struct QuiverGeometry {
     mark.emblem = emblem
     mark.ink = ink
     mark.inMenu = surface == .menu
-    mark.setAccessibilityLabel("Open Skippy")
+    mark.setAccessibilityLabel(page == 0 ? "Skippy, browse arrows" : "Back to pinned arrows")
     mark.tap = { [weak self] in
       guard let self else { return }
       if self.page != 0 { self.page = 0; self.layout() }
@@ -411,6 +376,57 @@ struct QuiverGeometry {
     }
     strip.addSubview(mark)
     render()
+  }
+
+  func beginKeyboardBrowsing() {
+    foldWork?.cancel()
+    previewWork?.cancel()
+    endKeyboardBrowsing()
+    if surface == .dock, dockTile == nil { dockTile = anchor }
+    shelf.dismiss()
+    page = 0
+    layout()
+    setUnfolded(true)
+    floating?.makeKeyAndOrderFront(nil)
+    NSApp.activate(ignoringOtherApps: true)
+    focusIcon(0)
+    keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+      MainActor.assumeIsolated { self?.handleWheelKey(event) == true ? nil : event }
+    }
+  }
+
+  private func focusIcon(_ index: Int) {
+    guard !icons.isEmpty else { return }
+    focusedIndex = (index % icons.count + icons.count) % icons.count
+    for (i, button) in icons.enumerated() { (button as? ArrowButton)?.pointing = i == focusedIndex }
+    if let floating { floating.makeFirstResponder(icons[focusedIndex]) }
+    strip.setAccessibilityHelp(icons[focusedIndex].accessibilityLabel())
+  }
+
+  private func handleWheelKey(_ event: NSEvent) -> Bool {
+    guard !icons.isEmpty else { endKeyboardBrowsing(); return false }
+    switch Int(event.keyCode) {
+    case kVK_LeftArrow, kVK_UpArrow: focusIcon(focusedIndex - 1)
+    case kVK_RightArrow, kVK_DownArrow: focusIcon(focusedIndex + 1)
+    case kVK_Tab: focusIcon(focusedIndex + (event.modifierFlags.contains(.shift) ? -1 : 1))
+    case kVK_Escape:
+      endKeyboardBrowsing(); setUnfolded(false)
+    case kVK_Return, kVK_Space:
+      let button = icons[min(focusedIndex, icons.count - 1)]
+      if pageCount > 1 && button === icons.last {
+        nextPage(); focusIcon(0)
+      } else {
+        endKeyboardBrowsing()
+        (button as? ArrowButton)?.openArrow()
+      }
+    default: return false
+    }
+    return true
+  }
+
+  private func endKeyboardBrowsing() {
+    if let keyboardMonitor { NSEvent.removeMonitor(keyboardMonitor); self.keyboardMonitor = nil }
+    strip.setAccessibilityHelp(nil)
   }
 
   func nextPage() {

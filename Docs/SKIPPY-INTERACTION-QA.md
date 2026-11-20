@@ -35,9 +35,9 @@ The feature inventory and hardware-dependent acceptance cases are in the [Skippy
 | Pick colour | Activate the native sampler and click a screen pixel. Verify that the clipboard contains a six-digit hex value and the next arrow can open. |
 | Timer | Start a countdown and stop it from the running app. |
 | Notes | Select everything in a populated note, type a replacement containing a slash, copy the note and compare the entire string. A separate persistence test reloads a note. |
-| QR tools | Type a payload and copy the generated QR image. A Vision test decodes the generated code and checks its payload. |
+| QR tools | Type a payload, copy the generated QR image, scan the clipboard and compare the actual decoded string. |
 | Search | Edit a query in the running app. Verify URL construction for spaces, literal plus signs, ampersands and Unicode. |
-| Apps | Open the launcher and find Finder in the running application list. |
+| Apps | Find the running Finder, pin it, unpin it and verify the control returns to its original state. |
 | Music | Check the local playback control. Load an Apple-provided AIFF through the native player and check its playback or output-unavailable state. |
 | Downloads | Create a disposable download and find it in the view. Test date ordering, the twelve-file limit and directory exclusion in a separate fixture. |
 | Stay awake | Start and release a real sleep-prevention session through its two control states. |
@@ -49,3 +49,10 @@ The feature inventory and hardware-dependent acceptance cases are in the [Skippy
 | Draw on screen | Open the native overlay, draw a stroke, verify Undo becomes available, undo it and close the overlay. |
 
 Public demo videos and a hosted Mac cannot establish comparative performance on physical MacBook displays. Dock magnification, a physical camera cutout, third-party player accounts, populated calendars and the audible output of the runner remain separate acceptance cases.
+
+
+## Feature recordings
+
+On a disposable macOS 15 or newer GUI account, run `bash Scripts/record-feature-library.sh` with Xcode, ffmpeg, Accessibility and Screen Recording available. The driver changes the test account's clipboard and Skippy preferences and opens sample files. It exercises the running application through Quartz and Accessibility and records its windows through ScreenCaptureKit. The tests create their own Downloads fixture and keep captures in a fresh build directory.
+
+The review index contains an MP4 and poster for each arrow, with separate films for QR generation and scanning, and additional films for the wheel, keyboard and themes, and Settings. The exporter checks every clip for 1920 × 1080 resolution and 15–20 seconds of playback before publishing the index. A 16:9 section of the runner display is framed around the interaction; encoded resolution and the native display scale are distinct. Calendar on an empty account shows the connection control. Playback on a headless account can verify loading a file without verifying physical audio output. [Film driver](../Scripts/record-feature-library.sh)

@@ -4,7 +4,11 @@ Skippy is a quiver of small productivity apps called arrows. File Shelf carries 
 
 ## How it opens
 
-Hover over the compact mark to unfold up to five pinned arrows beside it. The mark stays in place. Rest the pointer on a pinned tool to preview its panel without activating Skippy. Click to keep the tool open and use its keyboard controls. Pinned external apps launch on click. Click the mark for the paged workspace. Overflow opens the complete list. The strip folds after 0.55 seconds away and stays available while the pointer moves into the tool panel. Escape closes the panel. Control–Option–Command–P and the context menu also open the workspace. Finder Automation or Accessibility can be enabled in Settings to import a selection with that shortcut. Command–K finds any of the 18 arrows by name. Use Up or Down to choose a result, Return to open it and Escape to cancel. The shortcut hints follow the user’s bindings in Settings.
+Skippy starts as a 31 × 34 point companion. Hovering opens a wheel around the stationary center. The first page shows up to six pins and a More button. The default four pins are File Shelf, Clipboard, Notes and Timer. More rotates through the remaining tools inside the same launcher. Click the center on any later page to return to the pins. A side attachment presents the pins in a vertical bar. The other attached positions use a horizontal bar.
+
+Rest the pointer on an arrow to preview its tool. Click to keep the tool open for editing. Pinned Mac applications launch on click. The launcher allows 550 ms to cross into a panel and respects Reduce Motion. Settings contains three launcher emblems, themes, tool and app pins, placement and keyboard bindings. No tutorial or workspace opens on normal first launch.
+
+Control–Option–Command–P summons Skippy. Command–K finds any arrow by name. Option–Shift–B enters the wheel from the active tool. Arrow keys or Tab move between pins, Return opens a tool or the next page, and Escape closes the wheel. Option–Shift–T switches between light and dark and Option–Shift–I changes the emblem while a tool has focus. These bindings can be reassigned in Settings.
 
 Choose Menu bar, Notch, Floating, Left edge, Right edge, Top edge, Bottom edge or Dock in Settings. Drag the floating mark into position or toward a screen edge to snap. Skippy remembers the display and relative position. The notch mark sits below the camera cutout on equipped displays. In Dock mode, the real Dock tile accepts clicks, files and a secondary-click menu. Optional hover beside that tile uses macOS Accessibility permission to identify its location.
 
@@ -20,7 +24,7 @@ The grid supports five widget sizes, rearrangement, pinning, scrolling in whole 
 | Pick colour | Use the system colour sampler and copy a hex value. |
 | Timer | Run a countdown and optionally keep the Mac awake during it. |
 | Notes | Edit a quick note and save it on this Mac. |
-| QR tools | Generate a QR code, copy it or read a code from an image or selected screen area. |
+| QR tools | Generate a QR code, copy it or read a code from a clipboard image, image file or selected screen area. |
 | Search | Launch a web search. The shelf also supports local filename, type, size and date queries. |
 | Apps | Launch or activate apps and pin shortcuts. Saved shell commands require explicit confirmation showing the command before execution. |
 | Music | Control supported Music/Spotify playback through Automation or select a local audio file. |
@@ -34,6 +38,12 @@ The grid supports five widget sizes, rearrangement, pinning, scrolling in whole 
 | Draw on screen | Draw freehand, highlight, add lines, rectangles and ellipses, erase, undo and save a transparent PNG of the annotation layer. |
 
 The shelf's preparation tools cover image resizing, format and metadata controls, video preparation, PDF/text/Word extraction, spreadsheet interchange, Finder Services, file promises, watched folders, conversion presets, ZIP packaging and native sharing. Originals remain in place during conversion.
+
+## iPhone, iPad and iCloud roadmap
+
+The next mobile milestone is a shared Parcels shelf. On Mac the user explicitly adds a file or clipboard item to Parcels. Skippy copies the payload into its managed storage, gives it a stable item ID, and syncs the metadata and asset through the user's private CloudKit database. Each device shows pending uploads, downloads, offline retries and storage errors. Removal and expiry need synchronized deletion records so a returning device cannot restore expired items. Pinning keeps an item beyond the normal shelf lifetime. Ordinary clipboard history stays local.
+
+On iPhone, a Share extension would collect items, and an in-app shelf would offer system Copy and Share actions. On iPad, add drag and drop to compatible destinations in multitasking and a Files integration. A WhatsApp attachment would use the destination's supported share, paste or drop interface and require the user's final send action. Apple's public APIs limit persistent overlays outside an app. Plan for widgets, Shortcuts and the system share sheet as entry points. Validate signed-in sync, large attachments, offline reconciliation and supported WhatsApp handoffs on physical devices before release.
 
 ## Verification and release scope
 
