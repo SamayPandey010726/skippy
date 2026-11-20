@@ -1,5 +1,11 @@
 name: Record Skippy attachments
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      dock_only:
+        type: boolean
+        default: false
+        description: Record only the Dock attachment
 permissions:
   contents: read
 jobs:
@@ -14,15 +20,19 @@ jobs:
           swiftc -parse-as-library Scripts/record-display.swift -target "$(uname -m)-apple-macos15.0" -o build/display-recorder
           swiftc Scripts/check-attachment.swift -o build/check-attachment
       - name: Test and record each attachment
+        env:
+          DOCK_ONLY: ${{ inputs.dock_only }}
         run: |
           result=0
-          for surface in "Left edge" "Right edge" "Top edge" "Bottom edge" "Notch" "Menu bar" "Dock"; do
+          surfaces=("Left edge" "Right edge" "Top edge" "Bottom edge" "Notch" "Menu bar" "Dock")
+          if [[ "$DOCK_ONLY" == true ]]; then surfaces=("Dock"); fi
+          for surface in "${surfaces[@]}"; do
             defaults write com.yourcompany.parcel skippy.surface -string "$surface"
             defaults write com.yourcompany.parcel skippy.x -float 0.45
             defaults write com.yourcompany.parcel skippy.y -float 0.72
-            open -a "$PWD/build/Skippy.app"
+            "$PWD/build/Skippy.app/Contents/MacOS/Skippy" &
+            pid=$!
             sleep 2
-            pid="$(pgrep -x Skippy | head -1)"
             build/check-attachment "$pid" "$surface" "build/attachments/$surface" "$PWD/build/display-recorder" || result=1
             kill "$pid"
             while kill -0 "$pid" 2>/dev/null; do sleep 0.2; done
