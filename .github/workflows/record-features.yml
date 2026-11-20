@@ -2,6 +2,10 @@ name: Record Skippy on Mac
 on:
   workflow_dispatch:
     inputs:
+      handoffs_only:
+        type: boolean
+        default: false
+        description: Follow web search and a download into their destination apps
       preferences_only:
         type: boolean
         default: false
@@ -15,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        batch: ${{ fromJSON(inputs.preferences_only && '["preferences"]' || '["wheel","files","utilities","system","capture","preferences"]') }}
+        batch: ${{ fromJSON(inputs.preferences_only && '["preferences"]' || inputs.handoffs_only && '["searchhandoff","downloadhandoff"]' || '["wheel","files","utilities","system","capture","preferences"]') }}
     name: Film ${{ matrix.batch }}
     env:
       SKIPPY_FILM_BATCH: ${{ matrix.batch }}
@@ -50,7 +54,7 @@ jobs:
           name: Skippy-tested-universal
           path: build/Skippy-developer.zip
   package:
-    if: ${{ !inputs.preferences_only }}
+    if: ${{ !inputs.preferences_only && !inputs.handoffs_only }}
     needs: record
     runs-on: ubuntu-latest
     steps:

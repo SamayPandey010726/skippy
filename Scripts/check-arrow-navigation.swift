@@ -172,6 +172,14 @@ func stroke(from start: CGPoint, to end: CGPoint) {
   }
   mouse(.leftMouseUp, end)
 }
+func returnFromExternalApp() {
+  beat(2)
+  NSRunningApplication(processIdentifier: pid_t(pid))?.activate(options: [.activateIgnoringOtherApps])
+  guard let info = panels().first, let b = info[kCGWindowBounds as String] as? NSDictionary,
+        let pane = CGRect(dictionaryRepresentation: b as CFDictionary) else { return }
+  let title = CGPoint(x: pane.midX, y: pane.minY + 15)
+  mouse(.mouseMoved, title); mouse(.leftMouseDown, title); mouse(.leftMouseUp, title)
+}
 func verifyContent(_ name: String) {
   let board = NSPasteboard.general
   switch name {
@@ -224,6 +232,15 @@ func verifyContent(_ name: String) {
     check("pasteboard contains generated image") { NSImage(pasteboard: board) != nil }
   case "Search":
     enter("Skippy native"); check("edit web query") { contains("Skippy native") }
+    if batch == "searchhandoff" {
+      let browser = NSWorkspace.shared.urlForApplication(toOpen: URL(string: "https://www.google.com")!)
+      key(kVK_Return)
+      check("submitted search opens the registered browser") {
+        guard let browser, let url = NSWorkspace.shared.frontmostApplication?.bundleURL else { return false }
+        return browser.standardizedFileURL.path == url.standardizedFileURL.path
+      }
+      returnFromExternalApp()
+    }
   case "Apps":
     check("list running Finder") { contains("Finder") }
     check("pin Finder") { press("Pin Finder") }
@@ -249,6 +266,18 @@ func verifyContent(_ name: String) {
     }
   case "Downloads":
     check("recent download fixture") { contains("Skippy QA.txt") }
+    if batch == "downloadhandoff" {
+      check("open the listed download") { press(fixture.lastPathComponent) }
+      check("document opens in its registered app") {
+        guard let editor = NSWorkspace.shared.frontmostApplication,
+              let handler = NSWorkspace.shared.urlForApplication(toOpen: fixture),
+              editor.bundleURL?.standardizedFileURL.path == handler.standardizedFileURL.path else { return false }
+        let app = AXUIElementCreateApplication(editor.processIdentifier)
+        let windows = attribute(app, kAXWindowsAttribute) as? [AXUIElement] ?? []
+        return windows.contains { labels($0).contains(where: { $0.contains("Skippy QA") }) }
+      }
+      returnFromExternalApp()
+    }
   case "Stay awake":
     check("acquire sleep assertion") { press("Stay awake") }
     beat(1.8)
@@ -332,6 +361,8 @@ case "utilities": selected = Array(arrows[6..<10])
 case "system": selected = Array(arrows[10..<16])
 case "capture": selected = Array(arrows[16...])
 case "preferences": selected = []
+case "searchhandoff": selected = ["Search"]
+case "downloadhandoff": selected = ["Downloads"]
 default: selected = arrows
 }
 for name in selected {
