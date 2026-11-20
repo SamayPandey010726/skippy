@@ -7,14 +7,14 @@ final class RecordingDelegate: NSObject, SCRecordingOutputDelegate {
   let directory: URL
   init(_ directory: URL) { self.directory = directory }
   func recordingOutputDidStartRecording(_ recordingOutput: SCRecordingOutput) {
-    FileManager.default.createFile(atPath: directory.appendingPathComponent("capture.ready").path, contents: nil)
+    FileManager.default.createFile(atPath: directory.appendingPathComponent("capture.ready").path, contents: Data(String(Date().timeIntervalSince1970).utf8))
   }
   func recordingOutput(_ recordingOutput: SCRecordingOutput, didFailWithError error: Error) {
     fputs("ScreenCaptureKit: \(error)\n", stderr)
     exit(1)
   }
   func recordingOutputDidFinishRecording(_ recordingOutput: SCRecordingOutput) {
-    FileManager.default.createFile(atPath: directory.appendingPathComponent("capture.finished").path, contents: nil)
+    FileManager.default.createFile(atPath: directory.appendingPathComponent("capture.finished").path, contents: Data(String(Date().timeIntervalSince1970).utf8))
   }
 }
 

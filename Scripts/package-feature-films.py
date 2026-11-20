@@ -29,14 +29,21 @@ def package(source, destination):
     for index, title in enumerate(TITLES, 1):
         path = source / title / "WindowServer.mp4"
         duration, size = inspect(path)
-        if duration < 15 or size != (1920, 1080):
-            raise ValueError(f"{title} captured at {size} for {duration:.2f} seconds")
+        start, stop = (path.parent / f"capture.{event}" for event in ("ready", "finished"))
+        def timestamp(marker):
+            return float(marker.read_text().strip() or marker.stat().st_mtime)
+        elapsed = timestamp(stop) - timestamp(start)
+        timeline = max(duration, elapsed)
+        if duration <= 0 or timeline < 15 or size != (1920, 1080):
+            raise ValueError(f"{title} captured at {size} for {timeline:.2f} seconds")
         name = f"{index:02}-{title.lower().replace(' ', '-')}.mp4"
         movie = destination / name
-        # Preserve the full interaction if a system panel takes longer to respond.
-        timing = min(1, 18 / duration)
+        # ScreenCaptureKit stops emitting frames when the desktop is stationary.
+        # Restore that observed idle time from the recorder's start and finish callbacks.
+        timing = min(1, 18 / timeline)
+        filters = f"fps=30,tpad=stop_mode=clone:stop_duration={max(0, elapsed-duration):.4f},setpts={timing}*PTS,fps=30"
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(path), "-an",
-                        "-vf", f"setpts={timing}*PTS,fps=30", "-c:v", "libx264",
+                        "-vf", filters, "-c:v", "libx264", "-threads", "3",
                         "-crf", "17", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(movie)], check=True)
         length, shape = inspect(movie)
         if not 15 <= length <= 20 or shape != (1920, 1080):
