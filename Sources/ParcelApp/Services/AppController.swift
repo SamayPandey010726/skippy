@@ -118,6 +118,7 @@ import SwiftUI
       preferencesWindow?.contentView = NSHostingView(rootView: AnyView(UniversalInterface { PreferencesView(initialTab: initialTab ?? 0).environmentObject(store) }))
     }
     preferencesWindow?.appearance = NSAppearance(named: SkinStore.shared.skin == .night ? .darkAqua : .aqua)
+    DropPopupController.shared.dismiss()
     preferencesWindow?.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
   }

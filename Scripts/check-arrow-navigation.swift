@@ -54,7 +54,7 @@ final class FeatureFilm {
       .appendingPathComponent(title, isDirectory: true)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let screen = CGDisplayBounds(CGMainDisplayID())
-    let width = min(880, screen.width, screen.height * 16 / 9)
+    let width = min(max(880, (panel.height + 32) * 16 / 9), screen.width, screen.height * 16 / 9)
     let height = width * 9 / 16
     region = CGRect(x: min(max(0, panel.midX - width / 2), screen.width - width),
                     y: min(max(0, panel.midY - height / 2 - 24), screen.height - height),
@@ -239,7 +239,8 @@ func verifyContent(_ name: String) {
       board.clearContents(); board.setString("/System/Library/Sounds/Glass.aiff", forType: .string)
       key(kVK_ANSI_V, flags: .maskCommand)
       Thread.sleep(forTimeInterval: 0.45); key(kVK_Return)
-      check("confirm selected audio file in Open panel") {
+      check("complete selection of the audio file") {
+        if contains("Glass") && !panels().contains(where: { $0[kCGWindowName as String] as? String == "Open" }) { return true }
         guard contains("Glass.aiff"), let button = control(kAXButtonRole, "Open"),
               attribute(button, kAXEnabledAttribute) as? Bool == true else { return false }
         return press("Open")
@@ -368,6 +369,10 @@ for name in selected {
   checkingControls = false
 }
 if filming && (batch == "all" || batch == "preferences") {
+  if panels().isEmpty {
+    key(kVK_ANSI_P, flags: [.maskControl, .maskAlternate, .maskCommand])
+    check("summon launcher for keyboard browsing") { !panels().isEmpty }
+  }
   try startFilm("Keyboard and themes")
   beat(1)
   key(kVK_ANSI_T, flags: [.maskAlternate, .maskShift])
@@ -380,17 +385,16 @@ if filming && (batch == "all" || batch == "preferences") {
   check("select Notes from the wheel by keyboard") { panels().contains { $0[kCGWindowName as String] as? String == "Skippy · Notes" } }
   key(kVK_ANSI_T, flags: [.maskAlternate, .maskShift])
   try finishFilm()
-  try startFilm("Settings")
   key(kVK_ANSI_S, flags: .maskCommand)
   check("Settings is the standalone window") { panels().contains { $0[kCGWindowName as String] as? String == "Skippy Settings" } }
+  try startFilm("Settings")
   beat(1.5)
   check("open shortcut settings") { press("Shortcuts") }
   beat(3)
   check("return to Everyday settings") { press("Everyday") }
   try finishFilm()
   key(kVK_ANSI_W, flags: .maskCommand)
-  Thread.sleep(forTimeInterval: 0.3)
-  key(kVK_Escape)
+  check("closing Settings returns to the mark") { panels().isEmpty }
 }
 if !panels().isEmpty {
   key(kVK_Escape)

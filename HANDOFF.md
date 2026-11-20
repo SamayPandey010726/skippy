@@ -4,7 +4,7 @@ Start with the build from source, check the floating wheel by hand, then run the
 
 ## What you are testing
 
-The private repository is `SamayPandey010726/parcel`. Use **main**. The application changes were merged at `a75abd1`. Commit `4a50b86` added the optional cloud recording workflow. The executable and bundle are named **Skippy**. The `ParcelApp` target, `ParcelCore` module, development bundle ID `com.yourcompany.parcel`, and storage folder `~/Library/Application Support/Parcel/` retain their earlier names for compatibility.
+The repository is `SamayPandey010726/skippy`. Use **main**. The application changes were merged at `a75abd1`. Commit `4a50b86` added the optional cloud recording workflow. The executable and bundle are named **Skippy**. The `ParcelApp` target, `ParcelCore` module, development bundle ID `com.yourcompany.parcel`, and storage folder `~/Library/Application Support/Parcel/` retain their earlier names for compatibility.
 
 | Evidence at handoff | Scope |
 | --- | --- |
@@ -12,15 +12,15 @@ The private repository is `SamayPandey010726/parcel`. Use **main**. The applicat
 | [Parcels terminal recording](Artifacts/Skippy/Linux/Parcels-Linux-terminal.mp4) | 18 seconds at 1920 × 1080. The Linux engine creates a ZIP and compares extracted bytes with the original. |
 | [Universal developer bundle](Artifacts/Skippy/Skippy-universal-developer.zip) | Cross-compiled from the merge for Intel and Apple silicon using the macOS 15.2 SDK. The binary slices and ad-hoc code and resource hashes were checked. Launch on a Mac and Gatekeeper acceptance are unverified for this bundle. Build from source below for local testing. |
 | [Earlier Mac review](Artifacts/Skippy/Previous-Mac-4e52010/SKIPPY-TEST-RESULTS.md) | At `4e52010`, the predecessor with the horizontal floating strip passed 188 native tests and 89 running-app checks. Includes actual Mac footage, 18 tool screenshots and simulator startup images. |
-| Current wheel and 22 Mac feature films | Still pending a native desktop run. GitHub stopped the recording job before allocating a Mac. [Job history](https://github.com/SamayPandey010726/parcel/actions/runs/44679081637) |
+| Native Mac verification | 191 XCTest cases passed. The universal app launched, the running-app checks passed for every arrow, and the menu-bar hover test followed the pointer into the shelf and back out. [Native test job](https://github.com/SamayPandey010726/skippy/actions/runs/44708012304/job/136192337597) |
 
 ## 1. Get the source and check the tools
 
-In Terminal, clone with a GitHub account that can read the private repository. If you already have a checkout, switch to `main` and use `git pull --ff-only` after saving any local work. Run the remaining commands from the repository root.
+In Terminal, clone the repository. If you already have a checkout, switch to `main` and use `git pull --ff-only` after saving any local work. Run the remaining commands from the repository root.
 
 ```bash
-git clone https://github.com/SamayPandey010726/parcel.git
-cd parcel
+git clone https://github.com/SamayPandey010726/skippy.git
+cd skippy
 git rev-parse --short HEAD
 sw_vers
 uname -m

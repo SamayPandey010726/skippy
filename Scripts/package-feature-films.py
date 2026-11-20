@@ -23,15 +23,20 @@ def inspect(path):
     return float(info["format"]["duration"]), (video["width"], video["height"])
 
 
-def package(source, destination):
+ATTACHMENTS = ["Left edge", "Right edge", "Top edge", "Bottom edge", "Notch", "Menu bar", "Dock"]
+
+
+def timestamp(marker):
+    return float(marker.read_text().strip() or marker.stat().st_mtime)
+
+
+def package(source, destination, titles=TITLES):
     destination.mkdir(parents=True, exist_ok=True)
     cards = []
-    for index, title in enumerate(TITLES, 1):
+    for index, title in enumerate(titles, 1):
         path = source / title / "WindowServer.mp4"
         duration, size = inspect(path)
         start, stop = (path.parent / f"capture.{event}" for event in ("ready", "finished"))
-        def timestamp(marker):
-            return float(marker.read_text().strip() or marker.stat().st_mtime)
         elapsed = timestamp(stop) - timestamp(start)
         timeline = max(duration, elapsed)
         if duration <= 0 or timeline < 15 or size != (1920, 1080):
@@ -66,4 +71,5 @@ def package(source, destination):
 
 
 if __name__ == "__main__":
-    package(Path(sys.argv[1]), Path(sys.argv[2]))
+    titles = TITLES + ATTACHMENTS if "--with-attachments" in sys.argv[3:] else TITLES
+    package(Path(sys.argv[1]), Path(sys.argv[2]), titles)
