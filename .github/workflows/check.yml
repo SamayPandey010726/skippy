@@ -1,5 +1,13 @@
 name: Skippy checks
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      mac_only:
+        type: boolean
+        default: false
+        description: Run native Mac checks without repeating simulator boots
 permissions:
   contents: read
 jobs:
@@ -79,6 +87,7 @@ jobs:
             build/recordings/
             build/diagnostics/
   simulators:
+    if: ${{ !inputs.mac_only }}
     runs-on: macos-15
     timeout-minutes: 20
     steps:
