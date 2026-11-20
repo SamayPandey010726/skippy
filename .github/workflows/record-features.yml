@@ -1,0 +1,36 @@
+name: Record Skippy on Mac
+on: workflow_dispatch
+
+permissions:
+  contents: read
+
+jobs:
+  record:
+    name: Test and film the Mac application
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare the Mac desktop
+        run: |
+          sw_vers
+          xcodebuild -version
+          defaults write com.apple.universalaccess reduceMotion -bool false
+          if ! command -v ffmpeg >/dev/null; then brew install ffmpeg; fi
+      - name: Record native interactions
+        run: bash Scripts/record-feature-library.sh
+      - name: Upload verified feature videos and review index
+        uses: actions/upload-artifact@v4
+        with:
+          name: Skippy-feature-library
+          path: build/feature-review.*/Review/
+          if-no-files-found: error
+      - name: Save capture diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Skippy-recording-diagnostics
+          path: |
+            build/feature-review.*/build/Skippy.log
+            build/feature-review.*/build/feature-captures/
+          if-no-files-found: ignore
