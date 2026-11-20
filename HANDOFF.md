@@ -1,6 +1,6 @@
 # Skippy for Mac · local test handoff
 
-Start with the build from source, check the floating wheel by hand, then run the recorder in a fresh macOS test account. The app runs on macOS 14 and later. Recording all 22 review clips requires macOS 15 or later. All the steps below run locally and require no cloud Mac subscription.
+Start with the [recorded feature gallery and coverage](Docs/SKIPPY-MAC-REVIEW.md). Build from source to test on your Mac, then run the recorder in a fresh macOS test account to repeat the walkthrough. The app runs on macOS 14 and later. Recording all 22 review clips requires macOS 15 or later. All the steps below run locally and require no cloud Mac subscription.
 
 ## What you are testing
 
@@ -10,9 +10,9 @@ The repository is `SamayPandey010726/skippy`. Use **main**. The application chan
 | --- | --- |
 | [Current portable test log](Artifacts/Skippy/Linux/swift-test.log) | 55 XCTest cases passed on Linux. Includes packaging, archive safety, persistence and quiver geometry. |
 | [Parcels terminal recording](Artifacts/Skippy/Linux/Parcels-Linux-terminal.mp4) | 18 seconds at 1920 × 1080. The Linux engine creates a ZIP and compares extracted bytes with the original. |
-| [Universal developer bundle](Artifacts/Skippy/Skippy-universal-developer.zip) | Cross-compiled from the merge for Intel and Apple silicon using the macOS 15.2 SDK. The binary slices and ad-hoc code and resource hashes were checked. Launch on a Mac and Gatekeeper acceptance are unverified for this bundle. Build from source below for local testing. |
+| [Universal developer bundle](Artifacts/Skippy/Skippy-universal-developer.zip) | Built and launched on the hosted Mac from commit `75ff19c`. The job verified both Intel and Apple silicon slices and the ad-hoc signature. [Build and handoff tests](https://github.com/SamayPandey010726/skippy/actions/runs/44713310659) |
 | [Earlier Mac review](Artifacts/Skippy/Previous-Mac-4e52010/SKIPPY-TEST-RESULTS.md) | At `4e52010`, the predecessor with the horizontal floating strip passed 188 native tests and 89 running-app checks. Includes actual Mac footage, 18 tool screenshots and simulator startup images. |
-| Native Mac verification | 191 XCTest cases passed. The universal app launched, the running-app checks passed for every arrow, and the menu-bar hover test followed the pointer into the shelf and back out. [Native test job](https://github.com/SamayPandey010726/skippy/actions/runs/44708012304/job/136192337597) |
+| Native Mac verification | 191 XCTest cases passed. The universal app launched, the running-app checks passed for every arrow, and the menu-bar hover test followed the pointer into the shelf and back out. [Native test job](https://github.com/SamayPandey010726/skippy/actions/runs/44713349413/job/136210374775) |
 
 ## 1. Get the source and check the tools
 
@@ -90,7 +90,7 @@ The script builds its own app and helpers and prints the path to **Review/index.
 
 **Feature coverage.** Three films cover the floating wheel, keyboard/themes, and Settings. The remaining 19 cover File Shelf, Clipboard, Extract text, Pick colour, Timer, Notes, QR generator, QR scanner, Search, Apps, Music, Downloads, Stay awake, Recent actions, Mac, Calendar, Calculator, Screenshots and Draw on screen. QR generation and scanning are two recordings of the same arrow. Clips are silent. Real-time motion should be judged live as well because the exporter can shorten a long interaction for review.
 
-**Functional spot checks.** Paste a file into File Shelf, drag it out to Finder and compare its contents. Type a unique QR payload, copy the image, select Scan clipboard and compare the decoded text exactly. In Calculator, `(24 + 8) / 2` should copy `16`. Capture two screen regions and inspect the combined image. Start a drawing, draw one stroke, undo it and close the overlay. Search’s automated check exercises query editing. Calendar checks the consent entry point on a fresh account. Check browser launch, actual Calendar events and audible playback manually. The per-tool matrix lists the remaining checks. [Interaction QA](Docs/SKIPPY-INTERACTION-QA.md)
+**Functional spot checks.** Paste a file into File Shelf, drag it out to Finder and compare its contents. Type a unique QR payload, copy the image, select Scan clipboard and compare the decoded text exactly. In Calculator, `(24 + 8) / 2` should copy `16`. Capture two screen regions and inspect the combined image. Start a drawing, draw one stroke, undo it and close the overlay. The Search handoff test submits the query, dismisses the panel and checks that the registered browser takes focus. Calendar checks the consent entry point on a fresh account. Check populated Calendar events and audible playback on your hardware. The per-tool matrix lists the remaining checks. [Interaction QA](Docs/SKIPPY-INTERACTION-QA.md)
 
 ## 5. Diagnose a local failure
 
