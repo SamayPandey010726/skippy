@@ -408,7 +408,18 @@ struct NotchMacro: Codable, Identifiable {
   }
 
   func searchGoogle(_ query: String) {
-    if let url = Self.searchURL(for: query) { NSWorkspace.shared.open(url) }
+    guard let url = Self.searchURL(for: query),
+          let browser = NSWorkspace.shared.urlForApplication(toOpen: url) else { return }
+    let configuration = NSWorkspace.OpenConfiguration()
+    configuration.activates = true
+    NSWorkspace.shared.open([url], withApplicationAt: browser, configuration: configuration) { app, error in
+      Task { @MainActor in
+        if let error { self.status = error.localizedDescription; return }
+        let shelf = DropPopupController.shared
+        if shelf.activeModule == .search { shelf.dismiss() }
+        app?.activate(options: [.activateIgnoringOtherApps])
+      }
+    }
   }
 
   static func searchURL(for query: String) -> URL? {

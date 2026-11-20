@@ -237,7 +237,8 @@ func verifyContent(_ name: String) {
       key(kVK_Return)
       let browserID = browser.flatMap { Bundle(url: $0)?.bundleIdentifier }
       check("submitted search opens the registered browser", attempts: 175) {
-        guard let browserID else { return false }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.04))
+        guard let browserID, panels().isEmpty else { return false }
         return NSWorkspace.shared.frontmostApplication?.bundleIdentifier == browserID
       }
       print("Search handler:", browserID ?? "unknown", "foreground:", NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown")
