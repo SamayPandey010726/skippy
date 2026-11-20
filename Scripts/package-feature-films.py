@@ -46,7 +46,8 @@ def package(source, destination, titles=TITLES):
         # ScreenCaptureKit stops emitting frames when the desktop is stationary.
         # Restore that observed idle time from the recorder's start and finish callbacks.
         timing = min(1, 18 / timeline)
-        filters = f"fps=30,tpad=stop_mode=clone:stop_duration={max(0, elapsed-duration):.4f},setpts={timing}*PTS,fps=30"
+        filters = (f"setpts=PTS-STARTPTS,fps=30,tpad=stop_mode=clone:stop=-1,"
+                   f"trim=duration={timeline:.4f},setpts={timing}*PTS,fps=30")
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(path), "-an",
                         "-vf", filters, "-c:v", "libx264", "-threads", "3",
                         "-crf", "17", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(movie)], check=True)
