@@ -604,6 +604,7 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   beat(1.3)
   check("close markup without deleting the captures") { press("Done") }
   examples.forEach { $0.orderOut(nil) }
+  RunLoop.current.run(until: Date().addingTimeInterval(0.14))
   useArrow(kVK_ANSI_4, "Screenshots")
   check("four annotated screenshots are listed") { contains("4 regions") }
   check("copy the composite PNG") { press("Copy joined") }
@@ -732,7 +733,9 @@ private func exerciseConnectedPlacements(bounds: CGRect, expectedMusicOffset: CG
   check("the chosen app appears as an icon") { control(kAXButtonRole, "TextEdit") != nil }
   check("launch the chosen app") { press("TextEdit") }
   check("TextEdit becomes active and Quick Launch closes") {
-    NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.TextEdit" && windowFrame("Skippy · Quick Launch") == nil
+    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    return NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.TextEdit"
+      && windowFrame("Skippy · Quick Launch") == nil
   }
   beat(0.65)
   backdrop?.orderFrontRegardless()
@@ -747,7 +750,8 @@ private func exerciseConnectedPlacements(bounds: CGRect, expectedMusicOffset: CG
   let statusScout = CGPoint(x: statusPoint.x + max(0, statusSize.width - 31) / 2, y: statusPoint.y)
   stroke(from: statusScout, to: CGPoint(x: bounds.midX, y: bounds.maxY - 4))
   check("Scout switches to the real Dock tile", attempts: 80) {
-    NSRunningApplication(processIdentifier: pid_t(pid))?.activationPolicy == .regular
+    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    return NSRunningApplication(processIdentifier: pid_t(pid))?.activationPolicy == .regular
   }
   // The registered Dock tile moves as other apps activate. Find its real Accessibility frame.
   let tile: CGPoint? = {
