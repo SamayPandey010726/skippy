@@ -161,10 +161,11 @@ public struct PackagingOptions: Codable, Equatable, Sendable {
 /// Archive formats Parcel can pack. ZIP is built in; 7z and RAR use the
 /// matching command-line tool when it is installed on the Mac.
 public enum PackFormat: String, Codable, CaseIterable, Sendable {
-  case zip, sevenZip, rar
+  case zip, tarGzip, sevenZip, rar
   public var label: String {
     switch self {
     case .zip: return "ZIP"
+    case .tarGzip: return "TAR.GZ"
     case .sevenZip: return "7z"
     case .rar: return "RAR"
     }
@@ -172,6 +173,7 @@ public enum PackFormat: String, Codable, CaseIterable, Sendable {
   public var fileExtension: String {
     switch self {
     case .zip: return "zip"
+    case .tarGzip: return "tar.gz"
     case .sevenZip: return "7z"
     case .rar: return "rar"
     }
@@ -180,7 +182,7 @@ public enum PackFormat: String, Codable, CaseIterable, Sendable {
   /// cask), so it is only offered when the tool is already on the Mac.
   /// Everything else installs from inside the app.
   public static var availableCases: [PackFormat] {
-    var cases: [PackFormat] = [.zip, .sevenZip]
+    var cases: [PackFormat] = [.zip, .tarGzip, .sevenZip]
     if ExternalArchiver.toolPath(for: .rar) != nil { cases.append(.rar) }
     return cases
   }

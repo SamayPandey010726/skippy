@@ -31,6 +31,8 @@ enum QuiverEmblem: String, CaseIterable {
   private var installed = false
   private var dragging = false
   private var attachmentOrigin: CGRect?
+  private var attachmentHint: NSPanel?
+  private var handoffPanel: NSPanel?
   private var progress: CGFloat = 0
   private var motion: Timer?
   private var pointerMonitor: Any?
@@ -135,6 +137,9 @@ enum QuiverEmblem: String, CaseIterable {
       p.contentView = strip; floating = p
     }
     layout()
+    if let origin, !settingsPresented, surface == .menu || surface == .dock {
+      animateSystemHandoff(from: origin)
+    }
     if surface != .dock, !settingsPresented, let panel = floating {
       let animate = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
       let destination = panel.frame
@@ -296,6 +301,9 @@ enum QuiverEmblem: String, CaseIterable {
     let position = NSMenuItem(title: "Attach to", action: nil, keyEquivalent: "")
     position.submenu = places; menu.addItem(position)
     menu.addItem(.separator())
+    if surface != .floating {
+      menu.addItem(CourierMenuAction("Detach to floating") { self.surface = .floating })
+    }
     menu.addItem(CourierMenuAction("Settings…") { AppController.shared.openPreferences() })
     menu.addItem(CourierMenuAction("Quit Skippy") { NSApp.terminate(nil) })
     return menu
@@ -396,29 +404,126 @@ enum QuiverEmblem: String, CaseIterable {
     mark.beginDrop = { [weak self] in self?.shelf.beginPrimaryDrop() }
     mark.dragHover = { [weak self] inside in self?.hover(inside) }
     mark.registerForDraggedTypes([.fileURL, .png, .tiff, .URL, .string] + NSFilePromiseReceiver.readableDraggedTypes.map { .init($0) })
-    if let floating, surface != .dock {
-      mark.windowMovement = WindowMoveActions(begin: {}, drag: { [weak self, weak floating, weak mark] event in
-        guard let self, let floating, let mark else { return }
-        self.dragging = true; self.foldWork?.cancel()
-        for satellite in self.satellites.values { satellite.orderOut(nil) }
-        floating.performDrag(with: event)
-        self.dragging = false
-        let p = NSEvent.mouseLocation
-        let markFrame = floating.convertToScreen(mark.convert(mark.bounds, to: nil))
-        let vCenter = CGPoint(x: markFrame.midX, y: markFrame.midY)
-        guard let dest = NSScreen.screens.first(where: { $0.frame.contains(p) }) else { return }
-        let v = dest.visibleFrame
-        self.defaults.set(DropPopupController.displayID(for: dest), forKey: "skippy.display")
-        self.defaults.set(min(1, max(0, (vCenter.x - v.minX) / v.width)), forKey: "skippy.x")
-        self.defaults.set(min(1, max(0, (vCenter.y - v.minY) / v.height)), forKey: "skippy.y")
-        self.attachmentOrigin = markFrame
-        self.surface = QuiverSurface.snapped(at: p, screen: dest.frame, visible: v)
+    if surface != .dock {
+      mark.windowMovement = WindowMoveActions(begin: {}, drag: { [weak self, weak mark] event in
+        guard let self, let mark else { return }
+        self.dragLauncher(from: mark, event: event)
       }, end: {})
     }
     strip.addSubview(mark)
     render()
     rebuildSatellites()
     if unfolded { trackArrow() }
+  }
+
+  private func dragLauncher(from view: QuiverMark, event: NSEvent) {
+    guard let window = view.window else { return }
+    let start = window.convertToScreen(view.convert(view.bounds, to: nil))
+    let pointer = NSEvent.mouseLocation
+    let badge = movingBadge(at: start)
+    dragging = true
+    hoverCleanup()
+    for satellite in satellites.values { satellite.orderOut(nil) }
+    floating?.orderOut(nil)
+    badge.orderFrontRegardless()
+    var lastSurface = QuiverSurface.floating
+    var lastDisplay = ""
+    var target: (QuiverSurface, NSScreen)?
+    while let next = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
+      let point = NSEvent.mouseLocation
+      let origin = CGPoint(x: start.minX + point.x - pointer.x, y: start.minY + point.y - pointer.y)
+      badge.setFrameOrigin(origin)
+      if let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }) {
+        let surface = QuiverSurface.snapped(at: point, screen: screen.frame, visible: screen.visibleFrame)
+        let display = DropPopupController.displayID(for: screen)
+        target = (surface, screen)
+        if surface != lastSurface || display != lastDisplay {
+          showAttachmentHint(surface, on: screen, at: point)
+          if surface != .floating { NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now) }
+          lastSurface = surface; lastDisplay = display
+        }
+      }
+      if next.type == .leftMouseUp { break }
+    }
+    dragging = false
+    attachmentHint?.orderOut(nil); attachmentHint = nil
+    badge.orderOut(nil)
+    guard let (surface, screen) = target else {
+      floating?.orderFrontRegardless()
+      showSatellites()
+      return
+    }
+    let frame = badge.frame, visible = screen.visibleFrame
+    defaults.set(DropPopupController.displayID(for: screen), forKey: "skippy.display")
+    defaults.set(min(1, max(0, (frame.midX - visible.minX) / visible.width)), forKey: "skippy.x")
+    defaults.set(min(1, max(0, (frame.midY - visible.minY) / visible.height)), forKey: "skippy.y")
+    attachmentOrigin = frame
+    self.surface = surface
+  }
+
+  private func hoverCleanup() {
+    endKeyboardBrowsing()
+    foldWork?.cancel()
+    previewWork?.cancel()
+    pinPreviewWork?.cancel()
+    motion?.invalidate()
+    shelf.dismissArrowPreview()
+  }
+
+  private func movingBadge(at frame: CGRect) -> NSPanel {
+    let panel = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+    panel.level = .popUpMenu; panel.isOpaque = false; panel.backgroundColor = .clear
+    panel.hasShadow = true; panel.ignoresMouseEvents = true; panel.isReleasedWhenClosed = false
+    panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+    let face = QuiverMark(frame: CGRect(origin: .zero, size: frame.size))
+    face.emblem = emblem; face.ink = .white
+    face.wantsLayer = true; face.layer?.cornerRadius = 14
+    face.layer?.backgroundColor = NSColor(calibratedRed: 0.13, green: 0.17, blue: 0.22, alpha: 1).cgColor
+    panel.contentView = face
+    return panel
+  }
+
+  private func showAttachmentHint(_ target: QuiverSurface, on screen: NSScreen, at pointer: CGPoint) {
+    attachmentHint?.orderOut(nil); attachmentHint = nil
+    guard target != .floating else { return }
+    let visible = screen.visibleFrame
+    let size = CGSize(width: 125, height: 30)
+    let origin = CGPoint(x: min(max(visible.minX + 7, pointer.x - 62), visible.maxX - 132),
+      y: min(max(visible.minY + 8, pointer.y - 42), visible.maxY - 40))
+    let panel = NSPanel(contentRect: CGRect(origin: origin, size: size),
+      styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+    panel.level = .popUpMenu; panel.isOpaque = false; panel.backgroundColor = .clear
+    panel.ignoresMouseEvents = true; panel.isReleasedWhenClosed = false
+    let bar = NSVisualEffectView(frame: CGRect(origin: .zero, size: size))
+    bar.material = .hudWindow; bar.state = .active; bar.wantsLayer = true
+    bar.layer?.cornerRadius = 10; bar.layer?.masksToBounds = true
+    let label = NSTextField(labelWithString: target.rawValue)
+    label.frame = CGRect(x: 0, y: 6, width: size.width, height: 18)
+    label.alignment = .center; label.font = .systemFont(ofSize: 12, weight: .medium)
+    bar.addSubview(label); panel.contentView = bar
+    attachmentHint = panel; panel.orderFrontRegardless()
+  }
+
+  private func animateSystemHandoff(from origin: CGRect) {
+    guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+      let target = anchor else { return }
+    handoffPanel?.orderOut(nil)
+    let badge = movingBadge(at: origin)
+    handoffPanel = badge
+    badge.orderFrontRegardless()
+    let destination = CGRect(x: target.midX - origin.width / 2, y: target.midY - origin.height / 2,
+      width: origin.width, height: origin.height)
+    NSAnimationContext.runAnimationGroup({ context in
+      context.duration = 0.22
+      context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+      badge.animator().setFrame(destination, display: true)
+      badge.animator().alphaValue = 0
+    }, completionHandler: { [weak self, weak badge] in
+      MainActor.assumeIsolated {
+        badge?.orderOut(nil)
+        if self?.handoffPanel === badge { self?.handoffPanel = nil }
+      }
+    })
   }
 
   private func rebuildSatellites() {
@@ -551,7 +656,7 @@ enum QuiverEmblem: String, CaseIterable {
   func openArrowFinder() {
     endKeyboardBrowsing()
     previewWork?.cancel()
-    shelf.openArrow(.dashboard, at: anchor.map(toolAnchor), toggle: false)
+    shelf.openArrow(.dashboard, at: anchor.map(toolAnchor))
     shelf.chooseArrow()
   }
 

@@ -9,7 +9,7 @@ enum QuickConvertAppearance: String, CaseIterable, Identifiable {
 
 enum QuickConvertAction: String, CaseIterable, Identifiable, Sendable {
   case jpeg, png, heic, pdf, searchableWord, recognizedText, pngPages, jpegPages, compactVideo
-  case excelWorkbook, csv, tsv, spreadsheetPDF
+  case excelWorkbook, csv, tsv, spreadsheetPDF, numbersExcel
   var id: String { rawValue }
   var label: String {
     switch self {
@@ -23,6 +23,7 @@ enum QuickConvertAction: String, CaseIterable, Identifiable, Sendable {
     case .jpegPages: return "JPEG pages"
     case .compactVideo: return "Smaller MP4"
     case .excelWorkbook: return "Excel"
+    case .numbersExcel: return "Excel via Numbers"
     case .csv: return "CSV"
     case .tsv: return "TSV"
     case .spreadsheetPDF: return "Table PDF"
@@ -36,7 +37,7 @@ enum QuickConvertAction: String, CaseIterable, Identifiable, Sendable {
     case .recognizedText: return "text.viewfinder"
     case .pngPages, .jpegPages: return "photo.stack"
     case .compactVideo: return "film"
-    case .excelWorkbook: return "tablecells"
+    case .excelWorkbook, .numbersExcel: return "tablecells"
     case .csv, .tsv: return "text.alignleft"
     case .spreadsheetPDF: return "doc.richtext"
     }
@@ -69,6 +70,7 @@ enum QuickConvertAction: String, CaseIterable, Identifiable, Sendable {
     if pdfs { return [.searchableWord, .recognizedText, .pngPages, .jpegPages] }
     if readable { return [.searchableWord, .recognizedText] }
     if videos { return [.compactVideo] }
+    if formats == ["numbers"] { return [.numbersExcel] }
     if documents { return [.pdf] }
     if spreadsheets {
       return excludingCurrent([.excelWorkbook, .csv, .tsv, .spreadsheetPDF])
@@ -95,6 +97,8 @@ enum QuickConversionPipeline {
       recipe.flattenTransparency = action == .jpeg
       let result = try ImagePipeline.prepare(source: source, recipe: recipe, token: token)
       return QuickConversionResult(url: result.url, ownedRoot: result.url.deletingLastPathComponent())
+    case .numbersExcel:
+      return try await NumbersExport.convert(source, token: token)
     case .compactVideo:
       let root = StoragePaths.prepared.appendingPathComponent(UUID().uuidString, isDirectory: true)
       do {

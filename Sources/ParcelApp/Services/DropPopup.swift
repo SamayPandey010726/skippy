@@ -586,8 +586,8 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     if let host { panel?.makeFirstResponder(host) }
     Toaster.shared.tip("notch-pages", "Scroll for the next page, / to search, and Tab to move through widgets.")
   }
-  func openArrow(_ module: NotchModule, at anchor: CGRect?, toggle: Bool = true) {
-    if toggle && visible && expanded && activeModule == module && toolsVisible && !isArrowPreview && !choosingArrow {
+  func openArrow(_ module: NotchModule, at anchor: CGRect?) {
+    if visible && expanded && activeModule == module && toolsVisible && !isArrowPreview && !choosingArrow {
       focusForKeyboard()
       return
     }

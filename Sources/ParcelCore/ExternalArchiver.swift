@@ -9,6 +9,7 @@ public enum ExternalArchiver {
     case .sevenZip: names = ["7zz", "7z"]
     case .rar: names = ["rar"]
     case .zip: return nil
+    case .tarGzip: return FileManager.default.isExecutableFile(atPath: "/usr/bin/tar") ? "/usr/bin/tar" : nil
     }
     let pathEnv = ProcessInfo.processInfo.environment["PATH"] ?? ""
     let dirs = (pathEnv + ":/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin")
@@ -30,6 +31,7 @@ public enum ExternalArchiver {
     case .rar:
       return "The RAR tool isn't installed on this Mac."
     case .zip: return ""
+    case .tarGzip: return "The system TAR tool is unavailable."
     }
   }
 
@@ -52,7 +54,7 @@ public enum ExternalArchiver {
     switch format {
     case .sevenZip: package = "p7zip"
     case .rar: package = "rar"
-    case .zip: return
+    case .zip, .tarGzip: return
     }
     guard let brew = brewPath() else {
       throw ParcelError.storageError(
@@ -97,6 +99,8 @@ public enum ExternalArchiver {
     case .rar:
       let level = strength == .light ? "1" : strength == .heavy ? "5" : "3"
       process.arguments = ["a", "-m\(level)", "-y", destination.path] + items.map { "./" + $0 }
+    case .tarGzip:
+      process.arguments = ["-czf", destination.path, "--"] + items.map { "./" + $0 }
     case .zip:
       throw ParcelError.storageError("Internal error: ZIP uses the built-in packer.")
     }
@@ -107,7 +111,8 @@ public enum ExternalArchiver {
     }
     let verify = Process()
     verify.executableURL = URL(fileURLWithPath: tool)
-    verify.arguments = ["t", format == .rar ? "-p-" : "-y", destination.path]
+    verify.arguments = format == .tarGzip ? ["-tzf", destination.path]
+      : ["t", format == .rar ? "-p-" : "-y", destination.path]
     try run(verify, format: format, failure: "Archive verification failed", token: token)
     progress(0.95, "Your parcel is ready")
   }

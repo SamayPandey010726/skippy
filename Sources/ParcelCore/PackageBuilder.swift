@@ -101,7 +101,7 @@ public enum PackageBuilder {
           guard crc == entry.checksum else { throw ParcelError.storageError("Archive verification failed.") }
         }
       }
-    case .sevenZip, .rar:
+    case .tarGzip, .sevenZip, .rar:
       guard let tool = ExternalArchiver.toolPath(for: options.format) else {
         throw ParcelError.storageError(ExternalArchiver.missingToolMessage(for: options.format))
       }

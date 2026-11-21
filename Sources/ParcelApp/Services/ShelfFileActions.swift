@@ -162,6 +162,9 @@ struct ShelfFileActionView: View {
             if conversion == nil { Text("Choose a compatible file").tag(nil as QuickConvertAction?) }
             ForEach(QuickConvertAction.available(for: urls)) { action in Text(action.label).tag(Optional(action)) }
           }.disabled(running || conversion == nil)
+          if conversion == .numbersExcel {
+            Text("Requires Apple Numbers and macOS Automation access.").font(.caption).foregroundStyle(.secondary)
+          }
         } else if operation == .compress {
           Picker("Archive format", selection: $format) {
             ForEach(PackFormat.allCases, id: \.self) {
@@ -184,6 +187,7 @@ struct ShelfFileActionView: View {
               NSPasteboard.general.writeObjects(result.map { $0 as NSURL })
             }
             Button("Reveal") { NSWorkspace.shared.activateFileViewerSelecting(result) }
+            Button("Save Copy…", action: saveCopies)
             if sourceIdentity != nil && operation == .convert {
               Menu("Original") {
                 if urls.first?.pathExtension.lowercased() == result.first?.pathExtension.lowercased() && result.count == 1 {
@@ -213,6 +217,29 @@ struct ShelfFileActionView: View {
     .confirmationDialog("Replace the original?", isPresented: $confirmReplace) {
       Button("Replace Original", role: .destructive) { changeOriginal(replace: true) }
     } message: { Text("Skippy keeps a backup next to the original.") }
+  }
+
+  private func saveCopies() {
+    let panel = NSOpenPanel()
+    panel.canChooseFiles = false
+    panel.canChooseDirectories = true
+    panel.canCreateDirectories = true
+    panel.prompt = "Save Here"
+    guard panel.runModal() == .OK, let folder = panel.url else { return }
+    let files = result
+    Task {
+      do {
+        try await Task.detached(priority: .userInitiated) {
+          let fm = FileManager.default
+          var names = Set(try fm.contentsOfDirectory(atPath: folder.path).map(NamePolicy.key))
+          for source in files {
+            let name = try NamePolicy.unique(source.lastPathComponent, used: &names)
+            try fm.copyItem(at: source, to: folder.appendingPathComponent(name))
+          }
+        }.value
+        message = "Saved \(files.count) " + (files.count == 1 ? "copy." : "copies.")
+      } catch { message = error.localizedDescription }
+    }
   }
 
   private func choose() {

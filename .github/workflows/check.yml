@@ -23,13 +23,11 @@ jobs:
       - name: Compiler and native tests
         run: PARCEL_PREVIEW_DIRECTORY="$RUNNER_TEMP/skippy-layout-review" swift test
       - name: Compile and bundle Skippy
-        if: ${{ !cancelled() }}
         run: |
           bash Scripts/build-macos.sh --universal
           lipo -info build/Skippy.app/Contents/MacOS/Skippy
           lipo build/Skippy.app/Contents/MacOS/Skippy -verify_arch arm64 x86_64
       - name: Native smoke checks and launch
-        if: ${{ !cancelled() }}
         run: |
           bash Scripts/check-macos.sh
           defaults write com.yourcompany.parcel hasSeenWelcome -bool YES
@@ -44,18 +42,18 @@ jobs:
           open -a "$PWD/build/Skippy.app" "$PWD/Samples/Launch notes.txt" "$PWD/Samples/A little place.png"
           sleep 2
       - name: Record the launched Mac application
-        if: ${{ !cancelled() }}
         run: |
           swiftc -parse-as-library -target "$(uname -m)-apple-macos15.0" Scripts/record-display.swift -o build/display-recorder
           swiftc -target "$(uname -m)-apple-macos14.0" Scripts/record-quiver.swift -o build/recorder
-          build/recorder build/frames "$(pgrep -x Skippy | head -1)"
+          app_pid="$(pgrep -x Skippy | head -1)"
+          test -n "$app_pid"
+          build/recorder build/frames "$app_pid"
           mkdir -p build/recordings
           if ! command -v ffmpeg >/dev/null; then brew install ffmpeg; fi
           ffmpeg -loglevel error -i build/frames/WindowServer.mp4 -c copy -movflags +faststart build/recordings/Skippy.mp4
           ffmpeg -loglevel error -i build/recordings/Skippy.mp4 -filter_complex 'fps=15,scale=600:-1,split[a][b];[a]palettegen[p];[b][p]paletteuse' build/recordings/Skippy.gif
           cp build/frames/File-Shelf.png build/recordings/File-Shelf.png
       - name: Exercise all arrows through the running application
-        if: ${{ !cancelled() }}
         run: |
           pkill -x Skippy || true
           while pgrep -x Skippy >/dev/null; do sleep 0.1; done
@@ -63,7 +61,6 @@ jobs:
           sleep 2
           swift Scripts/check-arrow-navigation.swift "$(pgrep -x Skippy | head -1)"
       - name: Check real menu-bar hover and pointer handoff
-        if: ${{ !cancelled() }}
         run: |
           pkill -x Skippy
           defaults write com.yourcompany.parcel skippy.surface -string "Menu bar"
@@ -76,7 +73,6 @@ jobs:
           mkdir -p build/diagnostics
           if [[ -f build/frames/File-Shelf.png ]]; then cp build/frames/File-Shelf.png build/diagnostics/; fi
       - name: Archive developer build
-        if: ${{ !cancelled() }}
         run: codesign --verify --strict build/Skippy.app && ditto -c -k --keepParent build/Skippy.app build/Skippy-developer.zip
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}

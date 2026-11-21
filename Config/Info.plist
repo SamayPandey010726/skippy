@@ -13,7 +13,7 @@
 <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSPrincipalClass</key><string>NSApplication</string>
-<key>NSAppleEventsUsageDescription</key><string>Skippy reads your current Finder selection when you invoke its global shortcut.</string>
+<key>NSAppleEventsUsageDescription</key><string>Skippy can read selected Finder files, control supported music players, and export a copy of a chosen workbook through Numbers.</string>
 <key>NSCalendarsFullAccessUsageDescription</key><string>Skippy shows your upcoming calendar events in the quiver.</string>
 <key>CFBundleURLTypes</key><array><dict>
 <key>CFBundleURLName</key><string>Parcel links</string>

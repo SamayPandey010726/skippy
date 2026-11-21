@@ -264,10 +264,24 @@ struct ClipboardHistoryRow: View {
   let skin: ParcelSkin
   var addToParcel: (ClipboardEntry) -> Void
   var processImage: (ClipboardEntry) -> Void
+  private var colour: Color? {
+    guard let text = entry.text?.trimmingCharacters(in: .whitespacesAndNewlines), text.hasPrefix("#") else { return nil }
+    let digits = text.dropFirst()
+    guard digits.count == 3 || digits.count == 6 else { return nil }
+    let redGreenBlue = digits.count == 3 ? digits.map { String(repeating: String($0), count: 2) }.joined() : String(digits)
+    guard let value = UInt32(redGreenBlue, radix: 16) else { return nil }
+    return Color(red: Double(value >> 16) / 255, green: Double((value >> 8) & 255) / 255, blue: Double(value & 255) / 255)
+  }
   var body: some View {
     HStack(spacing: 8) {
       ZStack {
-        Image(systemName: entry.kind.symbol).frame(width: 22).foregroundStyle(skin.palette.accent)
+        if let colour {
+          RoundedRectangle(cornerRadius: 4).fill(colour).overlay {
+            RoundedRectangle(cornerRadius: 4).strokeBorder(.white.opacity(0.25))
+          }.frame(width: 20, height: 20).accessibilityLabel("Colour swatch")
+        } else {
+          Image(systemName: entry.kind.symbol).frame(width: 22).foregroundStyle(skin.palette.accent)
+        }
         FileDropSurface(enabled: true, outgoing: entry.dragURLs, outgoingText: entry.dragText,
           tap: { history.copy(entry) }, receive: { _ in }, receiving: { _ in }, hover: { _ in },
           failure: { _ in }, courierMenu: { _ in menu(for: entry) })
