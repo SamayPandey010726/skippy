@@ -89,8 +89,16 @@ public enum PackageBuilder {
       try token.check()
       do {
         let archive = try Archive(url: partial, accessMode: .read)
-        guard Array(archive).count == paths.count else {
+        let entries = Array(archive)
+        guard entries.count == paths.count else {
           throw ParcelError.storageError("Archive verification failed. Please try again.")
+        }
+        for entry in entries where entry.type == .file {
+          try token.check()
+          let progress = Progress(totalUnitCount: 0)
+          token.track(progress)
+          let crc = try archive.extract(entry, progress: progress) { _ in }
+          guard crc == entry.checksum else { throw ParcelError.storageError("Archive verification failed.") }
         }
       }
     case .sevenZip, .rar:

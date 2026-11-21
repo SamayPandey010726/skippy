@@ -40,6 +40,7 @@ public struct ParcelItem: Codable, Identifiable, Equatable, Sendable {
   public var preparedDescription: String?
   public var inlineText: String?
   public var stackID: UUID?
+  public var stackName: String?
   /// Pinned items survive the self-cleaning auto-clear. Inspired by FlowShelf's pin model.
   public var isPinned: Bool
   public init(
@@ -58,7 +59,7 @@ public struct ParcelItem: Codable, Identifiable, Equatable, Sendable {
   }
   private enum CodingKeys: String, CodingKey {
     case id, sourcePath, bookmark, displayName, isDirectory, byteCount, addedAt
-    case preparedPath, preparedBytes, preparedDescription, isPinned, inlineText, stackID
+    case preparedPath, preparedBytes, preparedDescription, isPinned, inlineText, stackID, stackName
   }
   public init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -74,6 +75,7 @@ public struct ParcelItem: Codable, Identifiable, Equatable, Sendable {
     preparedDescription = try c.decodeIfPresent(String.self, forKey: .preparedDescription)
     inlineText = try c.decodeIfPresent(String.self, forKey: .inlineText)
     stackID = try c.decodeIfPresent(UUID.self, forKey: .stackID)
+    stackName = try c.decodeIfPresent(String.self, forKey: .stackName)
     isPinned = try c.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
   }
   public var sourceURL: URL { URL(fileURLWithPath: sourcePath) }

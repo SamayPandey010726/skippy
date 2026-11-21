@@ -113,6 +113,7 @@ enum WorkspaceShortcut: Hashable, Identifiable {
         .recent: (kVK_ANSI_R, "R"), .system: (kVK_ANSI_Y, "Y"),
         .calendar: (kVK_ANSI_L, "L"), .calculator: (kVK_ANSI_K, "K"),
         .screenshot: (kVK_ANSI_4, "4"), .draw: (kVK_ANSI_B, "B"),
+        .convert: (kVK_ANSI_V, "V"), .compress: (kVK_ANSI_Z, "Z"), .extractArchive: (kVK_ANSI_X, "X"),
       ]
       let (code, label) = keys[module] ?? (kVK_ANSI_0, "0")
       return .init(keyCode: UInt32(code), modifiers: UInt32(controlKey | optionKey | cmdKey), keyLabel: label)
@@ -155,7 +156,7 @@ enum WorkspaceShortcut: Hashable, Identifiable {
           guard let pointer, let event else { return OSStatus(eventNotHandledErr) }
           var identifier = EventHotKeyID()
           let result = GetEventParameter(event, EventParamName(kEventParamDirectObject),
-            EventParamType(typeEventHotKeyID), nil, ByteCount(MemoryLayout<EventHotKeyID>.size), nil, &identifier)
+            EventParamType(typeEventHotKeyID), nil, numericCast(MemoryLayout<EventHotKeyID>.size), nil, &identifier)
           if result != noErr || identifier.signature != GlobalShortcutManager.signature {
             return OSStatus(eventNotHandledErr)
           }

@@ -93,13 +93,28 @@ public enum ExternalArchiver {
     switch format {
     case .sevenZip:
       let level = strength == .light ? "1" : strength == .heavy ? "9" : "5"
-      process.arguments = ["a", "-t7z", "-mx=\(level)", "-mmt=on", "-y", destination.path] + items
+      process.arguments = ["a", "-t7z", "-mx=\(level)", "-mmt=on", "-y", destination.path] + items.map { "./" + $0 }
     case .rar:
       let level = strength == .light ? "1" : strength == .heavy ? "5" : "3"
-      process.arguments = ["a", "-m\(level)", "-y", destination.path] + items
+      process.arguments = ["a", "-m\(level)", "-y", destination.path] + items.map { "./" + $0 }
     case .zip:
       throw ParcelError.storageError("Internal error: ZIP uses the built-in packer.")
     }
+    try run(process, format: format, failure: "Packing failed", token: token)
+    let size = (try? fm.attributesOfItem(atPath: destination.path)[.size] as? NSNumber)?.int64Value ?? 0
+    guard fm.fileExists(atPath: destination.path), size > 0 else {
+      throw ParcelError.storageError("\(format.label) packing produced no file.")
+    }
+    let verify = Process()
+    verify.executableURL = URL(fileURLWithPath: tool)
+    verify.arguments = ["t", format == .rar ? "-p-" : "-y", destination.path]
+    try run(verify, format: format, failure: "Archive verification failed", token: token)
+    progress(0.95, "Your parcel is ready")
+  }
+
+  private static func run(_ process: Process, format: PackFormat, failure: String, token: CancellationToken) throws {
+    try token.check()
+    process.standardInput = FileHandle.nullDevice
     process.standardOutput = FileHandle.nullDevice
     process.standardError = FileHandle.nullDevice
     try process.run()
@@ -112,15 +127,9 @@ public enum ExternalArchiver {
       process.terminate()
       throw error
     }
+    try token.check()
     guard process.terminationStatus == 0 else {
-      throw ParcelError.storageError("\(format.label) packing failed. Please try again.")
+      throw ParcelError.storageError(failure + " (" + format.label + ").")
     }
-    let size =
-      (try? fm.attributesOfItem(atPath: destination.path)[.size] as? NSNumber)?.int64Value ?? 0
-    guard fm.fileExists(atPath: destination.path), size > 0 else {
-      throw ParcelError.storageError(
-        "\(format.label) packing produced no file. Please try again.")
-    }
-    progress(0.95, "Your parcel is ready")
   }
 }

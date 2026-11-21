@@ -234,12 +234,14 @@ struct DragOutSurface: NSViewRepresentable {
   var outgoingText: String? = nil
   var enabled: Bool = true
   var tap: () -> Void = {}
+  var menu: ((NSView) -> NSMenu)? = nil
   func makeNSView(context: Context) -> SendingView { SendingView() }
   func updateNSView(_ view: SendingView, context: Context) {
     view.urls = urls
     view.outgoingText = outgoingText
     view.enabled = enabled
     view.tap = tap
+    view.courierMenu = menu
   }
   @MainActor class SendingView: NSView, NSDraggingSource {
     var urls: [URL] = []

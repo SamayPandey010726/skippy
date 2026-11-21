@@ -14,6 +14,17 @@ import AppKit
     let paths = pasteboard.propertyList(forType: NSPasteboard.PasteboardType("NSFilenamesPboardType")) as? [String] ?? []
     return paths.map { URL(fileURLWithPath: $0) }
   }
+  @objc func prepareInParcels(_ pasteboard: NSPasteboard, userData: String?,
+    error: AutoreleasingUnsafeMutablePointer<NSString?>) {
+    let urls = Self.fileURLs(from: pasteboard)
+    guard let store, !store.busy, store.canExport, !urls.isEmpty,
+      let value = userData, let operation = ShelfFileOperation(rawValue: value) else {
+      error.pointee = "Choose files when the File Shelf is ready."
+      return
+    }
+    ShelfFileActions.shared.open(operation, urls: urls)
+  }
+
   @objc func sendToParcels(_ pasteboard: NSPasteboard, userData: String?,
     error: AutoreleasingUnsafeMutablePointer<NSString?>) {
     let urls = Self.fileURLs(from: pasteboard)

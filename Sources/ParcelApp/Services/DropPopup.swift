@@ -1292,11 +1292,16 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     menu.addItem(CourierMenuAction("Quick Look", enabled: available) {
       QuickLookController.shared.show([item.effectiveURL])
     })
-    let box = store?.boxes.first(where: { $0.id == focusedBox })
+    let box = store?.boxes.first(where: { $0.items.contains { $0.id == item.id } })
+    let members = box.flatMap { store?.stackMembers(of: item, in: $0) } ?? [item]
+    let memberURLs = members.map(\.effectiveURL).filter { FileManager.default.fileExists(atPath: $0.path) }
     let stackCount = box.map { store?.stackCount(of: item, in: $0) ?? 1 } ?? 1
     menu.addItem(CourierMenuAction(stackCount > 1 ? "Copy stack (\(stackCount) items)" : "Copy item",
       enabled: available && store?.canExport == true) { [weak self] in
-      self?.copyFiles(item: item.id)
+      if stackCount > 1 {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects(memberURLs.map { $0 as NSURL })
+      } else { self?.copyFiles(item: item.id) }
     })
     menu.addItem(CourierMenuAction("Copy all parcel items", enabled: store?.canExport == true) { [weak self] in
       self?.copyFiles()
@@ -1305,6 +1310,14 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     menu.addItem(CourierMenuAction("Save packed parcel to Desktop", enabled: !receiving && store?.busy == false) { [weak self] in
       self?.savePackedParcelToDesktop()
     })
+    let writable = !receiving && store?.busy == false && !memberURLs.isEmpty
+    if !QuickConvertAction.available(for: memberURLs).isEmpty {
+      menu.addItem(CourierMenuAction("Convert…", enabled: writable) { ShelfFileActions.shared.open(.convert, urls: memberURLs) })
+    }
+    menu.addItem(CourierMenuAction("Compress…", enabled: writable) { ShelfFileActions.shared.open(.compress, urls: memberURLs) })
+    if memberURLs.allSatisfy({ $0.pathExtension.lowercased() == "zip" }) && !memberURLs.isEmpty {
+      menu.addItem(CourierMenuAction("Extract…", enabled: writable) { ShelfFileActions.shared.open(.extract, urls: memberURLs) })
+    }
     if ImagePipeline.canPrepare(item.effectiveURL) {
       menu.addItem(.separator())
       menu.addItem(CourierMenuAction("Process image…", enabled: !receiving && store?.busy == false) { [weak self] in
@@ -1322,7 +1335,12 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     }
     menu.addItem(.separator())
     if stackCount > 1 {
-      menu.addItem(CourierMenuAction("Unstack items", enabled: store?.busy == false) { [weak self] in self?.store?.unstack(item.id) })
+      menu.addItem(CourierMenuAction("Unstack items", enabled: store?.busy == false) { [weak self] in
+        if let box, let store = self?.store {
+          if store.selectedBox != box.id { store.selectBox(box.id) }
+          store.unstack(item.id)
+        }
+      })
     }
     menu.addItem(CourierMenuAction("Reveal in Finder", enabled: available) {
       NSWorkspace.shared.activateFileViewerSelecting([item.effectiveURL])

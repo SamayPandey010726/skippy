@@ -131,13 +131,14 @@ final class NotchToolsTests: XCTestCase {
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: root) }
     for (index, size) in [NSSize(width: 60, height: 20), NSSize(width: 40, height: 30)].enumerated() {
-      let image = NSImage(size: size)
-      image.lockFocus()
-      (index == 0 ? NSColor.red : NSColor.blue).setFill()
-      NSBezierPath(rect: CGRect(origin: .zero, size: size)).fill()
-      image.unlockFocus()
-      let url = root.appendingPathComponent("test-\(index).tiff")
-      try XCTUnwrap(image.tiffRepresentation).write(to: url)
+      let buffer = try XCTUnwrap(CGContext(data: nil, width: Int(size.width), height: Int(size.height),
+        bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+      buffer.setFillColor((index == 0 ? NSColor.red : NSColor.blue).cgColor)
+      buffer.fill(CGRect(origin: .zero, size: size))
+      let image = try XCTUnwrap(buffer.makeImage())
+      let url = root.appendingPathComponent("test-\(index).png")
+      try XCTUnwrap(NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])).write(to: url)
       store.addCapture(from: url)
     }
     XCTAssertEqual(store.captures.count, 2)

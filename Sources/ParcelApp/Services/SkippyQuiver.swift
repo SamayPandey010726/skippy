@@ -275,8 +275,8 @@ enum QuiverEmblem: String, CaseIterable {
     menu.addItem(CourierMenuAction("Open Skippy") { self.show(.dashboard) })
     menu.addItem(CourierMenuAction("Find an arrow…") { self.openArrowFinder() })
     let arrows = NSMenu()
-    for widget in widgets.widgets {
-      arrows.addItem(CourierMenuAction(widget.kind.module.title) { self.show(widget.kind.module) })
+    for module in NotchModule.allCases where module != .dashboard {
+      arrows.addItem(CourierMenuAction(module.title) { self.show(module) })
     }
     if !tools.pinnedApps.isEmpty {
       arrows.addItem(.separator())
@@ -336,25 +336,24 @@ enum QuiverEmblem: String, CaseIterable {
     strip.layer?.cornerRadius = surface == .menu ? 5 : height / 2
     strip.subviews.forEach { $0.removeFromSuperview() }
     icons.removeAll(); arrowModules.removeAll(); previewTarget = nil
-    enum Entry { case tool(NotchWidget), app(PinnedNotchApp) }
-    let pins = widgets.pinned.map(Entry.tool) + tools.pinnedApps.map(Entry.app)
+    enum Entry { case tool(NotchModule), app(PinnedNotchApp) }
+    let pins = widgets.pinned.map { Entry.tool($0.kind.module) } + tools.pinnedApps.map(Entry.app)
     let direct = quickPins.pins.prefix(3)
     let foregroundPins: [Entry] = direct.compactMap { pin in
-      if let widget = widgets.widgets.first(where: { $0.kind.rawValue == pin.id }) { return .tool(widget) }
+      if let module = pin.module { return .tool(module) }
       return tools.pinnedApps.first(where: { $0.id == pin.id }).map(Entry.app)
     }
     let directIDs = Set(direct.map(\.id))
     let remainingPins = pins.filter { entry in
       switch entry {
-      case .tool(let widget): !directIDs.contains(widget.kind.rawValue)
+      case .tool(let module): !directIDs.contains(module.id)
       case .app(let app): !directIDs.contains(app.id)
       }
     }
     let entries = (surface == .floating ? remainingPins : foregroundPins + remainingPins).prefix(3)
     for entry in entries {
       switch entry {
-      case .tool(let widget):
-        let module = widget.kind.module
+      case .tool(let module):
         let button = strip.addIcon(module.title, image: NSImage(systemSymbolName: module.symbol, accessibilityDescription: nil),
           frame: .zero, inMenu: surface == .menu) { [weak self] view in self?.show(module, from: view) }
         button.toolTip = module.title
@@ -398,8 +397,8 @@ enum QuiverEmblem: String, CaseIterable {
     mark.dragHover = { [weak self] inside in self?.hover(inside) }
     mark.registerForDraggedTypes([.fileURL, .png, .tiff, .URL, .string] + NSFilePromiseReceiver.readableDraggedTypes.map { .init($0) })
     if let floating, surface != .dock {
-      mark.windowMovement = WindowMoveActions(begin: {}, drag: { [weak self] event in
-        guard let self else { return }
+      mark.windowMovement = WindowMoveActions(begin: {}, drag: { [weak self, weak floating, weak mark] event in
+        guard let self, let floating, let mark else { return }
         self.dragging = true; self.foldWork?.cancel()
         for satellite in self.satellites.values { satellite.orderOut(nil) }
         floating.performDrag(with: event)
@@ -471,8 +470,9 @@ enum QuiverEmblem: String, CaseIterable {
       }
       button.movePin = { [weak self] pointer in
         guard let self else { return }
+        let center = self.center
         func distance(_ slot: QuickPinPosition) -> CGFloat {
-          hypot(self.center.x + slot.offset.x - pointer.x, self.center.y + slot.offset.y - pointer.y)
+          hypot(center.x + slot.offset.x - pointer.x, center.y + slot.offset.y - pointer.y)
         }
         if let slot = QuickPinPosition.allCases.min(by: { distance($0) < distance($1) }) {
           self.quickPins.position(pin.id, at: slot)

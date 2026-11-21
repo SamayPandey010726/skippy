@@ -549,20 +549,48 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     if selectedItems.contains(id) { selectedItems.remove(id) } else { selectedItems.insert(id) }
   }
   func stackSelected() {
-    guard !busy, let i = index, selectedItems.count > 1 else { return }
+    guard !busy, let index, selectedItems.count > 1 else { return }
     let group = UUID()
-    let ordered = boxes[i].items.filter { selectedItems.contains($0.id) }
-    guard let representative = ordered.first else { return }
-    for j in boxes[i].items.indices where selectedItems.contains(boxes[i].items[j].id) {
-      boxes[i].items[j].stackID = group
+    let previousGroups = Set(boxes[index].items.filter { selectedItems.contains($0.id) }.compactMap(\.stackID))
+    let members = boxes[index].items.indices.filter { position in
+      let item = boxes[index].items[position]
+      return selectedItems.contains(item.id) || item.stackID.map(previousGroups.contains) == true
     }
-    selectedItems = [representative.id]
+    guard let first = members.first, members.count > 1 else { return }
+    for position in members {
+      boxes[index].items[position].stackID = group
+      boxes[index].items[position].stackName = nil
+    }
+    selectedItems = [boxes[index].items[first].id]
     changed()
-    notice = "Stacked \(ordered.count) items into one shelf icon."
+    notice = "Stacked \(members.count) items."
   }
+
+  func renameStack(_ stackID: UUID, in boxID: UUID, to name: String) {
+    let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !busy, let index = boxes.firstIndex(where: { $0.id == boxID }), name.count <= 80 else { return }
+    for i in boxes[index].items.indices where boxes[index].items[i].stackID == stackID {
+      boxes[index].items[i].stackName = name.isEmpty ? nil : name
+    }
+    changed()
+  }
+
+  func moveStackMember(_ id: UUID, in boxID: UUID, by step: Int) {
+    guard !busy, let index = boxes.firstIndex(where: { $0.id == boxID }),
+      let source = boxes[index].items.firstIndex(where: { $0.id == id }),
+      let stackID = boxes[index].items[source].stackID else { return }
+    let indices = boxes[index].items.indices.filter { boxes[index].items[$0].stackID == stackID }
+    guard let position = indices.firstIndex(of: source), indices.indices.contains(position + step) else { return }
+    boxes[index].items.swapAt(source, indices[position + step])
+    changed()
+  }
+
   func unstack(_ itemID: UUID) {
     guard !busy, let i = index, let stackID = boxes[i].items.first(where: { $0.id == itemID })?.stackID else { return }
-    for j in boxes[i].items.indices where boxes[i].items[j].stackID == stackID { boxes[i].items[j].stackID = nil }
+    for j in boxes[i].items.indices where boxes[i].items[j].stackID == stackID {
+      boxes[i].items[j].stackID = nil
+      boxes[i].items[j].stackName = nil
+    }
     selectedItems = []
     changed()
   }
@@ -848,11 +876,11 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
     }
   }
   func quickConvert(
-    _ urls: [URL], action: QuickConvertAction,
+    _ urls: [URL], action: QuickConvertAction, outputs: (([URL]) -> Void)? = nil,
     completion: @escaping @MainActor (Int, String?) -> Void
   ) {
     refreshLicense()
-    guard canExport, !busy, receivingCount == 0, !urls.isEmpty,
+    guard canExport, !busy, receivingCount == 0, libraryWritable, !urls.isEmpty,
       QuickConvertAction.available(for: urls).contains(action),
       let boxID = ShelfRanking.primary(boxes)?.id ?? selectedBox
     else { completion(0, "This selection cannot be converted right now."); return }
@@ -866,35 +894,92 @@ enum ParcelPhase: Equatable { case open, receiving, preparing, packing, ready }
         progress = Double(offset) / Double(urls.count)
         progressLabel = "Converting \(url.lastPathComponent)"
         do {
-          results.append(try await QuickConversionPipeline.convert(
-            source: url, action: action, token: cancellation))
+          results.append(try await QuickConversionPipeline.convert(source: url, action: action, token: cancellation))
         } catch { if !cancellation.isCancelled { failures.append("\(url.lastPathComponent): \(error.localizedDescription)") } }
       }
-      var added = 0
-      if !cancellation.isCancelled, let position = boxes.firstIndex(where: { $0.id == boxID }) {
-        var box = boxes[position]
-        for result in results {
-          do {
-            let info = try FileTree.inspect(result.url)
-            box.items.append(ParcelItem(
-              sourcePath: result.url.path, displayName: result.url.lastPathComponent,
-              isDirectory: info.folder, byteCount: info.folder ? 0 : info.bytes))
-            added += 1
-          } catch {
-            _ = StoragePaths.deleteOwned(result.ownedRoot)
-            failures.append(error.localizedDescription)
+      let committed = finishShelfPreparation(results, in: boxID, cancellation: cancellation, failures: &failures)
+      outputs?(committed)
+      completion(committed.count, failures.isEmpty ? nil : failures.joined(separator: "\n"))
+    }
+  }
+
+  func prepareShelfArchive(_ urls: [URL], operation: ShelfFileOperation, format: PackFormat,
+    strength: PackStrength, completion: @escaping @MainActor ([URL], String?) -> Void) {
+    refreshLicense()
+    guard !busy, receivingCount == 0, libraryWritable, canExport, !urls.isEmpty,
+      let boxID = ShelfRanking.primary(boxes)?.id ?? selectedBox else {
+      completion([], "The File Shelf cannot accept results right now."); return
+    }
+    let cancellation = CancellationToken()
+    token = cancellation; phase = .preparing; progress = 0; progressLabel = operation.rawValue + "ing…"
+    job = Task {
+      var results: [QuickConversionResult] = []
+      var failures: [String] = []
+      do {
+        if operation == .compress {
+          let output = try await Task.detached(priority: .userInitiated) { [weak self] in
+            try ShelfArchivePipeline.compress(urls, format: format, strength: strength, token: cancellation) { progress, label in
+              Task { @MainActor [weak self] in
+                guard let self, self.token === cancellation else { return }
+                self.progress = progress; self.progressLabel = label
+              }
+            }
+          }.value
+          results.append(output)
+        } else if operation == .extract {
+          for (index, url) in urls.enumerated() {
+            try cancellation.check()
+            progress = Double(index) / Double(urls.count)
+            progressLabel = "Extracting \(url.lastPathComponent)"
+            guard url.pathExtension.lowercased() == "zip" else { throw ParcelError.unsupportedSource(url.lastPathComponent) }
+            results.append(try await Task.detached(priority: .userInitiated) {
+              try ShelfArchivePipeline.extractZIP(url, token: cancellation)
+            }.value)
           }
         }
-        box.updatedAt = Date(); box.lastArchivePath = nil; boxes[position] = box
-        selectedBox = boxID; bounce += added > 0 ? 1 : 0
-      } else {
-        results.forEach { _ = StoragePaths.deleteOwned($0.ownedRoot) }
+      } catch { if !cancellation.isCancelled { failures.append(error.localizedDescription) } }
+      let committed = finishShelfPreparation(results, in: boxID, cancellation: cancellation, failures: &failures)
+      completion(committed, failures.isEmpty ? nil : failures.joined(separator: "\n"))
+    }
+  }
+
+  private func finishShelfPreparation(_ results: [QuickConversionResult], in boxID: UUID,
+    cancellation: CancellationToken, failures: inout [String]) -> [URL] {
+    defer { phase = .open; token = nil; job = nil; progress = 0; archiveURL = nil; lastManifest = "" }
+    guard !cancellation.isCancelled, let index = boxes.firstIndex(where: { $0.id == boxID }) else {
+      results.forEach { _ = StoragePaths.deleteOwned($0.ownedRoot) }
+      return []
+    }
+    let previous = boxes[index]
+    let previousSelection = selectedBox
+    var box = previous
+    var accepted: [QuickConversionResult] = []
+    for result in results {
+      do {
+        let info = try FileTree.inspect(result.url)
+        guard box.items.count < 2000, info.folder || info.bytes > 0 else {
+          throw ParcelError.storageError("The result is empty or the File Shelf is full.")
+        }
+        box.items.append(ParcelItem(sourcePath: result.url.path, displayName: result.url.lastPathComponent,
+          isDirectory: info.folder, byteCount: info.folder ? 0 : info.bytes))
+        accepted.append(result)
+      } catch {
+        _ = StoragePaths.deleteOwned(result.ownedRoot)
+        failures.append(error.localizedDescription)
       }
-      phase = .open; token = nil; job = nil; progress = 0; archiveURL = nil; lastManifest = ""
-      notice = added > 0 ? "\(added) converted \(added == 1 ? "copy" : "copies") added to your parcel." : nil
-      save()
-      let message = failures.isEmpty ? nil : failures.joined(separator: "\n")
-      completion(added, message)
+    }
+    guard !accepted.isEmpty else { return [] }
+    box.updatedAt = Date(); box.lastArchivePath = nil; boxes[index] = box; selectedBox = boxID
+    do {
+      try persistLibrary()
+      bounce += 1
+      notice = "\(accepted.count) ready in the File Shelf."
+      return accepted.map(\.url)
+    } catch {
+      boxes[index] = previous; selectedBox = previousSelection
+      accepted.forEach { _ = StoragePaths.deleteOwned($0.ownedRoot) }
+      failures.append("Could not save the File Shelf: \(error.localizedDescription)")
+      return []
     }
   }
   func seal(reportError: ((String) -> Void)? = nil, options override: PackagingOptions? = nil,

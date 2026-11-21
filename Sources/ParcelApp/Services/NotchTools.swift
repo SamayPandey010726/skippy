@@ -17,7 +17,7 @@ extension Notification.Name {
 }
 
 enum NotchModule: String, CaseIterable, Identifiable {
-  case dashboard, parcel, clipboard, extract, color, timer, notes, qr, search, launcher, music, downloads, awake, recent, system, calendar, calculator, screenshot, draw
+  case dashboard, parcel, clipboard, extract, color, timer, notes, qr, search, launcher, music, downloads, awake, recent, system, calendar, calculator, screenshot, draw, convert, compress, extractArchive
   var id: String { rawValue }
   var title: String {
     switch self {
@@ -40,6 +40,9 @@ enum NotchModule: String, CaseIterable, Identifiable {
     case .calculator: "Calculator"
     case .screenshot: "Screenshots"
     case .draw: "Draw on screen"
+    case .convert: "Convert files"
+    case .compress: "Compress files"
+    case .extractArchive: "Extract archive"
     }
   }
   var symbol: String {
@@ -63,6 +66,9 @@ enum NotchModule: String, CaseIterable, Identifiable {
     case .calculator: "plus.forwardslash.minus"
     case .screenshot: "rectangle.dashed.badge.record"
     case .draw: "pencil.tip.crop.circle"
+    case .convert: "arrow.trianglehead.clockwise"
+    case .compress: "archivebox"
+    case .extractArchive: "shippingbox.and.arrow.backward"
     }
   }
 }
@@ -735,6 +741,9 @@ struct NotchToolsView: View {
   @State private var documentFonts = ""
   @State private var deliveredAlerts = ""
   @State private var dashboardPage: Int? = 0
+  @State private var openStack: UUID?
+  @State private var stackRename = ""
+  @State private var renamingStack = false
 
   var body: some View {
     VStack(spacing: 7) {
@@ -852,6 +861,7 @@ struct NotchToolsView: View {
     case .calculator: "Calculate privately on your Mac"
     case .screenshot: "Capture and combine regions"
     case .draw: "Annotate your screen"
+    case .convert, .compress, .extractArchive: "Save results to the File Shelf"
     }
   }
 
@@ -876,6 +886,9 @@ struct NotchToolsView: View {
     case .calculator: calculatorView
     case .screenshot: screenshotView
     case .draw: drawView
+    case .convert: ShelfFileActionView(store: store, operation: .convert)
+    case .compress: ShelfFileActionView(store: store, operation: .compress)
+    case .extractArchive: ShelfFileActionView(store: store, operation: .extract)
     }
   }
 
@@ -1108,55 +1121,126 @@ struct NotchToolsView: View {
 
   private var parcelSummary: some View {
     VStack(alignment: .leading, spacing: 8) {
-      HStack(spacing: 9) {
-        CourierSatchel(sealed: store.ready, count: shelf.primaryBox?.items.count ?? 0,
-          awake: true, celebration: shelf.reveal, skin: skin)
-          .frame(width: 44, height: 44).allowsHitTesting(false)
-        VStack(alignment: .leading, spacing: 2) {
-          Text(shelf.primaryBox?.name ?? "My parcel").font(.system(size: 14, weight: .semibold)).lineLimit(1)
-          Text("\(shelf.primaryBox?.items.count ?? 0) items").font(.caption).foregroundStyle(.secondary)
+      if let box = shelf.primaryBox {
+        HStack(spacing: 8) {
+          Label(box.name, systemImage: "shippingbox").font(.headline).lineLimit(1)
+          Spacer()
+          Text("\(box.items.count) items").font(.caption).foregroundStyle(.secondary)
         }
-        Spacer()
-      }
-      HStack(spacing: 8) {
-        NotchActionButton(title: "Add", symbol: "plus", tint: skin.palette.accent) {
-          if let id = shelf.primaryBox?.id { store.selectBox(id) }
-          store.addFilesPanel()
+        HStack(spacing: 8) {
+          NotchActionButton(title: "Add", symbol: "plus", tint: skin.palette.accent) {
+            store.selectBox(box.id); store.addFilesPanel()
+          }
+          NotchActionButton(title: "Paste", symbol: "doc.on.clipboard", tint: skin.palette.accent, action: shelf.pasteFiles)
+          NotchActionButton(title: "Pack", symbol: "archivebox", tint: skin.palette.accent, action: shelf.pack)
+          if store.selectedItems.count > 1 {
+            Button("Stack selected") { store.stackSelected() }
+          }
+          Spacer()
         }
-        NotchActionButton(title: "Paste", symbol: "doc.on.clipboard", tint: skin.palette.accent,
-          action: shelf.pasteFiles)
-        NotchActionButton(title: "Pack", symbol: "archivebox", tint: skin.palette.accent,
-          action: shelf.pack)
-        Spacer()
-      }
-      Divider().opacity(0.45)
-      ScrollView(.horizontal, showsIndicators: false) {
-        LazyHStack(alignment: .top, spacing: 9) {
-          ForEach(shelf.primaryBox?.items ?? []) { item in
-            Button { NSWorkspace.shared.open(item.effectiveURL) } label: {
-              VStack(spacing: 5) {
-                Image(nsImage: NSWorkspace.shared.icon(forFile: item.effectiveURL.path))
-                  .resizable().aspectRatio(contentMode: .fit).frame(width: 42, height: 42)
-                Text(item.effectiveName).font(.caption).lineLimit(2)
-                  .frame(width: 100, alignment: .center)
-              }.padding(7).background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 11))
-            }.buttonStyle(.plain).help(item.effectiveName)
-              .overlay {
-                DragOutSurface(urls: [item.effectiveURL], tap: { NSWorkspace.shared.open(item.effectiveURL) })
+        Divider().opacity(0.45)
+        if let openStack, box.items.contains(where: { $0.stackID == openStack }) {
+          stackDetails(openStack, in: box)
+        } else {
+          ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(alignment: .top, spacing: 9) {
+              ForEach(store.compactItems(box.items)) { item in
+                shelfIcon(item, in: box)
               }
+              if box.items.isEmpty {
+                Label("Drop or paste files here", systemImage: "arrow.down.doc")
+                  .font(.caption).foregroundStyle(.secondary).padding(15)
+              }
+            }.frame(maxHeight: .infinity, alignment: .topLeading)
           }
-          if shelf.primaryBox?.items.isEmpty != false {
-            Label("Drop or paste files here", systemImage: "arrow.down.doc")
-              .font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary).padding(18)
-          }
-        }.frame(maxHeight: .infinity, alignment: .topLeading)
+        }
       }
     }
-    .padding(12)
+    .padding(10)
     .background(skin.palette.accent.opacity(0.075), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     .background {
       FileDropSurface(enabled: !store.busy, receive: { _ in }, receiving: { _ in }, hover: { _ in },
         failure: { _ in }, beginDrop: shelf.beginPrimaryDrop)
+    }
+  }
+
+  private func shelfIcon(_ item: ParcelItem, in box: ParcelBox) -> some View {
+    let members = store.stackMembers(of: item, in: box)
+    let available = members.filter { FileManager.default.fileExists(atPath: $0.effectiveURL.path) }
+    let grouped = members.count > 1
+    let title = grouped ? item.stackName ?? "Stack" : item.effectiveName
+    let open = {
+      if NSEvent.modifierFlags.contains(.command) {
+        if store.selectedBox != box.id { store.selectBox(box.id) }
+        store.toggleSelection(item.id)
+      } else if grouped { openStack = item.stackID }
+      else if let first = available.first { NSWorkspace.shared.open(first.effectiveURL) }
+    }
+    return VStack(spacing: 5) {
+      ZStack(alignment: .bottomTrailing) {
+        if grouped {
+          RoundedRectangle(cornerRadius: 7).fill(.primary.opacity(0.14)).frame(width: 35, height: 34).offset(x: 4, y: -4)
+        }
+        Image(nsImage: NSWorkspace.shared.icon(forFile: item.effectiveURL.path))
+          .resizable().aspectRatio(contentMode: .fit).frame(width: 36, height: 38)
+        if grouped {
+          Text("\(members.count)").font(.caption2.bold()).padding(3).background(.regularMaterial, in: Capsule())
+        }
+      }
+      Text(title).font(.caption).lineLimit(2).frame(width: 89)
+      if available.count != members.count {
+        Text("\(members.count - available.count) missing").font(.caption2).foregroundStyle(.orange)
+      }
+    }.padding(7)
+      .background(Color.primary.opacity(store.selectedItems.contains(item.id) ? 0.18 : 0.06), in: RoundedRectangle(cornerRadius: 10))
+      .overlay {
+        DragOutSurface(urls: available.map(\.effectiveURL), tap: open, menu: { _ in
+          shelf.fileContextMenu(for: item)
+        })
+      }
+      .accessibilityLabel(title)
+      .help(grouped ? "Open stack · Drag all items · Command-click to select" : "Open file · Command-click to select")
+  }
+
+  private func stackDetails(_ id: UUID, in box: ParcelBox) -> some View {
+    let members = box.items.filter { $0.stackID == id }
+    return VStack(alignment: .leading, spacing: 5) {
+      HStack {
+        Button("Back") { openStack = nil }
+        Text(members.first?.stackName ?? "Stack").font(.headline)
+        Spacer()
+        Button("Rename…") {
+          stackRename = members.first?.stackName ?? ""
+          renamingStack = true
+        }
+        Button("Ungroup") {
+          if let first = members.first {
+            if store.selectedBox != box.id { store.selectBox(box.id) }
+            store.unstack(first.id)
+            openStack = nil
+          }
+        }
+      }
+      ScrollView {
+        ForEach(Array(members.enumerated()), id: \.element.id) { index, member in
+          HStack {
+            Text(member.effectiveName).lineLimit(1)
+            if !FileManager.default.fileExists(atPath: member.effectiveURL.path) {
+              Text("Missing").foregroundStyle(.orange)
+            }
+            Spacer()
+            Button { store.moveStackMember(member.id, in: box.id, by: -1) } label: { Image(systemName: "arrow.up") }
+              .accessibilityLabel("Move \(member.effectiveName) up").disabled(index == 0)
+            Button { store.moveStackMember(member.id, in: box.id, by: 1) } label: { Image(systemName: "arrow.down") }
+              .accessibilityLabel("Move \(member.effectiveName) down").disabled(index == members.count - 1)
+          }.buttonStyle(.borderless).font(.caption)
+        }
+      }
+    }
+    .alert("Rename Stack", isPresented: $renamingStack) {
+      TextField("Stack name", text: $stackRename)
+      Button("Save") { store.renameStack(id, in: box.id, to: stackRename) }
+      Button("Cancel", role: .cancel) {}
     }
   }
 
