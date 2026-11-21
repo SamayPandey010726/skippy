@@ -486,6 +486,7 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   check("the clicked calculator remains open") { windowFrame("Skippy · Calculator") != nil }
   try finishFilm()
 
+  backdrop?.orderOut(nil)
   key(kVK_ANSI_S, flags: .maskCommand)
   check("open standalone Skippy Settings") { windowFrame("Skippy Settings") != nil }
   try startFilm("Workspace Settings")
@@ -498,6 +499,7 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   try finishFilm()
   key(kVK_ANSI_W, flags: .maskCommand)
   check("Settings closes") { windowFrame("Skippy Settings") == nil }
+  backdrop?.orderFrontRegardless()
 
   useArrow(kVK_ANSI_V, "Convert files")
   try startFilm("Convert and compress in Parcels", desktop: true)
@@ -613,6 +615,20 @@ defer { try? FileManager.default.removeItem(at: fixture) }
 check("Accessibility can exercise UI controls") { AXIsProcessTrusted() }
 if ProcessInfo.processInfo.environment["SKIPPY_FILM_BATCH"] == "workspace" {
   try captureWorkspaceFilms(using: fixture)
+  exit(0)
+}
+if ProcessInfo.processInfo.environment["SKIPPY_FILM_BATCH"] == "settings-review" {
+  useArrow(kVK_ANSI_K, "Calculator")
+  key(kVK_ANSI_S, flags: .maskCommand)
+  check("open the rebuilt app’s Settings") { windowFrame("Skippy Settings") != nil }
+  try startFilm("Visible Settings review")
+  check("review the Placement page") { press("Placement") }
+  beat(2.4)
+  check("review the Pins page") { press("Pins") }
+  beat(2.4)
+  check("review editable system-wide shortcuts") { press("Shortcuts") }
+  beat(2)
+  try finishFilm()
   exit(0)
 }
 let runningApp = NSRunningApplication(processIdentifier: pid_t(pid))

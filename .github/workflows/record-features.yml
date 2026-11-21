@@ -2,6 +2,10 @@ name: Record Skippy on Mac
 on:
   workflow_dispatch:
     inputs:
+      settings_from_run:
+        type: string
+        default: ""
+        description: Record visible Settings using a validated universal workspace artifact
       workspace_only:
         type: boolean
         default: false
@@ -17,16 +21,18 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   record:
     strategy:
       fail-fast: false
       matrix:
-        batch: ${{ fromJSON(inputs.workspace_only && '["workspace"]' || inputs.preferences_only && '["preferences"]' || inputs.handoffs_only && '["searchhandoff","downloadhandoff"]' || '["wheel","files","utilities","system","capture","preferences"]') }}
+        batch: ${{ fromJSON(inputs.settings_from_run && '["settings-review"]' || inputs.workspace_only && '["workspace"]' || inputs.preferences_only && '["preferences"]' || inputs.handoffs_only && '["searchhandoff","downloadhandoff"]' || '["wheel","files","utilities","system","capture","preferences"]') }}
     name: Film ${{ matrix.batch }}
     env:
       SKIPPY_FILM_BATCH: ${{ matrix.batch }}
+      SKIPPY_REUSE_BUILD: ${{ inputs.settings_from_run != '' }}
       SKIPPY_UNIVERSAL: ${{ inputs.workspace_only || inputs.preferences_only || (inputs.handoffs_only && matrix.batch == 'searchhandoff') }}
     runs-on: macos-15
     timeout-minutes: 40
@@ -38,6 +44,19 @@ jobs:
           xcodebuild -version
           defaults write com.apple.universalaccess reduceMotion -bool false
           if ! command -v ffmpeg >/dev/null; then brew install ffmpeg; fi
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.settings_from_run }}
+        with:
+          name: Skippy-tested-universal
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.settings_from_run }}
+          path: build
+      - name: Unpack the tested build
+        if: ${{ inputs.settings_from_run }}
+        run: |
+          ditto -x -k build/Skippy-developer.zip build
+          codesign --verify --strict build/Skippy.app
       - name: Record native interactions
         run: bash Scripts/record-feature-library.sh
       - uses: actions/upload-artifact@v4
@@ -58,7 +77,7 @@ jobs:
           name: Skippy-tested-universal
           path: build/Skippy-developer.zip
   package:
-    if: ${{ !inputs.workspace_only && !inputs.preferences_only && !inputs.handoffs_only }}
+    if: ${{ !inputs.settings_from_run && !inputs.workspace_only && !inputs.preferences_only && !inputs.handoffs_only }}
     needs: record
     runs-on: ubuntu-latest
     steps:

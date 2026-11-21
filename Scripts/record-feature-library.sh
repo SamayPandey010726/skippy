@@ -4,7 +4,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v ffmpeg >/dev/null
 command -v ffprobe >/dev/null
-if [[ "${SKIPPY_UNIVERSAL:-false}" == true ]]; then
+if [[ "${SKIPPY_REUSE_BUILD:-false}" == true ]]; then
+  test -x build/Skippy.app/Contents/MacOS/Skippy
+elif [[ "${SKIPPY_UNIVERSAL:-false}" == true ]]; then
   bash Scripts/build-macos.sh --universal
 else
   bash Scripts/build-macos.sh
@@ -23,7 +25,7 @@ defaults write "$bundle_id" skippy.x -float 0.52
 defaults write "$bundle_id" skippy.y -float 0.78
 defaults write "$bundle_id" parcel.idleTimeout -float 0
 defaults write "$bundle_id" parcel-skin -string night
-if [[ "${SKIPPY_FILM_BATCH:-all}" == workspace ]]; then
+if [[ "${SKIPPY_FILM_BATCH:-all}" == workspace || "${SKIPPY_FILM_BATCH:-all}" == settings-review ]]; then
   pin_data="$(python3 -c 'import json; print(json.dumps([{"id": "calculator", "position": 2, "alwaysVisible": True}, {"id": "music", "position": 0, "alwaysVisible": False}]).encode().hex())')"
   defaults write "$bundle_id" skippy.quickPins -data "$pin_data"
 fi
