@@ -83,6 +83,36 @@ enum ShelfArchivePipeline {
 @MainActor final class ShelfFileActions {
   static let shared = ShelfFileActions()
   private var window: NSWindow?
+  private var shelfWindow: NSPanel?
+
+  private func resultShelf() -> NSPanel {
+    if let shelfWindow { return shelfWindow }
+    let panel = NSPanel(contentRect: CGRect(x: 0, y: 0, width: 330, height: 330),
+      styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+    panel.title = "Parcels File Shelf"
+    panel.level = .floating
+    panel.isReleasedWhenClosed = false
+    panel.hidesOnDeactivate = false
+    panel.appearance = NSAppearance(named: .aqua)
+    shelfWindow = panel
+    return panel
+  }
+
+  func showResults(_ urls: [URL], beside anchor: NSWindow? = nil) {
+    let panel = resultShelf()
+    panel.contentView = NSHostingView(rootView: ParcelsShelfContents(shelf: .shared,
+      store: ParcelRuntime.store, skin: .slate, highlighted: urls).background(Ink.paper))
+    if !panel.isVisible {
+      let visible = anchor?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame
+      if let anchor, let visible {
+        let frame = QuiverSurface.companionPanel(at: anchor.frame, within: visible, size: panel.frame.size)
+        panel.setFrame(frame, display: true)
+      } else {
+        panel.center()
+      }
+    }
+    panel.orderFrontRegardless()
+  }
 
   func open(_ operation: ShelfFileOperation, urls: [URL] = []) {
     if let existing = window, existing.isVisible, ParcelRuntime.store.busy {
@@ -90,18 +120,24 @@ enum ShelfArchivePipeline {
       return
     }
     window?.orderOut(nil)
-    let panel = NSPanel(contentRect: CGRect(x: 0, y: 0, width: 465, height: 330),
+    let panel = NSPanel(contentRect: CGRect(x: 0, y: 0, width: 372, height: 298),
       styleMask: [.titled, .closable], backing: .buffered, defer: false)
     panel.title = operation.rawValue + " in Parcels"
     panel.isReleasedWhenClosed = false
     panel.level = .floating
     panel.hidesOnDeactivate = false
     panel.contentView = NSHostingView(rootView: ShelfFileActionView(store: ParcelRuntime.store,
-      operation: operation, urls: urls))
+      operation: operation, urls: urls, presentResults: { [weak self, weak panel] urls in
+        self?.showResults(urls, beside: panel)
+      }))
     panel.appearance = NSAppearance(named: .aqua)
     panel.center()
+    if !urls.isEmpty, let bounds = panel.screen?.visibleFrame {
+      panel.setFrameOrigin(NSPoint(x: max(bounds.minX + 12, bounds.midX - 353), y: panel.frame.minY))
+    }
     window = panel
     panel.makeKeyAndOrderFront(nil)
+    if !urls.isEmpty { showResults([], beside: panel) }
     NSApp.activate(ignoringOtherApps: true)
   }
 }
@@ -119,10 +155,13 @@ struct ShelfFileActionView: View {
   @State private var sourceIdentity: SourceIdentity?
   @State private var confirmDiscard = false
   @State private var confirmReplace = false
+  private let presentResults: (([URL]) -> Void)?
 
-  init(store: ParcelStore, operation: ShelfFileOperation, urls: [URL] = []) {
+  init(store: ParcelStore, operation: ShelfFileOperation, urls: [URL] = [],
+       presentResults: (([URL]) -> Void)? = nil) {
     self.store = store
     self.operation = operation
+    self.presentResults = presentResults
     _urls = State(initialValue: urls)
     _conversion = State(initialValue: QuickConvertAction.available(for: urls).first)
   }
@@ -181,7 +220,11 @@ struct ShelfFileActionView: View {
         } else {
           Text("Select ZIP archives to expand into the File Shelf.").font(.caption)
         }
-        LabeledContent("Destination", value: "Parcels File Shelf")
+        LabeledContent { Label("File Shelf", systemImage: "tray") }
+          label: { Text("Save to") }
+        if operation == .convert && result.isEmpty {
+          LabeledContent("Original", value: "Keep original").foregroundStyle(.secondary)
+        }
         if running { ProgressView(store.progressLabel, value: store.progress) }
         if let message { Text(message).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
         if !result.isEmpty {
@@ -190,8 +233,14 @@ struct ShelfFileActionView: View {
               NSPasteboard.general.clearContents()
               NSPasteboard.general.writeObjects(result.map { $0 as NSURL })
             }
-            Button("Reveal") { NSWorkspace.shared.activateFileViewerSelecting(result) }
-            Button("Save Copy…", action: saveCopies)
+            Button("Show in File Shelf") {
+              if let presentResults { presentResults(result) }
+              else { ShelfFileActions.shared.showResults(result, beside: NSApp.keyWindow) }
+            }
+            Menu("Export") {
+              Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting(result) }
+              Button("Save Copy…", action: saveCopies)
+            }
             if sourceIdentity != nil && operation == .convert {
               Menu("Original") {
                 if urls.first?.pathExtension.lowercased() == result.first?.pathExtension.lowercased() && result.count == 1 {
@@ -271,6 +320,7 @@ struct ShelfFileActionView: View {
       running = false
       message = error ?? (output.isEmpty ? "Cancelled." : "Ready in the File Shelf. Originals kept.")
       if error != nil { sourceIdentity = nil }
+      if !output.isEmpty { presentResults?(output) }
     }
     if operation == .convert, let conversion {
       store.quickConvert(urls, action: conversion, outputs: { output in result = output }) { _, error in

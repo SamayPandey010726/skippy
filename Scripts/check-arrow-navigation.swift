@@ -39,7 +39,7 @@ func panels() -> [[String: Any]] {
     guard info[kCGWindowOwnerPID as String] as? Int == pid,
           let bounds = info[kCGWindowBounds as String] as? NSDictionary,
           let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary) else { return false }
-    return rect.width >= 300 && rect.height >= 160
+    return rect.width >= 260 && rect.height >= 135 && (info[kCGWindowName as String] as? String != "Parcels File Shelf")
   }
 }
 // The source is a live region of the macOS display. Capture begins before the finder opens.
@@ -363,6 +363,24 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   key(kVK_Escape)
   check("Escape collapses Scout") { (windowFrame("Skippy quiver")?.width ?? 0) < 45 }
 
+  mouse(.mouseMoved, CGPoint(x: 14, y: 180))
+  guard let scout = windowFrame("Skippy quiver") else { throw CocoaError(.fileNoSuchFile) }
+  mouse(.mouseMoved, CGPoint(x: scout.midX, y: scout.midY))
+  check("Music appears on hover as a separate pin") { windowFrame("Skippy pin · Music") != nil }
+  guard let music = windowFrame("Skippy pin · Music") else { throw CocoaError(.fileNoSuchFile) }
+  mouse(.mouseMoved, CGPoint(x: music.midX, y: music.midY))
+  check("Music opens a compact companion card beside its satellite") {
+    guard let card = windowFrame("Skippy · Music") else { return false }
+    return card.width < 300 && card.height < 160 && (card.minX > music.maxX || card.maxX < music.minX)
+  }
+  try startFilm("Music Quick Pin")
+  check("keep Music open from the card") { press("Keep panel open") }
+  mouse(.mouseMoved, CGPoint(x: 15, y: 180))
+  beat(2)
+  check("retained Music stays visible after the pointer leaves") { windowFrame("Skippy · Music") != nil }
+  check("close Music") { press("Close Skippy") }
+  try finishFilm()
+
   guard let pin = windowFrame("Skippy pin · Calculator") else {
     throw CocoaError(.fileNoSuchFile)
   }
@@ -410,6 +428,12 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   check("converter shows the filename") { contains(fixture.lastPathComponent) }
   check("convert text to PDF") { press("Convert") }
   check("PDF lands in File Shelf") { contains("Ready in the File Shelf. Originals kept.") }
+  check("show the completed conversion beside the form") { press("Show in File Shelf") }
+  check("the destination is a separate File Shelf") { windowFrame("Parcels File Shelf") != nil && contains("Ready") }
+  if let resultShelf = windowFrame("Parcels File Shelf") {
+    let close = CGPoint(x: resultShelf.minX + 13, y: resultShelf.minY + 14)
+    mouse(.leftMouseDown, close); mouse(.leftMouseUp, close)
+  }
   check("copy the converted file") { press("Copy result") }
   let pdfs = board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
   guard let pdf = pdfs.first, try Data(contentsOf: pdf).starts(with: Data("%PDF".utf8)) else {

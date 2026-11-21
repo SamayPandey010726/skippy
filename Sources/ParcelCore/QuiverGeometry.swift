@@ -20,6 +20,15 @@ public enum QuiverSurface: String, CaseIterable, Identifiable {
     return .floating
   }
 
+  public static func companionPanel(at anchor: CGRect, within bounds: CGRect, size: CGSize) -> CGRect {
+    let w = min(size.width, bounds.width), h = min(size.height, bounds.height)
+    let right = anchor.maxX + 13
+    let left = anchor.minX - w - 13
+    let x = right + w <= bounds.maxX ? right : left
+    return CGRect(x: min(max(x, bounds.minX), bounds.maxX - w),
+      y: min(max(anchor.midY - h * 0.5, bounds.minY), bounds.maxY - h), width: w, height: h)
+  }
+
   public static func panel(at anchor: CGRect, within bounds: CGRect, size: CGSize) -> CGRect {
     let w = min(size.width, bounds.width), h = min(size.height, bounds.height)
     if anchor.height > anchor.width * 2, anchor.width <= 34,

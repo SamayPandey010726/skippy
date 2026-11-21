@@ -125,7 +125,7 @@ pointer(notes, .leftMouseDown); pointer(notes, .leftMouseUp); pause(0.65)
 try glide(notes, center)
 pointer(center, .leftMouseDown); pointer(center, .leftMouseUp); pause(1.2)
 guard windows().contains(where: { abs($0.width-strip.width) <= 1 && abs($0.height-strip.height) <= 1 }),
-      windows().contains(where: { $0.width >= 300 && $0.height >= 160 }) else {
+      windows().contains(where: { (275...305).contains($0.width) && $0.height >= 270 }) else {
   throw RecordingError.panelFailed
 }
 print("PASS Scout opens the searchable arrow list next to the stable wheel")

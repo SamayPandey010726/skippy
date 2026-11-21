@@ -68,6 +68,7 @@ enum QuiverEmblem: String, CaseIterable {
   func install() {
     guard !installed else { return }
     installed = true
+    shelf.quiverFloating = { [weak self] in self?.surface == .floating }
     shelf.quiverAnchor = { [weak self] in self?.anchor }
     shelf.quiverPanelPointer = { [weak self] inside in
       guard let self else { return }
@@ -132,7 +133,7 @@ enum QuiverEmblem: String, CaseIterable {
       let p = ShelfPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
       p.title = "Skippy quiver"; p.level = .statusBar; p.hidesOnDeactivate = false
       p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-      p.isOpaque = false; p.backgroundColor = .clear; p.hasShadow = true; p.isReleasedWhenClosed = false
+      p.isOpaque = false; p.backgroundColor = .clear; p.hasShadow = surface != .floating; p.isReleasedWhenClosed = false
       p.acceptsMouseMovedEvents = true
       p.contentView = strip; floating = p
     }
@@ -203,6 +204,7 @@ enum QuiverEmblem: String, CaseIterable {
   private func setUnfolded(_ open: Bool) {
     guard open != unfolded else { return }
     unfolded = open
+    if !open { pointerPrimaries = false }
     showSatellites()
     if open {
       // A status item can receive pointer motion through the menu-bar hosting process.
@@ -346,7 +348,7 @@ enum QuiverEmblem: String, CaseIterable {
       center.y = min(max(center.y, visible.minY + 68), visible.maxY - 68)
     }
     strip.wantsLayer = true
-    strip.layer?.masksToBounds = true
+    strip.layer?.masksToBounds = surface != .floating
     strip.layer?.cornerRadius = surface == .menu ? 5 : height / 2
     strip.subviews.forEach { $0.removeFromSuperview() }
     icons.removeAll(); arrowModules.removeAll(); previewTarget = nil
@@ -383,28 +385,28 @@ enum QuiverEmblem: String, CaseIterable {
       frame: .zero, inMenu: surface == .menu) { [weak self] _ in self?.openArrowFinder() })
     let dark = SkinStore.shared.skin == .night
     let ink = dark ? NSColor(white: 0.94, alpha: 1) : NSColor(calibratedRed: 0.17, green: 0.23, blue: 0.29, alpha: 1)
+    let porcelain = NSColor(calibratedRed: 0.958, green: 0.971, blue: 0.989, alpha: 1)
+    let background = dark ? NSColor(calibratedRed: 0.13, green: 0.17, blue: 0.22, alpha: 0.97) : porcelain
     for icon in icons {
       icon.contentTintColor = surface == .menu ? .labelColor : ink
       if surface == .floating {
-        icon.wantsLayer = true
-        icon.layer?.cornerRadius = 15
-        icon.layer?.backgroundColor = ink.withAlphaComponent(0.085).cgColor
+        styleFloatingButton(icon, fill: background, ink: ink, radius: 14)
       }
     }
-    strip.layer?.backgroundColor = surface == .menu ? NSColor.clear.cgColor :
-      (dark ? NSColor(calibratedRed: 0.13, green: 0.17, blue: 0.22, alpha: 0.97) : NSColor(calibratedRed: 0.946, green: 0.96, blue: 0.985, alpha: 0.98)).cgColor
-    strip.layer?.borderWidth = surface == .menu ? 0 : 0.8
+    strip.layer?.backgroundColor = surface == .menu || surface == .floating ? NSColor.clear.cgColor : background.cgColor
+    strip.layer?.borderWidth = surface == .menu || surface == .floating ? 0 : 0.8
     strip.layer?.borderColor = ink.withAlphaComponent(0.18).cgColor
     let mark = QuiverMark(frame: .zero)
     self.mark = mark
     mark.emblem = emblem
     mark.ink = ink
     mark.inMenu = surface == .menu
+    if surface == .floating { styleFloatingButton(mark, fill: background, ink: ink, radius: 16) }
     mark.setAccessibilityLabel("Skippy, browse arrows")
     mark.tap = { [weak self] in
       guard let self else { return }
-      if self.unfolded || self.surface != .floating { self.openArrowFinder() }
-      else { self.setUnfolded(true) }
+      if self.unfolded || self.surface != .floating || !self.satellites.isEmpty { self.openArrowFinder() }
+      else { self.pointerPrimaries = true; self.setUnfolded(true) }
     }
     mark.courierMenu = { [weak self] _ in self?.menu() ?? NSMenu() }
     mark.beginDrop = { [weak self] in self?.shelf.beginPrimaryDrop() }
@@ -601,7 +603,17 @@ enum QuiverEmblem: String, CaseIterable {
     for pin in quickPins.pins.prefix(3) {
       guard let panel = satellites[pin.id] else { continue }
       if !settingsPresented && (unfolded || quickPins.isAlwaysVisible(pin)) {
-        if !panel.isVisible { panel.orderFrontRegardless() }
+        if !panel.isVisible {
+          let animate = !quickPins.isAlwaysVisible(pin) && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+          panel.alphaValue = animate ? 0 : 1
+          panel.orderFrontRegardless()
+          if animate {
+            NSAnimationContext.runAnimationGroup { context in
+              context.duration = 0.19
+              panel.animator().alphaValue = 1
+            }
+          }
+        }
       } else if panel.isVisible { panel.orderOut(nil) }
     }
   }
@@ -622,7 +634,9 @@ enum QuiverEmblem: String, CaseIterable {
     if surface == .dock, dockTile == nil { dockTile = anchor }
     shelf.dismiss()
     layout()
+    pointerPrimaries = true
     setUnfolded(true)
+    render()
     floating?.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
     focusIcon(0)
@@ -668,6 +682,20 @@ enum QuiverEmblem: String, CaseIterable {
     shelf.chooseArrow()
   }
 
+  private var pointerPrimaries = false
+
+  private func styleFloatingButton(_ view: NSView, fill: NSColor, ink: NSColor, radius: CGFloat) {
+    view.wantsLayer = true
+    view.layer?.cornerRadius = radius
+    view.layer?.backgroundColor = fill.cgColor
+    view.layer?.borderWidth = 0.7
+    view.layer?.borderColor = ink.withAlphaComponent(0.18).cgColor
+    view.layer?.shadowColor = NSColor(calibratedRed: 0.12, green: 0.27, blue: 0.43, alpha: 1).cgColor
+    view.layer?.shadowOpacity = 0.28
+    view.layer?.shadowRadius = 4
+    view.layer?.shadowOffset = CGSize(width: 0, height: -2)
+  }
+
   private func render() {
     let geometry = QuiverGeometry(surface: surface, center: center, bounds: screenBounds, count: icons.count,
                                   progress: progress, height: height, growsRight: growsRight)
@@ -679,8 +707,9 @@ enum QuiverEmblem: String, CaseIterable {
     for (i, icon) in icons.enumerated() {
       icon.frame = geometry.buttons[i]
       icon.alphaValue = progress
-      icon.isHidden = progress == 0
-      icon.isEnabled = unfolded && progress > 0.68
+      let showPrimary = surface != .floating || satellites.isEmpty || keyboardMonitor != nil || pointerPrimaries
+      icon.isHidden = progress == 0 || !showPrimary
+      icon.isEnabled = showPrimary && unfolded && progress > 0.68
     }
   }
 }

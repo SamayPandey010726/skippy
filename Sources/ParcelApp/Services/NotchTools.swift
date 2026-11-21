@@ -742,13 +742,10 @@ struct NotchToolsView: View {
   @State private var documentFonts = ""
   @State private var deliveredAlerts = ""
   @State private var dashboardPage: Int? = 0
-  @State private var openStack: UUID?
-  @State private var stackRename = ""
-  @State private var renamingStack = false
 
   var body: some View {
     VStack(spacing: 7) {
-      header
+      if !shelf.choosingArrow { header }
       Group {
         if shelf.choosingArrow { ArrowFinder(shelf: shelf) }
         else if shelf.activeModule == .dashboard { widgetDashboard }
@@ -764,7 +761,7 @@ struct NotchToolsView: View {
         Spacer()
         if shelf.choosingArrow {
           Text("↑ ↓  Select     ↩  Open     Esc  Back").font(.system(size: 11)).foregroundStyle(.secondary)
-        } else {
+        } else if shelf.activeModule != .music {
           Button(action: shelf.chooseArrow) {
             Label("Find an arrow", systemImage: "magnifyingglass")
             Text(shortcuts.binding(for: .chooseArrow).displayName).monospaced()
@@ -775,7 +772,7 @@ struct NotchToolsView: View {
 
       }
     }
-    .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 7)
+    .padding(.horizontal, 12).padding(.top, 9).padding(.bottom, 7)
     .animation(reduceMotion ? nil : .smooth(duration: 0.23), value: shelf.activeModule)
     .animation(reduceMotion ? nil : .smooth(duration: 0.23), value: shelf.choosingArrow)
     .onReceive(tools.$status.dropFirst()) { status in
@@ -1121,128 +1118,7 @@ struct NotchToolsView: View {
   }
 
   private var parcelSummary: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      if let box = shelf.primaryBox {
-        HStack(spacing: 8) {
-          Label(box.name, systemImage: "shippingbox").font(.headline).lineLimit(1)
-          Spacer()
-          Text("\(box.items.count) items").font(.caption).foregroundStyle(.secondary)
-        }
-        HStack(spacing: 8) {
-          NotchActionButton(title: "Add", symbol: "plus", tint: skin.palette.accent) {
-            store.selectBox(box.id); store.addFilesPanel()
-          }
-          NotchActionButton(title: "Paste", symbol: "doc.on.clipboard", tint: skin.palette.accent, action: shelf.pasteFiles)
-          NotchActionButton(title: "Pack", symbol: "archivebox", tint: skin.palette.accent, action: shelf.pack)
-          if store.selectedItems.count > 1 {
-            Button("Stack selected") { store.stackSelected() }
-          }
-          Spacer()
-        }
-        Divider().opacity(0.45)
-        if let openStack, box.items.contains(where: { $0.stackID == openStack }) {
-          stackDetails(openStack, in: box)
-        } else {
-          ScrollView(.horizontal, showsIndicators: false) {
-            LazyHStack(alignment: .top, spacing: 9) {
-              ForEach(store.compactItems(box.items)) { item in
-                shelfIcon(item, in: box)
-              }
-              if box.items.isEmpty {
-                Label("Drop or paste files here", systemImage: "arrow.down.doc")
-                  .font(.caption).foregroundStyle(.secondary).padding(15)
-              }
-            }.frame(maxHeight: .infinity, alignment: .topLeading)
-          }
-        }
-      }
-    }
-    .padding(10)
-    .background(skin.palette.accent.opacity(0.075), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-    .background {
-      FileDropSurface(enabled: !store.busy, receive: { _ in }, receiving: { _ in }, hover: { _ in },
-        failure: { _ in }, beginDrop: shelf.beginPrimaryDrop)
-    }
-  }
-
-  private func shelfIcon(_ item: ParcelItem, in box: ParcelBox) -> some View {
-    let members = store.stackMembers(of: item, in: box)
-    let available = members.filter { FileManager.default.fileExists(atPath: $0.effectiveURL.path) }
-    let grouped = members.count > 1
-    let title = grouped ? item.stackName ?? "Stack" : item.effectiveName
-    let open = {
-      if NSEvent.modifierFlags.contains(.command) {
-        if store.selectedBox != box.id { store.selectBox(box.id) }
-        store.toggleSelection(item.id)
-      } else if grouped { openStack = item.stackID }
-      else if let first = available.first { NSWorkspace.shared.open(first.effectiveURL) }
-    }
-    return VStack(spacing: 5) {
-      ZStack(alignment: .bottomTrailing) {
-        if grouped {
-          RoundedRectangle(cornerRadius: 7).fill(.primary.opacity(0.14)).frame(width: 35, height: 34).offset(x: 4, y: -4)
-        }
-        Image(nsImage: NSWorkspace.shared.icon(forFile: item.effectiveURL.path))
-          .resizable().aspectRatio(contentMode: .fit).frame(width: 36, height: 38)
-        if grouped {
-          Text("\(members.count)").font(.caption2.bold()).padding(3).background(.regularMaterial, in: Capsule())
-        }
-      }
-      Text(title).font(.caption).lineLimit(2).frame(width: 89)
-      if available.count != members.count {
-        Text("\(members.count - available.count) missing").font(.caption2).foregroundStyle(.orange)
-      }
-    }.padding(7)
-      .background(Color.primary.opacity(store.selectedItems.contains(item.id) ? 0.18 : 0.06), in: RoundedRectangle(cornerRadius: 10))
-      .overlay {
-        DragOutSurface(urls: available.map(\.effectiveURL), tap: open, menu: { _ in
-          shelf.fileContextMenu(for: item)
-        })
-      }
-      .accessibilityLabel(title)
-      .help(grouped ? "Open stack · Drag all items · Command-click to select" : "Open file · Command-click to select")
-  }
-
-  private func stackDetails(_ id: UUID, in box: ParcelBox) -> some View {
-    let members = box.items.filter { $0.stackID == id }
-    return VStack(alignment: .leading, spacing: 5) {
-      HStack {
-        Button("Back") { openStack = nil }
-        Text(members.first?.stackName ?? "Stack").font(.headline)
-        Spacer()
-        Button("Rename…") {
-          stackRename = members.first?.stackName ?? ""
-          renamingStack = true
-        }
-        Button("Ungroup") {
-          if let first = members.first {
-            if store.selectedBox != box.id { store.selectBox(box.id) }
-            store.unstack(first.id)
-            openStack = nil
-          }
-        }
-      }
-      ScrollView {
-        ForEach(Array(members.enumerated()), id: \.element.id) { index, member in
-          HStack {
-            Text(member.effectiveName).lineLimit(1)
-            if !FileManager.default.fileExists(atPath: member.effectiveURL.path) {
-              Text("Missing").foregroundStyle(.orange)
-            }
-            Spacer()
-            Button { store.moveStackMember(member.id, in: box.id, by: -1) } label: { Image(systemName: "arrow.up") }
-              .accessibilityLabel("Move \(member.effectiveName) up").disabled(index == 0)
-            Button { store.moveStackMember(member.id, in: box.id, by: 1) } label: { Image(systemName: "arrow.down") }
-              .accessibilityLabel("Move \(member.effectiveName) down").disabled(index == members.count - 1)
-          }.buttonStyle(.borderless).font(.caption)
-        }
-      }
-    }
-    .alert("Rename Stack", isPresented: $renamingStack) {
-      TextField("Stack name", text: $stackRename)
-      Button("Save") { store.renameStack(id, in: box.id, to: stackRename) }
-      Button("Cancel", role: .cancel) {}
-    }
+    ParcelsShelfContents(shelf: shelf, store: store, skin: skin)
   }
 
   private var clipboardView: some View {
@@ -1557,32 +1433,36 @@ struct NotchToolsView: View {
   }
 
   private var musicView: some View {
-    HStack(spacing: 14) {
+    HStack(spacing: 10) {
       ZStack {
-        RoundedRectangle(cornerRadius: 20, style: .continuous).fill(
-          LinearGradient(colors: [skin.palette.accent, skin.palette.accentSoft.opacity(0.65)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        RoundedRectangle(cornerRadius: 9).fill(
+          LinearGradient(colors: [skin.palette.accentSoft, skin.palette.accent], startPoint: .bottomLeading, endPoint: .topTrailing))
         Image(systemName: tools.mediaIsPlaying || tools.isPlaying ? "waveform" : "music.note")
-          .font(.system(size: 42, weight: .medium)).foregroundStyle(.white)
-          .symbolEffect(.variableColor.iterative, isActive: tools.mediaIsPlaying || tools.isPlaying)
-      }.frame(width: 142, height: 142).shadow(color: skin.palette.accent.opacity(0.25), radius: 14, y: 6)
-      VStack(alignment: .leading, spacing: 8) {
-        if let source = tools.mediaSource {
-          Text(source.uppercased()).font(.system(size: 8, weight: .bold)).tracking(0.8).foregroundStyle(skin.palette.accent)
-        }
-        Text(tools.mediaTitle).font(.system(size: 15, weight: .semibold)).lineLimit(2)
-        Text(tools.mediaArtist).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
-        HStack(spacing: 10) {
-          mediaButton("backward.fill", action: { tools.controlMedia(.previous) })
-          mediaButton(tools.mediaIsPlaying || tools.isPlaying ? "pause.fill" : "play.fill", prominent: true,
-            action: { tools.controlMedia(.toggle) })
-          mediaButton("forward.fill", action: { tools.controlMedia(.next) })
-        }
-        NotchActionButton(title: "Play a local file", symbol: "folder", tint: skin.palette.accent) {
-          tools.chooseAudio()
-          shelf.focusForKeyboard()
-        }
-      }.frame(maxWidth: 240, alignment: .leading)
-    }.frame(maxWidth: .infinity, maxHeight: .infinity)
+          .font(.system(size: 22, weight: .medium)).foregroundStyle(.white)
+          .symbolEffect(.variableColor.iterative, isActive: !reduceMotion && (tools.mediaIsPlaying || tools.isPlaying))
+      }.frame(width: 53, height: 53)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(tools.mediaTitle).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+        Text(tools.mediaArtist).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+        HStack(spacing: 12) {
+          Button { tools.controlMedia(.previous) } label: { Image(systemName: "backward.fill") }
+            .accessibilityLabel("Previous track").disabled(tools.mediaSource == nil)
+          Button { tools.controlMedia(.toggle) } label: {
+            Image(systemName: tools.mediaIsPlaying || tools.isPlaying ? "pause.fill" : "play.fill")
+              .frame(width: 24, height: 24).background(skin.palette.accent.opacity(0.16), in: Circle())
+          }.accessibilityLabel(tools.mediaIsPlaying || tools.isPlaying ? "Pause" : "Play")
+          Button { tools.controlMedia(.next) } label: { Image(systemName: "forward.fill") }
+            .accessibilityLabel("Next track").disabled(tools.mediaSource == nil)
+          Spacer(minLength: 2)
+          Button {
+            tools.chooseAudio()
+            shelf.focusForKeyboard()
+          } label: {
+            Image(systemName: "folder").help("Play a local file")
+          }.accessibilityLabel("Play a local file")
+        }.buttonStyle(.plain).font(.system(size: 11, weight: .medium))
+      }.frame(maxWidth: .infinity, alignment: .leading)
+    }.padding(.horizontal, 4).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
   }
 
   private var downloadsView: some View {
@@ -1879,6 +1759,149 @@ private extension NSColor {
 }
 
 /// Type a tool name, move through matching tools with the arrow keys, and press Return.
+struct ParcelsShelfContents: View {
+  @ObservedObject var shelf: DropPopupController
+  @ObservedObject var store: ParcelStore
+  var skin: ParcelSkin
+  var highlighted: [URL] = []
+  @State private var openStack: UUID?
+  @State private var stackRename = ""
+  @State private var renamingStack = false
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      if let box = shelf.primaryBox {
+        HStack(spacing: 8) {
+          Label(box.name, systemImage: "shippingbox").font(.headline).lineLimit(1)
+          Spacer()
+          Text("\(box.items.count) items").font(.caption).foregroundStyle(.secondary)
+        }
+        HStack(spacing: 8) {
+          NotchActionButton(title: "Add", symbol: "plus", tint: skin.palette.accent) {
+            store.selectBox(box.id); store.addFilesPanel()
+          }
+          NotchActionButton(title: "Paste", symbol: "doc.on.clipboard", tint: skin.palette.accent, action: shelf.pasteFiles)
+          NotchActionButton(title: "Pack", symbol: "archivebox", tint: skin.palette.accent, action: shelf.pack)
+          if store.selectedItems.count > 1 {
+            Button("Stack selected") { store.stackSelected() }
+          }
+          Spacer()
+        }
+        Divider().opacity(0.45)
+        if let openStack, box.items.contains(where: { $0.stackID == openStack }) {
+          stackDetails(openStack, in: box)
+        } else {
+          ScrollView {
+            LazyVStack(alignment: .leading, spacing: 4) {
+              ForEach(store.compactItems(box.items)) { item in
+                shelfIcon(item, in: box)
+              }
+              if box.items.isEmpty {
+                Label("Drop or paste files here", systemImage: "arrow.down.doc")
+                  .font(.caption).foregroundStyle(.secondary).padding(15)
+              }
+            }.frame(maxWidth: .infinity, alignment: .topLeading)
+          }
+        }
+      }
+    }
+    .padding(10)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    .background {
+      FileDropSurface(enabled: !store.busy, receive: { _ in }, receiving: { _ in }, hover: { _ in },
+        failure: { _ in }, beginDrop: shelf.beginPrimaryDrop)
+    }
+  }
+
+  private func shelfIcon(_ item: ParcelItem, in box: ParcelBox) -> some View {
+    let members = store.stackMembers(of: item, in: box)
+    let available = members.filter { FileManager.default.fileExists(atPath: $0.effectiveURL.path) }
+    let grouped = members.count > 1
+    let title = grouped ? item.stackName ?? "Stack" : item.effectiveName
+    let open = {
+      if NSEvent.modifierFlags.contains(.command) {
+        if store.selectedBox != box.id { store.selectBox(box.id) }
+        store.toggleSelection(item.id)
+      } else if grouped { openStack = item.stackID }
+      else if let first = available.first { NSWorkspace.shared.open(first.effectiveURL) }
+    }
+    return HStack(spacing: 9) {
+      ZStack {
+        if grouped {
+          RoundedRectangle(cornerRadius: 4).fill(skin.palette.accent.opacity(0.2))
+            .frame(width: 27, height: 21).rotationEffect(.degrees(-10)).offset(x: 3, y: -4)
+        }
+        Image(nsImage: NSWorkspace.shared.icon(forFile: item.effectiveURL.path))
+          .resizable().aspectRatio(contentMode: .fit).frame(width: 29, height: 29)
+      }.frame(width: 34)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title).font(.system(size: 12, weight: .medium)).lineLimit(1)
+        if grouped { Text("\(members.count) items").font(.caption2).foregroundStyle(.secondary) }
+      }
+      Spacer(minLength: 5)
+      if available.count != members.count {
+        Text("\(members.count - available.count) missing").font(.caption2).foregroundStyle(.orange)
+      } else if highlighted.contains(item.effectiveURL) {
+        Image(systemName: "checkmark.circle.fill").foregroundStyle(skin.palette.accent).accessibilityLabel("Ready")
+      } else if grouped {
+        Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.secondary)
+      }
+    }.padding(.horizontal, 8).frame(height: 38)
+      .background(skin.palette.accent.opacity(store.selectedItems.contains(item.id) || highlighted.contains(item.effectiveURL) ? 0.16 : 0.045),
+        in: RoundedRectangle(cornerRadius: 7))
+      .overlay {
+        DragOutSurface(urls: available.map(\.effectiveURL), tap: open, menu: { _ in
+          shelf.fileContextMenu(for: item)
+        })
+      }
+      .accessibilityLabel(title)
+      .help(grouped ? "Open stack · Drag all items · Command-click to select" : "Open file · Command-click to select")
+  }
+
+  private func stackDetails(_ id: UUID, in box: ParcelBox) -> some View {
+    let members = box.items.filter { $0.stackID == id }
+    return VStack(alignment: .leading, spacing: 5) {
+      HStack {
+        Button("Back") { openStack = nil }
+        Text(members.first?.stackName ?? "Stack").font(.headline)
+        Spacer()
+        Button("Rename…") {
+          stackRename = members.first?.stackName ?? ""
+          renamingStack = true
+        }
+        Button("Ungroup") {
+          if let first = members.first {
+            if store.selectedBox != box.id { store.selectBox(box.id) }
+            store.unstack(first.id)
+            openStack = nil
+          }
+        }
+      }
+      ScrollView {
+        ForEach(Array(members.enumerated()), id: \.element.id) { index, member in
+          HStack {
+            Text(member.effectiveName).lineLimit(1)
+            if !FileManager.default.fileExists(atPath: member.effectiveURL.path) {
+              Text("Missing").foregroundStyle(.orange)
+            }
+            Spacer()
+            Button { store.moveStackMember(member.id, in: box.id, by: -1) } label: { Image(systemName: "arrow.up") }
+              .accessibilityLabel("Move \(member.effectiveName) up").disabled(index == 0)
+            Button { store.moveStackMember(member.id, in: box.id, by: 1) } label: { Image(systemName: "arrow.down") }
+              .accessibilityLabel("Move \(member.effectiveName) down").disabled(index == members.count - 1)
+          }.buttonStyle(.borderless).font(.caption)
+        }
+      }
+    }
+    .alert("Rename Stack", isPresented: $renamingStack) {
+      TextField("Stack name", text: $stackRename)
+      Button("Save") { store.renameStack(id, in: box.id, to: stackRename) }
+      Button("Cancel", role: .cancel) {}
+    }
+  }
+
+}
+
 private struct ArrowFinder: View {
   @ObservedObject var shelf: DropPopupController
   @ObservedObject private var tools = NotchToolStore.shared
@@ -1895,13 +1918,25 @@ private struct ArrowFinder: View {
     }
   }
 
-  private var matches: [Entry] {
+  private var sections: [(String, [Entry])] {
     let entries = NotchModule.allCases.filter { $0 != .dashboard }.map(Entry.tool) + tools.pinnedApps.map(Entry.app)
-    let pinned = quickPins.pins.compactMap { pin in entries.first { $0.id == pin.id } }
     let query = shelf.arrowQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-    if !query.isEmpty { return entries.filter { $0.title.localizedCaseInsensitiveContains(query) } }
-    return pinned + entries.filter { !quickPins.contains($0.id) }
+    if !query.isEmpty { return [("", entries.filter { $0.title.localizedCaseInsensitiveContains(query) })] }
+    let pins = quickPins.pins.compactMap { pin in entries.first { $0.id == pin.id } }
+    let groups: [(String, [NotchModule])] = [
+      ("Files", [.parcel, .convert, .compress, .extractArchive, .downloads, .recent]),
+      ("Capture and create", [.screenshot, .draw, .extract, .color, .qr]),
+      ("Everyday", [.clipboard, .notes, .calculator, .timer, .calendar, .music, .search, .launcher, .awake, .system])
+    ]
+    let regular = groups.map { name, modules in
+      (name, modules.filter { !quickPins.contains($0.id) }.map(Entry.tool))
+    }
+    return [("Quick Pins", pins)] + regular + [
+      ("Apps", tools.pinnedApps.filter { !quickPins.contains($0.id) }.map(Entry.app))
+    ]
   }
+
+  private var matches: [Entry] { sections.flatMap { $0.1 } }
 
   var body: some View {
     VStack(spacing: 8) {
@@ -1910,7 +1945,13 @@ private struct ArrowFinder: View {
       }, submit: {
         if matches.indices.contains(shelf.arrowIndex) { select(matches[shelf.arrowIndex]) }
       }, cancel: shelf.cancelChoosingArrow)
-      .frame(height: 28)
+      .frame(height: 29)
+      HStack {
+        Text("\(NotchModule.allCases.count - 1) tools").font(.caption.weight(.semibold))
+        Spacer()
+        Button(action: shelf.cancelChoosingArrow) { Image(systemName: "xmark").font(.caption) }
+          .buttonStyle(.plain).accessibilityLabel("Back to tool")
+      }.foregroundStyle(.secondary).padding(.horizontal, 3)
       if matches.isEmpty {
         Text("No matching arrows").foregroundStyle(.secondary)
         Spacer()
@@ -1919,7 +1960,11 @@ private struct ArrowFinder: View {
           ScrollView {
             LazyVStack(spacing: 3) {
               ForEach(Array(matches.enumerated()), id: \.element.id) { position, entry in
-                HStack(spacing: 5) {
+                if let heading = sections.first(where: { !$0.0.isEmpty && $0.1.first?.id == entry.id })?.0 {
+                  Text(heading).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 7).padding(.top, 4)
+                }
+                HStack(spacing: 4) {
                   Button { select(entry) } label: {
                     HStack {
                       switch entry {
@@ -1942,7 +1987,7 @@ private struct ArrowFinder: View {
                   }.buttonStyle(.borderless)
                     .help(pinned ? "Remove Quick Pin" : "Add Quick Pin")
                     .accessibilityLabel((pinned ? "Unpin " : "Pin ") + entry.title)
-                }.background(shelf.arrowIndex == position ? Color.primary.opacity(0.1) : .clear,
+                }.background(shelf.arrowIndex == position ? Ink.green.opacity(0.15) : .clear,
                   in: RoundedRectangle(cornerRadius: 6)).id(entry.id)
               }
             }

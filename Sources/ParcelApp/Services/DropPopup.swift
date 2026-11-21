@@ -248,8 +248,15 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     let screen = parkedInMenuBar ? (placementPhysicalScreen ?? panel?.screen?.frame ?? NSScreen.main?.frame ?? visibleScreen) : visibleScreen
     if expanded, let anchor = menuAnchor, quiverAnchor != nil {
       let bounds = NSScreen.screens.first { $0.frame.intersects(anchor) }?.visibleFrame ?? visibleScreen
-      let size = CGSize(width: 460 * interfaceScale, height: 340 * interfaceScale)
-      let frame = QuiverSurface.panel(at: anchor, within: bounds, size: size)
+      let dimensions: CGSize
+      if choosingArrow { dimensions = CGSize(width: 290, height: 306) }
+      else if toolsVisible && activeModule == .music { dimensions = CGSize(width: 278, height: 143) }
+      else if toolsVisible && activeModule == .parcel { dimensions = CGSize(width: 340, height: 310) }
+      else { dimensions = CGSize(width: 460, height: 340) }
+      let size = CGSize(width: dimensions.width * interfaceScale, height: dimensions.height * interfaceScale)
+      let companion = toolsVisible && activeModule == .music && !choosingArrow && quiverFloating()
+      let frame = companion ? QuiverSurface.companionPanel(at: anchor, within: bounds, size: size)
+        : QuiverSurface.panel(at: anchor, within: bounds, size: size)
       return CourierPlacement(frame: frame, courier: .zero, pane: CGRect(origin: .zero, size: frame.size), side: .bottom)
     }
     if parkedInMenuBar && !expanded {
@@ -587,6 +594,8 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     if let host { panel?.makeFirstResponder(host) }
     Toaster.shared.tip("notch-pages", "Scroll for the next page, / to search, and Tab to move through widgets.")
   }
+  var quiverFloating: () -> Bool = { false }
+
   func openArrow(_ module: NotchModule, at anchor: CGRect?) {
     if visible && expanded && activeModule == module && toolsVisible && !isArrowPreview && !choosingArrow {
       focusForKeyboard()
@@ -611,9 +620,14 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     showModule(module)
     isArrowPreview = preview
     if !wasVisible, let panel, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+      let destination = panel.frame
+      let toward: CGFloat = menuAnchor.map { $0.midX < destination.midX ? -1.0 : 1.0 } ?? 1
+      panel.setFrameOrigin(NSPoint(x: destination.minX + toward * 8, y: destination.minY + 4))
       panel.alphaValue = 0
       NSAnimationContext.runAnimationGroup { context in
-        context.duration = 0.12
+        context.duration = 0.21
+        context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        panel.animator().setFrameOrigin(destination.origin)
         panel.animator().alphaValue = 1
       }
     }
@@ -635,8 +649,9 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     focusForKeyboard()
     choosingArrow = true
     arrowFocusRequest += 1
+    fitContents()
   }
-  func cancelChoosingArrow() { choosingArrow = false; focusForKeyboard() }
+  func cancelChoosingArrow() { choosingArrow = false; fitContents(); focusForKeyboard() }
   func focusForKeyboard() {
     NSApp.activate(ignoringOtherApps: true)
     panel?.makeKey()
