@@ -273,7 +273,8 @@ enum QuiverEmblem: String, CaseIterable {
   private func show(_ module: NotchModule, from view: NSView? = nil) {
     let rect = view.flatMap { v in v.window.map { $0.convertToScreen(v.convert(v.bounds, to: nil)) } } ?? anchor
     endKeyboardBrowsing()
-    shelf.openArrow(module, at: rect.map(toolAnchor))
+    // A satellite owns its own anchor. Promoting its preview must keep that same origin.
+    shelf.openArrow(module, at: view is QuickPinButton ? rect : rect.map(toolAnchor))
   }
 
   func toolAnchor(_ button: CGRect) -> CGRect {
