@@ -252,10 +252,14 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       if choosingArrow { dimensions = CGSize(width: 290, height: 306) }
       else if toolsVisible && activeModule == .music { dimensions = CGSize(width: 278, height: 143) }
       else if toolsVisible && activeModule == .parcel { dimensions = CGSize(width: 340, height: 310) }
-      else { dimensions = CGSize(width: 460, height: 340) }
+      else if toolsVisible && [.convert, .compress, .extractArchive].contains(activeModule) {
+        dimensions = CGSize(width: 372, height: 298)
+      } else { dimensions = CGSize(width: 460, height: 340) }
       let size = CGSize(width: dimensions.width * interfaceScale, height: dimensions.height * interfaceScale)
       let companion = toolsVisible && activeModule == .music && !choosingArrow && quiverFloating()
-      let frame = companion ? QuiverSurface.companionPanel(at: anchor, within: bounds, size: size)
+      let scoutCenter = quiverAnchor?()?.midX ?? anchor.midX
+      let preferRight = anchor.midX >= scoutCenter
+      let frame = companion ? QuiverSurface.companionPanel(at: anchor, within: bounds, size: size, preferRight: preferRight)
         : QuiverSurface.panel(at: anchor, within: bounds, size: size)
       return CourierPlacement(frame: frame, courier: .zero, pane: CGRect(origin: .zero, size: frame.size), side: .bottom)
     }

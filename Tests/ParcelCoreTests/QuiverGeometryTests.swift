@@ -55,6 +55,8 @@ final class QuiverGeometryTests: XCTestCase {
     let center = CGRect(x: -600, y: 300, width: 28, height: 28)
     let left = QuiverSurface.companionPanel(at: center, within: screen, size: size)
     XCTAssertEqual(left.minX, center.maxX + 13)
+    let outward = QuiverSurface.companionPanel(at: center, within: screen, size: size, preferRight: false)
+    XCTAssertEqual(outward.maxX, center.minX - 13)
     let edge = CGRect(x: -38, y: 8, width: 28, height: 28)
     let right = QuiverSurface.companionPanel(at: edge, within: screen, size: size)
     XCTAssertEqual(right.maxX, edge.minX - 13)

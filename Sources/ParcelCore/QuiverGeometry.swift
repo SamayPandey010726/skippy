@@ -20,11 +20,13 @@ public enum QuiverSurface: String, CaseIterable, Identifiable {
     return .floating
   }
 
-  public static func companionPanel(at anchor: CGRect, within bounds: CGRect, size: CGSize) -> CGRect {
+  public static func companionPanel(at anchor: CGRect, within bounds: CGRect, size: CGSize, preferRight: Bool = true) -> CGRect {
     let w = min(size.width, bounds.width), h = min(size.height, bounds.height)
     let right = anchor.maxX + 13
     let left = anchor.minX - w - 13
-    let x = right + w <= bounds.maxX ? right : left
+    let rightFits = right + w <= bounds.maxX
+    let leftFits = left >= bounds.minX
+    let x = rightFits && (preferRight || !leftFits) ? right : left
     return CGRect(x: min(max(x, bounds.minX), bounds.maxX - w),
       y: min(max(anchor.midY - h * 0.5, bounds.minY), bounds.maxY - h), width: w, height: h)
   }
