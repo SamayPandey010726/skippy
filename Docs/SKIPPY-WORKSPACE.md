@@ -4,7 +4,7 @@ Skippy groups 21 tools, called arrows, behind Scout. This build uses the approve
 
 ## Scout, More and Quick Pins
 
-- Hover over Scout for three primary arrows and **More**. Hover over an arrow for a preview and click to open for editing. Use the panel’s pin button to keep it visible.
+- Hover over Scout for separate orbiting controls. When Quick Pins are configured, the floating hover state prioritizes those shortcuts. Click Scout to open the searchable drawer, or use the launcher shortcut to reveal the primary arrow controls and **More**. Hover over an arrow for a preview and click to open for editing. Use the panel’s pin button to keep it visible.
 - **More** opens a searchable tool list. Type a name, use Up and Down to select, Return to open, and Escape to return. The list remembers the search. Pin an arrow directly from its row.
 - **Settings → Placement** offers Floating, Left edge, Right edge, Top edge, Bottom edge, Notch, Menu bar and Dock. Drag Scout toward an edge to preview the attachment. Release to settle. Use **Detach to floating** from the secondary-click menu. The Dock uses Skippy’s actual app tile. Dock hover requires Accessibility permission.
 - **Settings → Pins** lets you reorder shortcuts, assign a position and choose **On hover**, **Always visible** or **Use default**. Drag a floating pin around Scout to reposition it. The first three can appear around Scout. Attached strips prioritize Quick Pins. Additional pins live in More.
@@ -64,13 +64,13 @@ Edit system-wide and local shortcuts in **Settings → Shortcuts**. Use Escape t
 - Open **Convert files**, **Compress files** or **Extract archive** from More or via their shortcuts. You can also secondary-click a shelf item or use Convert and Compress from Finder’s **Services** menu. Choose, paste or drop source files. The converter lists formats compatible with the selection.
 - The converter handles image copies and PDF or OCR output, PDF page images and text, Office/text to PDF, smaller MP4 copies and interchange among CSV, TSV, XLSX and table PDF. Numbers-to-XLSX uses Apple Numbers and macOS Automation. Check the result when source formatting, formulas or multiple tables matter.
 - Compress to ZIP or TAR.GZ with system tools. Install 7-Zip for 7z creation or RARLAB’s RAR tool for RAR creation. Skippy verifies the archive before adding it to the shelf. The built-in Extract arrow handles ZIP.
-- Results land in the File Shelf. Copy, drag, reveal or save copies to another folder. When a single-file result is saved and validated, **Original** offers an explicit Trash action. If the output uses the original extension, it also offers atomic replacement with a sibling backup. Failed or cancelled work does not expose source actions.
+- Results land in the File Shelf. **Show in File Shelf** opens a separate destination window and highlights the result. An operation started from a file’s context menu opens beside that window. Copy, drag, reveal or save copies to another folder. When a single-file result is saved and validated, **Original** offers an explicit Trash action. If the output uses the original extension, it also offers atomic replacement with a sibling backup. Failed or cancelled work does not expose source actions.
 
 ## Calculator and markup
 
 - Hover over Calculator for a preview. Click its arrow or use ⌃⌥⌘K for an editable panel. Type an expression or use the keypad. **Scientific** shows trigonometry in radians, square roots, logarithms, powers and π. Return or the equals key evaluates. **Copy** copies the answer.
 - Open **Draw on screen → Start drawing**. Choose pen, highlighter, line, rectangle, ellipse or eraser. Adjust colour and width. Use **Interact** to work in the apps below the ink, then **Resume drawing** to return.
-- In the drawing toolbar choose **Capture → Area, Window, Display or Multiple**. Multiple lets you draw several crops in one session. In **Screenshots**, reorder or remove regions, select Stack or Grid, and copy or save a PNG. The capture compositor adds the strokes to the selected region at native pixel scale.
+- In the drawing toolbar choose **Capture → Area, Window, Display or Multiple**. Multiple lets you draw several crops in one session and opens a live grid composer beside the canvas. In **Screenshots**, reorder or remove regions, select Stack or Grid, and copy or save a PNG. The capture compositor adds the strokes to the selected region at native pixel scale.
 
 ## GitHub build and evidence
 

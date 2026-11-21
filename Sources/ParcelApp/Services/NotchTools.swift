@@ -1787,7 +1787,7 @@ struct ParcelsShelfContents: View {
           NotchActionButton(title: "Paste", symbol: "doc.on.clipboard", tint: skin.palette.accent, action: shelf.pasteFiles)
           NotchActionButton(title: "Pack", symbol: "archivebox", tint: skin.palette.accent, action: shelf.pack)
           Spacer()
-          if selecting && store.selectedItems.count > 1 {
+          if store.selectedItems.count > 1 {
             Button("Stack selected") { store.stackSelected(); selecting = false }
           } else {
             Button(selecting ? "Done" : "Select") {

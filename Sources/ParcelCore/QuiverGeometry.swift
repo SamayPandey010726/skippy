@@ -54,21 +54,24 @@ public struct QuiverGeometry {
     let wheel = surface == .floating
     let vertical = surface == .left || surface == .right
     let radius: CGFloat = 51
-    let width = wheel ? cell + 2 * radius * progress : (vertical ? cell : cell * (1 + CGFloat(count) * progress))
-    let h = wheel ? height + 2 * radius * progress : (vertical ? height + height * CGFloat(count) * progress : height)
+    let markWidth: CGFloat = wheel ? 42 : cell
+    let markHeight: CGFloat = wheel ? 42 : height
+    let width = wheel ? markWidth + 2 * radius * progress : (vertical ? cell : cell * (1 + CGFloat(count) * progress))
+    let h = wheel ? markHeight + 2 * radius * progress : (vertical ? height + height * CGFloat(count) * progress : height)
     let up = center.y <= bounds.midY
-    let mx = wheel ? (width - cell) / 2 : (vertical || growsRight ? 0 : width - cell)
-    let my = wheel ? (h - height) / 2 : (vertical && !up ? h - height : 0)
-    frame = CGRect(x: min(max(center.x - cell / 2 - mx, bounds.minX), bounds.maxX - width),
-                   y: min(max(center.y - height / 2 - my, bounds.minY), bounds.maxY - h),
+    let mx = wheel ? (width - markWidth) / 2 : (vertical || growsRight ? 0 : width - cell)
+    let my = wheel ? (h - markHeight) / 2 : (vertical && !up ? h - height : 0)
+    frame = CGRect(x: min(max(center.x - markWidth / 2 - mx, bounds.minX), bounds.maxX - width),
+                   y: min(max(center.y - markHeight / 2 - my, bounds.minY), bounds.maxY - h),
                    width: width.rounded(), height: h.rounded())
-    mark = CGRect(x: mx.rounded(), y: my.rounded(), width: cell, height: height)
+    mark = CGRect(x: mx.rounded(), y: my.rounded(), width: markWidth, height: markHeight)
     buttons = (0..<count).map { i in
       let angle = CGFloat.pi / 2 - 2 * .pi * CGFloat(i) / CGFloat(max(1, count))
       let delta = (vertical ? height : cell) * CGFloat(i + 1) * progress
       let dx = wheel ? cos(angle) * radius * progress : (vertical ? 0 : (growsRight ? delta : -delta))
       let dy = wheel ? sin(angle) * radius * progress : (vertical ? (up ? delta : -delta) : 0)
-      return CGRect(x: (mx + dx).rounded(), y: (my + dy).rounded(), width: cell, height: height)
+      return CGRect(x: (mx + (markWidth - cell) / 2 + dx).rounded(),
+        y: (my + (markHeight - height) / 2 + dy).rounded(), width: cell, height: height)
     }
   }
 }

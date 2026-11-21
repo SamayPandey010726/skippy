@@ -344,8 +344,8 @@ enum QuiverEmblem: String, CaseIterable {
     center.x = min(max(center.x, visible.minX + cell / 2), visible.maxX - cell / 2)
     center.y = min(max(center.y, screen.frame.minY + height / 2), screen.frame.maxY - height / 2)
     if surface == .floating {
-      center.x = min(max(center.x, visible.minX + 67), visible.maxX - 67)
-      center.y = min(max(center.y, visible.minY + 68), visible.maxY - 68)
+      center.x = min(max(center.x, visible.minX + 73), visible.maxX - 73)
+      center.y = min(max(center.y, visible.minY + 73), visible.maxY - 73)
     }
     strip.wantsLayer = true
     strip.layer?.masksToBounds = surface != .floating
@@ -401,7 +401,7 @@ enum QuiverEmblem: String, CaseIterable {
     mark.emblem = emblem
     mark.ink = ink
     mark.inMenu = surface == .menu
-    if surface == .floating { styleFloatingButton(mark, fill: background, ink: ink, radius: 16) }
+    if surface == .floating { styleFloatingButton(mark, fill: background, ink: ink, radius: 21) }
     mark.setAccessibilityLabel("Skippy, browse arrows")
     mark.tap = { [weak self] in
       guard let self else { return }
@@ -817,13 +817,14 @@ final class QuiverMark: FileDropSurface.ReceivingView {
   override func draw(_ dirtyRect: NSRect) {
     let color = inMenu ? NSColor.labelColor : ink
     if emblem == .scout {
-      let body = CGRect(x: bounds.midX - 10, y: bounds.midY - 8, width: 20, height: 15)
-      color.setFill(); NSBezierPath(roundedRect: body, xRadius: 6, yRadius: 6).fill()
+      let scale = min(1.4, bounds.width / 31)
+      let body = CGRect(x: bounds.midX - 10 * scale, y: bounds.midY - 8 * scale, width: 20 * scale, height: 15 * scale)
+      color.setFill(); NSBezierPath(roundedRect: body, xRadius: 6 * scale, yRadius: 6 * scale).fill()
       let antenna = NSBezierPath(); antenna.move(to: CGPoint(x: body.midX, y: body.maxY-1))
-      antenna.line(to: CGPoint(x: body.midX+3, y: body.maxY+3)); color.setStroke(); antenna.lineWidth = 1.5; antenna.stroke()
+      antenna.line(to: CGPoint(x: body.midX + 3 * scale, y: body.maxY + 3 * scale)); color.setStroke(); antenna.lineWidth = 1.5; antenna.stroke()
       (inMenu ? NSColor.windowBackgroundColor : (SkinStore.shared.skin == .night ? NSColor.black : NSColor.white)).setFill()
       for dx: CGFloat in [-4, 4] {
-        NSBezierPath(roundedRect: CGRect(x: body.midX + dx - 1.4, y: body.midY-2, width: 2.8, height: 5), xRadius: 1.4, yRadius: 1.4).fill()
+        NSBezierPath(roundedRect: CGRect(x: body.midX + (dx - 1.4) * scale, y: body.midY - 2 * scale, width: 2.8 * scale, height: 5 * scale), xRadius: 1.4, yRadius: 1.4).fill()
       }
       return
     }
