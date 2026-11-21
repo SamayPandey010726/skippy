@@ -72,9 +72,6 @@ struct QuickPin: Codable, Identifiable, Equatable {
     positions[display] = offset
     var pin = pins[index]
     pin.displayOffsets = positions
-    pin.position = QuickPinPosition.allCases.min {
-      hypot($0.offset.x - offset.x, $0.offset.y - offset.y) < hypot($1.offset.x - offset.x, $1.offset.y - offset.y)
-    } ?? pin.position
     pins[index] = pin
   }
 

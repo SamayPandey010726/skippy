@@ -4,11 +4,15 @@ import XCTest
 @testable import ParcelApp
 
 final class WorkspaceTests: XCTestCase {
-  func testScientificCalculatorHasRightAssociativePowersAndRejectsInvalidFunctions() {
+  func testScientificCalculatorHasRightAssociativePowersAndRejectsInvalidFunctions() throws {
     var expression = NotchCalculator("-2^2 + 2^3^2 + sqrt(16) + cos(π)")
     XCTAssertEqual(expression.evaluate(), 511)
     var invalid = NotchCalculator("sqrt(-1)")
     XCTAssertNil(invalid.evaluate())
+    var factorial = NotchCalculator("fact(5) + e")
+    XCTAssertEqual(try XCTUnwrap(factorial.evaluate()), 120 + M_E, accuracy: 0.0001)
+    var nonIntegerFactorial = NotchCalculator("fact(2.5)")
+    XCTAssertNil(nonIntegerFactorial.evaluate())
   }
 
   func testGridKeepsNativePixelDimensions() throws {
@@ -39,6 +43,30 @@ final class WorkspaceTests: XCTestCase {
     XCTAssertEqual(reopened.pins.map(\.position), [.upperLeft, .upperRight])
     XCTAssertTrue(reopened.isAlwaysVisible(reopened.pins[0]))
     XCTAssertFalse(reopened.isAlwaysVisible(reopened.pins[1]))
+    XCTAssertTrue(reopened.showConnectors)
+    reopened.showConnectors = false
+    reopened.move(NotchModule.music.id, to: CGPoint(x: 132, y: -72), on: "display-A")
+    reopened.move(NotchModule.music.id, to: CGPoint(x: 85, y: -20), on: "display-B")
+    let moved = QuickPinStore(defaults: defaults)
+    XCTAssertFalse(moved.showConnectors)
+    XCTAssertEqual(moved.pins[0].displayOffsets?["display-A"], CGPoint(x: 132, y: -72))
+    XCTAssertEqual(moved.pins[0].displayOffsets?["display-B"], CGPoint(x: 85, y: -20))
+  }
+
+  @MainActor func testQuickLaunchMigratesSavedAppsAndPersistsOrdering() throws {
+    let name = "Skippy.QuickLaunch." + UUID().uuidString
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+    defer { defaults.removePersistentDomain(forName: name) }
+    let previous = PinnedNotchApp(bundleIdentifier: "com.apple.TextEdit", name: "TextEdit")
+    defaults.set(try JSONEncoder().encode([previous]), forKey: "parcel.notch.pinnedApps.v1")
+    let tools = NotchToolStore(defaults: defaults)
+    XCTAssertEqual(tools.quickLaunchApps.prefix(2), [.defaultMail, .defaultBrowser])
+    XCTAssertEqual(tools.quickLaunchApps.last, previous)
+    tools.moveQuickLaunchApp(previous, by: -1)
+    tools.removeQuickLaunchApp(.defaultMail)
+    let reopened = NotchToolStore(defaults: defaults)
+    XCTAssertEqual(reopened.quickLaunchApps, tools.quickLaunchApps)
+    XCTAssertEqual(reopened.pinnedApps, [previous])
   }
 
   func testZIPRoundTripThroughShelfPreparation() throws {

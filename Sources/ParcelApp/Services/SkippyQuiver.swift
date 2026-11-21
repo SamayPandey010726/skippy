@@ -37,6 +37,7 @@ enum QuiverEmblem: String, CaseIterable {
   private let connectorView = QuiverConnectorView()
   private let pinDiameter: CGFloat = 42
   private var activePin: String?
+  private var lastPointer: CGPoint?
   private var progress: CGFloat = 0
   private var motion: Timer?
   private var pointerMonitor: Any?
@@ -73,6 +74,7 @@ enum QuiverEmblem: String, CaseIterable {
     guard !installed else { return }
     installed = true
     shelf.quiverFloating = { [weak self] in self?.surface == .floating }
+    shelf.quiverSideRail = { [weak self] in self?.surface == .left || self?.surface == .right }
     shelf.quiverAnchor = { [weak self] in self?.anchor }
     shelf.arrowGeometryChanged = { [weak self] in self?.showSatellites() }
     shelf.quiverPanelPointer = { [weak self] inside in
@@ -81,7 +83,7 @@ enum QuiverEmblem: String, CaseIterable {
       else if !self.stripContainsPointer { self.hover(false) }
     }
     strip.pointer = { [weak self] in self?.hover($0) }
-    strip.pointerMoved = { [weak self] in self?.trackArrow() }
+    strip.pointerMoved = { [weak self] in self?.trackArrow(pointerMoved: true) }
     attach()
     quickPins.$pins.combineLatest(quickPins.$alwaysVisible).dropFirst()
       .receive(on: RunLoop.main).sink { [weak self] _ in self?.layout() }.store(in: &subscriptions)
@@ -174,7 +176,7 @@ enum QuiverEmblem: String, CaseIterable {
         NSAnimationContext.runAnimationGroup({ context in
           context.duration = origin == nil ? 0.14 : 0.24
           context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-          panel.animator().setFrame(destination, display: true)
+          if origin != nil { panel.animator().setFrame(destination, display: true) }
           panel.animator().alphaValue = 1
         }, completionHandler: {
           MainActor.assumeIsolated { revealAfterLanding() }
@@ -196,7 +198,7 @@ enum QuiverEmblem: String, CaseIterable {
     guard installed else { return }
     if shown {
       endKeyboardBrowsing()
-      previewWork?.cancel(); foldWork?.cancel()
+      previewWork?.cancel(); pinPreviewWork?.cancel(); foldWork?.cancel(); foldWork = nil
       setUnfolded(false)
       floating?.orderOut(nil)
       for satellite in satellites.values { satellite.orderOut(nil) }
@@ -210,6 +212,7 @@ enum QuiverEmblem: String, CaseIterable {
   func hover(_ inside: Bool) {
     guard !settingsPresented, !dragging, keyboardMonitor == nil else { return }
     if inside {
+      lastPointer = NSEvent.mouseLocation
       foldWork?.cancel()
       foldWork = nil
       if !unfolded, defaults.object(forKey: "skippy.hoverLauncher") as? Bool ?? true { setUnfolded(true) }
@@ -231,6 +234,7 @@ enum QuiverEmblem: String, CaseIterable {
       if self.stripContainsPointer { self.trackArrow(); return }
       if self.connectorView.containsPointer(pointer) { self.scheduleFold(); return }
       self.shelf.dismissArrowPreview()
+      if self.surface != .floating && self.shelf.arrowSource != nil && self.shelf.presentationFrame != nil { return }
       self.setUnfolded(false)
     }
     foldWork = work
@@ -245,7 +249,7 @@ enum QuiverEmblem: String, CaseIterable {
     if open {
       // A status item can receive pointer motion through the menu-bar hosting process.
       pointerMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
-        MainActor.assumeIsolated { self?.trackArrow() }
+        MainActor.assumeIsolated { self?.trackArrow(pointerMoved: true) }
       }
     } else if let pointerMonitor {
       NSEvent.removeMonitor(pointerMonitor); self.pointerMonitor = nil
@@ -288,10 +292,13 @@ enum QuiverEmblem: String, CaseIterable {
     return mark?.frame.contains(local) == true || icons.contains { !$0.isHidden && $0.frame.contains(local) }
   }
 
-  private func trackArrow() {
+  private func trackArrow(pointerMoved: Bool = false) {
     guard unfolded, keyboardMonitor == nil, let window = strip.window else { return }
     let pointer = NSEvent.mouseLocation
-    if !stripContainsPointer, shelf.presentationFrame?.contains(pointer) != true { scheduleFold() }
+    if pointerMoved, pointer != lastPointer {
+      lastPointer = pointer
+      if !stripContainsPointer, shelf.presentationFrame?.contains(pointer) != true { scheduleFold() }
+    }
     let point = strip.convert(window.convertPoint(fromScreen: pointer), from: nil)
     let button = icons.first { !$0.isHidden && $0.isEnabled && $0.frame.contains(point) }
     guard previewTarget !== button else { return }
@@ -384,8 +391,9 @@ enum QuiverEmblem: String, CaseIterable {
     center.x = min(max(center.x, visible.minX + cell / 2), visible.maxX - cell / 2)
     center.y = min(max(center.y, screen.frame.minY + height / 2), screen.frame.maxY - height / 2)
     if surface == .floating {
-      center.x = min(max(center.x, visible.minX + 73), visible.maxX - 73)
-      center.y = min(max(center.y, visible.minY + 73), visible.maxY - 73)
+      let radius = QuiverGeometry.wheelRadius + QuiverGeometry.floatingDiameter / 2
+      center.x = min(max(center.x, visible.minX + radius), visible.maxX - radius)
+      center.y = min(max(center.y, visible.minY + radius), visible.maxY - radius)
     }
     strip.wantsLayer = true
     strip.layer?.masksToBounds = surface != .floating
@@ -798,7 +806,7 @@ enum QuiverEmblem: String, CaseIterable {
       return
     }
     if surface == .menu { openArrowFinder(); return }
-    foldWork?.cancel()
+    foldWork?.cancel(); foldWork = nil
     previewWork?.cancel()
     endKeyboardBrowsing()
     if surface == .dock, dockTile == nil { dockTile = anchor }

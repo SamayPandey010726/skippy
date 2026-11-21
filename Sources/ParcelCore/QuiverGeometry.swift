@@ -31,9 +31,9 @@ public enum QuiverSurface: String, CaseIterable, Identifiable {
       y: min(max(anchor.midY - h * 0.5, bounds.minY), bounds.maxY - h), width: w, height: h)
   }
 
-  public static func panel(at anchor: CGRect, within bounds: CGRect, size: CGSize) -> CGRect {
+  public static func panel(at anchor: CGRect, within bounds: CGRect, size: CGSize, sideRail: Bool = false) -> CGRect {
     let w = min(size.width, bounds.width), h = min(size.height, bounds.height)
-    if anchor.width <= 34,
+    if (sideRail || anchor.height > anchor.width * 2), anchor.width <= 34,
        (anchor.minX <= bounds.minX + 1 || anchor.maxX >= bounds.maxX - 1) {
       let x = anchor.midX < bounds.midX ? anchor.maxX + 3 : anchor.minX - w - 3
       return CGRect(x: min(max(x, bounds.minX), bounds.maxX - w),
@@ -47,6 +47,9 @@ public enum QuiverSurface: String, CaseIterable, Identifiable {
 }
 
 public struct QuiverGeometry {
+  public static let floatingDiameter: CGFloat = 60
+  public static let wheelRadius: CGFloat = 59
+
   public let frame: CGRect
   public let mark: CGRect
   public let buttons: [CGRect]
@@ -55,9 +58,9 @@ public struct QuiverGeometry {
     let cell: CGFloat = 31
     let wheel = surface == .floating
     let vertical = surface == .left || surface == .right
-    let radius: CGFloat = 59
-    let markWidth: CGFloat = wheel ? 60 : cell
-    let markHeight: CGFloat = wheel ? 60 : height
+    let radius = Self.wheelRadius
+    let markWidth: CGFloat = wheel ? Self.floatingDiameter : cell
+    let markHeight: CGFloat = wheel ? Self.floatingDiameter : height
     let width = wheel ? markWidth + 2 * radius * progress : (vertical ? cell : cell * (1 + CGFloat(count) * progress))
     let h = wheel ? markHeight + 2 * radius * progress : (vertical ? height + height * CGFloat(count) * progress : height)
     let up = center.y <= bounds.midY

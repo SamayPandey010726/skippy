@@ -437,8 +437,18 @@ struct PreferencesView: View {
   private func pinPreview(selected: String) -> some View {
     ZStack {
       RoundedRectangle(cornerRadius: 13).fill(Ink.cream)
-      Circle().strokeBorder(Ink.green.opacity(0.6), style: StrokeStyle(lineWidth: 1.4, dash: [3, 3]))
-        .frame(width: 94, height: 94)
+      if quickPins.showConnectors {
+        Canvas { context, size in
+          let center = CGPoint(x: size.width / 2, y: size.height / 2)
+          for pin in quickPins.pins.prefix(3) {
+            let offset = pin.position.offset
+            var line = Path()
+            line.move(to: center)
+            line.addLine(to: CGPoint(x: center.x + offset.x * 0.54, y: center.y - offset.y * 0.54))
+            context.stroke(line, with: .color(pin.id == selected ? Ink.green : Ink.line), lineWidth: 1)
+          }
+        }
+      }
       ScoutPreview().frame(width: 30, height: 26)
       ForEach(quickPins.pins.prefix(3)) { pin in
         Image(systemName: pin.module?.symbol ?? "app")

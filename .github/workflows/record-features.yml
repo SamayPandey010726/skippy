@@ -10,6 +10,10 @@ on:
         type: boolean
         default: false
         description: Record one continuous walkthrough of the connected native Mac workspace
+      connected_from_run:
+        type: string
+        default: ""
+        description: Reuse the Skippy-Mac developer ZIP from a completed Skippy checks run
       workspace_only:
         type: boolean
         default: false
@@ -36,7 +40,7 @@ jobs:
     name: Film ${{ matrix.batch }}
     env:
       SKIPPY_FILM_BATCH: ${{ matrix.batch }}
-      SKIPPY_REUSE_BUILD: ${{ inputs.settings_from_run != '' }}
+      SKIPPY_REUSE_BUILD: ${{ inputs.settings_from_run != '' || inputs.connected_from_run != '' }}
       SKIPPY_UNIVERSAL: ${{ inputs.connected_walkthrough || inputs.workspace_only || inputs.preferences_only || (inputs.handoffs_only && matrix.batch == 'searchhandoff') }}
     runs-on: macos-15
     timeout-minutes: 40
@@ -49,15 +53,15 @@ jobs:
           defaults write com.apple.universalaccess reduceMotion -bool false
           if ! command -v ffmpeg >/dev/null; then brew install ffmpeg; fi
       - uses: actions/download-artifact@v4
-        if: ${{ inputs.settings_from_run }}
+        if: ${{ inputs.settings_from_run || inputs.connected_from_run }}
         with:
-          name: Skippy-tested-universal
+          name: ${{ inputs.connected_from_run && 'Skippy-Mac' || 'Skippy-tested-universal' }}
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
-          run-id: ${{ inputs.settings_from_run }}
+          run-id: ${{ inputs.connected_from_run || inputs.settings_from_run }}
           path: build
       - name: Unpack the tested build
-        if: ${{ inputs.settings_from_run }}
+        if: ${{ inputs.settings_from_run || inputs.connected_from_run }}
         run: |
           ditto -x -k build/Skippy-developer.zip build
           codesign --verify --strict build/Skippy.app
@@ -80,7 +84,9 @@ jobs:
         if: always()
         with:
           name: footage-${{ matrix.batch }}
-          path: build/feature-review.*/build/feature-captures/
+          path: |
+            build/feature-review.*/build/feature-captures/
+            build/feature-review.*/build/Skippy.log
           if-no-files-found: ignore
       - name: Verify and archive tested universal app
         if: ${{ inputs.connected_walkthrough || inputs.workspace_only || inputs.preferences_only || (inputs.handoffs_only && matrix.batch == 'searchhandoff') }}

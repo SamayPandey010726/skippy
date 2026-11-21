@@ -64,7 +64,7 @@ enum NotchModule: String, CaseIterable, Identifiable {
     case .recent: "clock.arrow.circlepath"
     case .system: "gauge.with.dots.needle.67percent"
     case .calendar: "calendar"
-    case .calculator: "calculator"
+    case .calculator: "plus.forwardslash.minus"
     case .screenshot: "rectangle.dashed.badge.record"
     case .draw: "pencil.tip.crop.circle"
     case .convert: "arrow.trianglehead.clockwise"
@@ -844,6 +844,7 @@ struct NotchToolsView: View {
   @State private var feedback: String?
   @State private var feedbackRevision = 0
   @State private var qrInput = ""
+  @State private var scanningQR = false
   @State private var webQuery = ""
   @State private var showingMacros = false
   @State private var macroName = ""
@@ -864,24 +865,23 @@ struct NotchToolsView: View {
         .id(shelf.choosingArrow ? "finder" : shelf.activeModule.rawValue)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .transition(.opacity.combined(with: .offset(y: 4)))
-      if shelf.choosingArrow || ![.calculator, .launcher, .color, .timer, .clipboard].contains(shelf.activeModule) {
-      HStack {
-        if let feedback {
-          Text(feedback).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
-        }
-        Spacer()
-        if shelf.choosingArrow {
-          Text("↑ ↓  Select     ↩  Open     Esc  Back").font(.system(size: 11)).foregroundStyle(.secondary)
-        } else if ![.music, .calculator, .launcher, .color, .timer, .clipboard].contains(shelf.activeModule) {
-          Button(action: shelf.chooseArrow) {
-            Label("Find an arrow", systemImage: "magnifyingglass")
-            Text(shortcuts.binding(for: .chooseArrow).displayName).monospaced()
+      if shelf.choosingArrow || !usesCompactHeader && shelf.activeModule != .calculator {
+        HStack {
+          if let feedback {
+            Text(feedback).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
           }
-          .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(.secondary)
-          .accessibilityLabel("Find an arrow")
+          Spacer()
+          if shelf.choosingArrow {
+            Text("↑ ↓  Select     ↩  Open     Esc  Back").font(.system(size: 11)).foregroundStyle(.secondary)
+          } else {
+            Button(action: shelf.chooseArrow) {
+              Label("Find an arrow", systemImage: "magnifyingglass")
+              Text(shortcuts.binding(for: .chooseArrow).displayName).monospaced()
+            }
+            .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(.secondary)
+            .accessibilityLabel("Find an arrow")
+          }
         }
-
-      }
       }
     }
     .padding(.horizontal, 12).padding(.top, 9).padding(.bottom, 9)
@@ -920,8 +920,12 @@ struct NotchToolsView: View {
     }
   }
 
+  private var usesCompactHeader: Bool {
+    [.launcher, .color, .timer, .clipboard, .music, .parcel, .qr, .draw, .screenshot].contains(shelf.activeModule)
+  }
+
   @ViewBuilder private var header: some View {
-    if [.launcher, .color, .timer, .clipboard, .music].contains(shelf.activeModule) {
+    if usesCompactHeader {
       HStack(spacing: 7) {
         Image(systemName: shelf.activeModule.symbol).foregroundStyle(skin.palette.accent)
         Text(shelf.activeModule.title).font(.system(size: 13, weight: .semibold))
@@ -941,34 +945,34 @@ struct NotchToolsView: View {
           .buttonStyle(.plain).help("Close Skippy").accessibilityLabel("Close Skippy")
       }.font(.system(size: 12, weight: .medium)).frame(height: 22)
     } else {
-    HStack(spacing: 7) {
-      NotchIconButton(symbol: "xmark", help: "Close Skippy", action: shelf.dismiss)
-      ZStack {
-        Circle().fill(skin.palette.accent.opacity(0.18))
-        Image(systemName: shelf.choosingArrow ? "magnifyingglass" : shelf.activeModule.symbol).font(.system(size: 10, weight: .bold)).foregroundStyle(skin.palette.accent)
-      }.frame(width: 26, height: 26)
-      VStack(alignment: .leading, spacing: 0) {
-        Text(shelf.choosingArrow ? "Arrows" : shelf.activeModule.title).font(.system(size: 16, weight: .semibold))
-        Text(shelf.choosingArrow ? "\(NotchModule.allCases.count - 1) tools" : headerSubtitle).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-      }
-      Spacer()
-      if shelf.choosingArrow {
-        NotchIconButton(symbol: "chevron.backward", help: "Back to tool", action: shelf.cancelChoosingArrow)
-      } else if shelf.activeModule == .dashboard {
-        NotchIconButton(symbol: widgets.editing ? "checkmark" : "slider.horizontal.3", tint: skin.palette.accent,
-          selected: widgets.editing, help: widgets.editing ? "Finish arranging" : "Arrange widgets") {
-          withAnimation(Motion.layoutRelayout) { widgets.editing.toggle() }
+      HStack(spacing: 7) {
+        NotchIconButton(symbol: "xmark", help: "Close Skippy", action: shelf.dismiss)
+        ZStack {
+          Circle().fill(skin.palette.accent.opacity(0.18))
+          Image(systemName: shelf.choosingArrow ? "magnifyingglass" : shelf.activeModule.symbol).font(.system(size: 10, weight: .bold)).foregroundStyle(skin.palette.accent)
+        }.frame(width: 26, height: 26)
+        VStack(alignment: .leading, spacing: 0) {
+          Text(shelf.choosingArrow ? "Arrows" : shelf.activeModule.title).font(.system(size: 16, weight: .semibold))
+          Text(shelf.choosingArrow ? "\(NotchModule.allCases.count - 1) tools" : headerSubtitle).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
         }
-      } else {
-        NotchIconButton(symbol: shelf.keepArrowOpen ? "pin.fill" : "pin", tint: skin.palette.accent,
-          selected: shelf.keepArrowOpen, help: shelf.keepArrowOpen ? "Unpin panel" : "Keep panel open") {
-          shelf.toggleArrowRetention()
+        Spacer()
+        if shelf.choosingArrow {
+          NotchIconButton(symbol: "chevron.backward", help: "Back to tool", action: shelf.cancelChoosingArrow)
+        } else if shelf.activeModule == .dashboard {
+          NotchIconButton(symbol: widgets.editing ? "checkmark" : "slider.horizontal.3", tint: skin.palette.accent,
+            selected: widgets.editing, help: widgets.editing ? "Finish arranging" : "Arrange widgets") {
+            withAnimation(Motion.layoutRelayout) { widgets.editing.toggle() }
+          }
+        } else {
+          NotchIconButton(symbol: shelf.keepArrowOpen ? "pin.fill" : "pin", tint: skin.palette.accent,
+            selected: shelf.keepArrowOpen, help: shelf.keepArrowOpen ? "Unpin panel" : "Keep panel open") {
+            shelf.toggleArrowRetention()
+          }
+          NotchIconButton(symbol: "square.grid.2x2", tint: skin.palette.accent,
+            help: "Back to widgets", action: { shelf.showModule(.dashboard) })
         }
-        NotchIconButton(symbol: "square.grid.2x2", tint: skin.palette.accent,
-          help: "Back to widgets", action: { shelf.showModule(.dashboard) })
+        NotchIconButton(symbol: "gearshape", help: "Settings", action: AppController.shared.openPreferences)
       }
-      NotchIconButton(symbol: "gearshape", help: "Settings", action: AppController.shared.openPreferences)
-    }
     }
   }
 
@@ -1408,37 +1412,50 @@ struct NotchToolsView: View {
   }
 
   private var qrView: some View {
-    HStack(spacing: 14) {
-      ZStack {
-        RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.white)
-        if let image = tools.generateQR(qrInput) {
-          Image(nsImage: image).interpolation(.none).resizable().padding(12)
+    HStack(spacing: 11) {
+      VStack(alignment: .leading, spacing: 7) {
+        HStack(spacing: 6) {
+          qrMode("Create", selected: !scanningQR) { scanningQR = false }
+          qrMode("Scan", selected: scanningQR) { scanningQR = true }
+        }
+        if scanningQR {
+          NotchActionButton(title: "Scan screen", symbol: "viewfinder", tint: skin.palette.accent,
+            action: tools.scanScreenQR)
+          HStack(spacing: 5) {
+            NotchActionButton(title: "Scan clipboard", symbol: "doc.on.clipboard", tint: skin.palette.accent,
+              action: tools.scanClipboardQR)
+            Button(action: tools.scanQR) { Image(systemName: "photo") }
+              .help("Scan an image").accessibilityLabel("Scan an image")
+          }
+          if !tools.qrText.isEmpty {
+            Text(tools.qrText).font(.system(size: 11)).lineLimit(2).textSelection(.enabled)
+          }
         } else {
-          Image(systemName: "qrcode").font(.system(size: 62)).foregroundStyle(.black.opacity(0.22))
-        }
-      }.frame(width: 142, height: 142).shadow(color: .black.opacity(0.14), radius: 12, y: 5)
-      VStack(alignment: .leading, spacing: 9) {
-        NotchSectionTitle(title: "QR tools", symbol: "qrcode.viewfinder")
-        HStack(spacing: 7) {
-          Image(systemName: "text.cursor").foregroundStyle(.secondary)
-          TextField("Text, Wi-Fi details or a link", text: $qrInput).textFieldStyle(.plain)
-        }.padding(.horizontal, 9).frame(height: 31)
-          .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
-        HStack(spacing: 6) {
+          TextField("Text or a link", text: $qrInput).textFieldStyle(.plain)
+            .padding(.horizontal, 8).frame(height: 30)
+            .background(Color.primary.opacity(0.075), in: RoundedRectangle(cornerRadius: 8))
           NotchActionButton(title: "Copy QR", symbol: "doc.on.doc", tint: skin.palette.accent) { tools.copyQR(qrInput) }
-          NotchActionButton(title: "Scan screen", symbol: "viewfinder", tint: skin.palette.accent, action: tools.scanScreenQR)
+            .disabled(qrInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
-        HStack(spacing: 6) {
-          NotchActionButton(title: "Scan clipboard", symbol: "doc.on.clipboard", tint: skin.palette.accent, action: tools.scanClipboardQR)
-          NotchActionButton(title: "Image", symbol: "photo", tint: skin.palette.accent, action: tools.scanQR)
+        if let feedback, scanningQR { Text(feedback).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1) }
+      }.frame(maxWidth: .infinity, alignment: .leading)
+      ZStack {
+        RoundedRectangle(cornerRadius: 10).fill(.white)
+        if let image = tools.generateQR(qrInput) {
+          Image(nsImage: image).interpolation(.none).resizable().padding(9).accessibilityLabel("Generated QR code")
+        } else {
+          Image(systemName: scanningQR ? "qrcode.viewfinder" : "qrcode").font(.system(size: 49))
+            .foregroundStyle(.black.opacity(0.27)).accessibilityHidden(true)
         }
-        if !tools.qrText.isEmpty {
-          Text(tools.qrText).font(.system(size: 8.5)).lineLimit(3).textSelection(.enabled)
-            .padding(7).frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 9))
-        }
-      }
+      }.frame(width: 118, height: 118)
     }.frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
+  private func qrMode(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      Text(title).font(.system(size: 12, weight: .semibold)).padding(.horizontal, 11).padding(.vertical, 4)
+        .background((selected ? skin.palette.accent : Color.primary).opacity(selected ? 0.18 : 0.07), in: Capsule())
+    }.buttonStyle(WorkspaceKeyStyle()).accessibilityAddTraits(selected ? .isSelected : [])
   }
 
   private var searchView: some View {
@@ -1589,10 +1606,6 @@ struct NotchToolsView: View {
 
   private var drawView: some View {
     VStack(spacing: 12) {
-      Image(systemName: "pencil.tip.crop.circle").font(.system(size: 40)).foregroundStyle(skin.palette.accent)
-      Text("Draw over your screen").font(.system(size: 14, weight: .semibold))
-      Text("Draw, erase or save the annotation layer as a transparent PNG.")
-        .font(.system(size: 10)).foregroundStyle(.secondary).multilineTextAlignment(.center)
       NotchActionButton(title: "Start drawing", symbol: "pencil.tip", tint: skin.palette.accent) {
         shelf.dismiss()
         ScreenMarkupController.shared.open()
@@ -1798,7 +1811,6 @@ struct ParcelsShelfContents: View {
             }
           }
         }
-        Divider().opacity(0.45)
         if let openStack, box.items.contains(where: { $0.stackID == openStack }) {
           stackDetails(openStack, in: box)
         } else {
@@ -1814,13 +1826,26 @@ struct ParcelsShelfContents: View {
             }.frame(maxWidth: .infinity, alignment: .topLeading)
           }
         }
+        HStack(spacing: 7) {
+          fileOperation(.convert, symbol: "arrow.trianglehead.clockwise", in: box)
+          fileOperation(.compress, symbol: "archivebox", in: box)
+          Spacer()
+        }
       }
     }
-    .padding(10)
+    .padding(5)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .background {
       FileDropSurface(enabled: !store.busy, receive: { _ in }, receiving: { _ in }, hover: { _ in },
         failure: { _ in }, beginDrop: shelf.beginPrimaryDrop)
+    }
+  }
+
+  private func fileOperation(_ operation: ShelfFileOperation, symbol: String, in box: ParcelBox) -> some View {
+    NotchActionButton(title: operation.rawValue, symbol: symbol, tint: skin.palette.accent) {
+      let selected = box.items.filter { store.selectedItems.contains($0.id) || $0.stackID == openStack && openStack != nil }
+      let urls = Set(selected.flatMap { store.stackMembers(of: $0, in: box) }.map(\.effectiveURL))
+      ShelfFileActions.shared.open(operation, urls: urls.sorted { $0.path < $1.path })
     }
   }
 
@@ -1975,7 +2000,7 @@ private struct ArrowFinder: View {
         ScrollViewReader { scroll in
           ScrollView {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 7), count: columns), spacing: 6) {
-              ForEach(Array(matches.enumerated()), id: \.element.id) { position, entry in
+              ForEach(matches) { entry in
                 tile(entry, highlighted: entry.id == selected?.id).id(entry.id)
               }
             }.padding(2)

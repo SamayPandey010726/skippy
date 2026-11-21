@@ -64,7 +64,6 @@ import SwiftUI
 struct WorkspaceCalculatorView: View {
   @ObservedObject var shelf: DropPopupController
   @ObservedObject private var model = WorkspaceCalculation.shared
-  @FocusState private var focused: Bool
   @Environment(\.colorScheme) private var appearance
 
   private let keys = ["AC", "±", "%", "÷", "7", "8", "9", "×", "4", "5", "6", "−",
@@ -77,7 +76,7 @@ struct WorkspaceCalculatorView: View {
     VStack(spacing: 8) {
       if shelf.isArrowPreview {
         HStack(spacing: 7) {
-          Image(systemName: "calculator").foregroundStyle(teal)
+          Image(systemName: NotchModule.calculator.symbol).foregroundStyle(teal)
           Text("Calculator").font(.system(size: 13, weight: .semibold))
           Spacer()
           Button { shelf.openArrow(.calculator, at: nil) } label: { Image(systemName: "return") }
@@ -85,6 +84,8 @@ struct WorkspaceCalculatorView: View {
         }
         Spacer(minLength: 0)
         display(historyOnly: true)
+          .contentShape(Rectangle())
+          .onTapGesture { shelf.openArrow(.calculator, at: nil) }
       } else {
         header
         display(historyOnly: false)
@@ -98,13 +99,12 @@ struct WorkspaceCalculatorView: View {
     }
     .padding(.horizontal, 1)
     .padding(.vertical, shelf.isArrowPreview ? 2 : 4)
-    .onAppear { focused = !shelf.isArrowPreview }
-    .onChange(of: shelf.isArrowPreview) { _, preview in focused = !preview }
+
   }
 
   private var header: some View {
     HStack(spacing: 8) {
-      Image(systemName: "calculator").foregroundStyle(teal).accessibilityHidden(true)
+      Image(systemName: NotchModule.calculator.symbol).foregroundStyle(teal).accessibilityHidden(true)
       Button { shelf.toggleCalculatorMode() } label: {
         Text(shelf.calculatorScientific ? "Scientific" : "Basic")
           .font(.system(size: 12, weight: .semibold))
@@ -125,10 +125,11 @@ struct WorkspaceCalculatorView: View {
         .accessibilityLabel("History").help("Calculation history")
       Button(action: model.copy) { Image(systemName: "doc.on.doc").frame(width: 19, height: 23) }
         .buttonStyle(.plain).accessibilityLabel("Copy").help("Copy result").disabled(model.result == nil)
-      Button(action: shelf.toggleArrowRetention) {
-        Image(systemName: shelf.keepArrowOpen ? "pin.fill" : "pin").frame(width: 15, height: 23)
-      }.buttonStyle(.plain).help(shelf.keepArrowOpen ? "Unpin panel" : "Keep panel open")
-        .accessibilityLabel(shelf.keepArrowOpen ? "Unpin panel" : "Keep panel open")
+      Menu {
+        Button(shelf.keepArrowOpen ? "Unpin panel" : "Keep panel open", action: shelf.toggleArrowRetention)
+        Button("Close Calculator", action: shelf.dismiss)
+      } label: { Image(systemName: "ellipsis").frame(width: 16, height: 23) }
+        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().accessibilityLabel("Calculator options")
     }
     .font(.system(size: 13, weight: .medium))
   }
@@ -141,10 +142,16 @@ struct WorkspaceCalculatorView: View {
       if historyOnly {
         Text(expression).lineLimit(1).foregroundStyle(.secondary)
       } else {
-        TextField("", text: $model.expression, prompt: Text("0"))
-          .textFieldStyle(.plain).multilineTextAlignment(.trailing)
-          .focused($focused).onSubmit(model.evaluate)
-          .accessibilityLabel("Expression")
+        let committed = history?.result == model.expression
+        CalculatorInput(expression: $model.expression, focusRequest: shelf.calculatorFocusRequest,
+          showsHistory: committed, evaluate: model.evaluate)
+          .frame(height: 20)
+          .overlay(alignment: .trailing) {
+            if committed {
+              Text(expression).lineLimit(1).foregroundStyle(.secondary)
+                .allowsHitTesting(false).accessibilityHidden(true)
+            }
+          }
       }
       Text(shown)
         .font(.system(size: historyOnly ? 35 : 43, weight: .light).monospacedDigit())
@@ -163,7 +170,7 @@ struct WorkspaceCalculatorView: View {
           : (appearance == .dark ? Color(red: 0.16, green: 0.23, blue: 0.29) : Color.primary.opacity(0.085))
         Button {
           model.press(key)
-          focused = true
+          shelf.focusForKeyboard()
         } label: {
           Text(key).font(.system(size: compact ? 12 : 17, weight: key == "=" ? .semibold : .regular))
             .foregroundStyle(key == "=" ? Color.black : isOperator ? .white : .primary)
@@ -174,6 +181,65 @@ struct WorkspaceCalculatorView: View {
           .accessibilityLabel(key == "⌫" ? "Delete" : key)
       }
     }.frame(width: compact ? 132 : nil)
+  }
+}
+
+private struct CalculatorInput: NSViewRepresentable {
+  @Binding var expression: String
+  let focusRequest: Int
+  let showsHistory: Bool
+  let evaluate: () -> Void
+
+  final class Coordinator: NSObject, NSTextFieldDelegate {
+    var parent: CalculatorInput
+    var lastFocusRequest: Int?
+    init(_ parent: CalculatorInput) { self.parent = parent }
+    func controlTextDidChange(_ notification: Notification) {
+      guard let field = notification.object as? NSTextField else { return }
+      parent.expression = field.stringValue
+    }
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy command: Selector) -> Bool {
+      guard command == #selector(NSResponder.insertNewline(_:)) else { return false }
+      parent.evaluate()
+      return true
+    }
+  }
+
+  func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+  func makeNSView(context: Context) -> NSTextField {
+    let field = NSTextField(string: expression)
+    field.isEditable = true
+    field.isSelectable = true
+    field.isBezeled = false
+    field.isBordered = false
+    field.drawsBackground = false
+    field.alignment = .right
+    field.usesSingleLineMode = true
+    field.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+    field.setAccessibilityLabel("Expression")
+    field.delegate = context.coordinator
+    return field
+  }
+
+  func updateNSView(_ field: NSTextField, context: Context) {
+    let coordinator = context.coordinator
+    coordinator.parent = self
+    if field.stringValue != expression {
+      field.stringValue = expression
+      if let editor = field.currentEditor() as? NSTextView {
+        editor.string = expression
+        editor.setSelectedRange(NSRange(location: expression.utf16.count, length: 0))
+      }
+    }
+    field.textColor = showsHistory ? .clear : .secondaryLabelColor
+    (field.currentEditor() as? NSTextView)?.textColor = field.textColor
+    guard coordinator.lastFocusRequest != focusRequest else { return }
+    coordinator.lastFocusRequest = focusRequest
+    DispatchQueue.main.async { [weak field] in
+      guard let field, let window = field.window, window.isKeyWindow else { return }
+      if field.currentEditor() == nil { window.makeFirstResponder(field) }
+    }
   }
 }
 

@@ -133,6 +133,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   private(set) var arrowSource: CGRect?
   private(set) var arrowSourcePin: String?
   @Published private(set) var calculatorScientific = false
+  @Published private(set) var calculatorFocusRequest = 0
   private(set) var calculatorExpandsRight = false
   @Published private var quickLaunchCommands = false
   private var quiverPointerInside = false
@@ -261,13 +262,15 @@ private final class CourierHostingView: NSHostingView<AnyView> {
                             height: isArrowPreview ? 125 : 346)
       }
       else if toolsVisible && activeModule == .launcher {
-        dimensions = quickLaunchCommands ? CGSize(width: 380, height: 322) : CGSize(width: 320, height: 154)
+        dimensions = quickLaunchCommands ? CGSize(width: 380, height: 322) : CGSize(width: 320, height: 161)
       }
       else if toolsVisible && activeModule == .color { dimensions = CGSize(width: 262, height: 145) }
       else if toolsVisible && activeModule == .timer { dimensions = CGSize(width: 236, height: 176) }
       else if toolsVisible && activeModule == .clipboard { dimensions = CGSize(width: 302, height: 214) }
       else if toolsVisible && activeModule == .music { dimensions = CGSize(width: 278, height: 143) }
-      else if toolsVisible && activeModule == .parcel { dimensions = CGSize(width: 340, height: 310) }
+      else if toolsVisible && activeModule == .parcel { dimensions = CGSize(width: 340, height: 246) }
+      else if toolsVisible && activeModule == .qr { dimensions = CGSize(width: 347, height: 208) }
+      else if toolsVisible && activeModule == .draw { dimensions = CGSize(width: 265, height: 133) }
       else if toolsVisible && [.convert, .compress, .extractArchive].contains(activeModule) {
         dimensions = CGSize(width: 372, height: 298)
       } else { dimensions = CGSize(width: 460, height: 340) }
@@ -291,7 +294,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
           frame = QuiverSurface.companionPanel(at: anchor, within: bounds, size: size, preferRight: preferRight)
         }
       } else {
-        frame = QuiverSurface.panel(at: anchor, within: bounds, size: size)
+        frame = QuiverSurface.panel(at: anchor, within: bounds, size: size, sideRail: quiverSideRail())
       }
       return CourierPlacement(frame: frame, courier: .zero, pane: CGRect(origin: .zero, size: frame.size), side: .bottom)
     }
@@ -466,7 +469,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       // A local click belongs to Parcel (the notch, a child tool, Settings, or a native menu).
       // Do not infer that it was outside from the global cursor position: keyboard and
       // Accessibility-driven activation can legitimately click without moving the pointer.
-      if let self, event.window === self.panel, self.isArrowPreview {
+      if let self, event.window === self.panel, self.isArrowPreview, self.activeModule != .calculator {
         self.isArrowPreview = false
         self.fitContents()
       }
@@ -637,6 +640,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     Toaster.shared.tip("notch-pages", "Scroll for the next page, / to search, and Tab to move through widgets.")
   }
   var quiverFloating: () -> Bool = { false }
+  var quiverSideRail: () -> Bool = { false }
 
   func openArrow(_ module: NotchModule, at anchor: CGRect?, source: CGRect? = nil, pin: String? = nil) {
     if visible && expanded && activeModule == module && toolsVisible && !isArrowPreview && !choosingArrow
@@ -735,8 +739,8 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   func chooseArrow() {
     isArrowPreview = false
     if !toolsVisible { showModule(.dashboard) }
-    focusForKeyboard()
     choosingArrow = true
+    focusForKeyboard()
     arrowFocusRequest += 1
     fitContents()
     arrowGeometryChanged?()
@@ -745,7 +749,11 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   func focusForKeyboard() {
     NSApp.activate(ignoringOtherApps: true)
     panel?.makeKey()
-    if let host { panel?.makeFirstResponder(host) }
+    if !choosingArrow && activeModule == .calculator && toolsVisible {
+      calculatorFocusRequest += 1
+    } else if let host {
+      panel?.makeFirstResponder(host)
+    }
     recordActivity()
   }
   func summonFromMouseShake() {
@@ -1715,12 +1723,14 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     isArrowPreview = false
     let stamp = generation
     panel?.orderOut(nil)
+    arrowGeometryChanged?()
     return { [weak self] in
       guard let self else { return }
       self.selectingOnScreen = false
       self.selectionEndedAt = ProcessInfo.processInfo.systemUptime
       guard self.visible, self.generation == stamp else { return }
       self.panel?.orderFrontRegardless()
+      self.arrowGeometryChanged?()
       self.focusForKeyboard()
     }
   }

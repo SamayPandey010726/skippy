@@ -486,12 +486,10 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   check("hovering the pin reopens the preview") { windowFrame("Skippy · Calculator") != nil }
   beat(1)
   mouse(.leftMouseDown, point); mouse(.leftMouseUp, point)
-  check("calculator focuses its expression on click") {
-    guard let focused = attribute(application, kAXFocusedUIElementAttribute),
-      CFGetTypeID(focused) == AXUIElementGetTypeID() else { return false }
-    return labels(focused as! AXUIElement).contains("Expression") || labels(focused as! AXUIElement).contains("e.g. (24 + 8) / 2")
+  check("the editable Calculator opens on click") {
+    control(kAXTextFieldRole, "Expression") != nil && (windowFrame("Skippy · Calculator")?.height ?? 0) >= 310
   }
-  enter("420*1.19"); key(kVK_Return)
+  typeText("420*1.19"); key(kVK_Return)
   check("keyboard calculation shows the result") { contains("Result 499.8") || contains("499.8") }
   check("scientific controls expand the same Calculator") { press("Scientific mode") }
   check("scientific mode keeps Calculator and its pin separate") {
@@ -688,6 +686,9 @@ private func exerciseConnectedPlacements(bounds: CGRect, expectedMusicOffset: CG
   }
   useArrow(kVK_ANSI_Q, "QR tools")
   verifyContent("QR tools")
+  check("switch to QR scan mode") { press("Scan") }
+  check("scan the code created during the recording") { press("Scan clipboard") }
+  check("QR round trip decodes the original text") { NSPasteboard.general.string(forType: .string) == "Skippy QA" }
   key(kVK_Escape)
 
   try dragScout(to: CGPoint(x: dock.midX - 150, y: dock.maxY - 4))
@@ -869,6 +870,7 @@ for name in selected {
   if name == "QR tools" {
     try startFilm("QR scanner")
     beat(2)
+    check("switch to QR scanning") { press("Scan") }
     check("scan the generated QR image from the clipboard") { press("Scan clipboard") }
     check("Vision decodes original payload into the clipboard") { NSPasteboard.general.string(forType: .string) == "Skippy QA" }
     try finishFilm()

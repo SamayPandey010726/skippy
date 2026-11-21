@@ -57,11 +57,12 @@ struct WorkspaceQuickLaunch: View {
   private func tile<Icon: View>(id: String, name: String, action: @escaping () -> Void,
                                 @ViewBuilder icon: () -> Icon) -> some View {
     let highlighted = hovered == id || focus == id
+    let adding = id == "add"
     return Button(action: action) {
       icon().frame(maxWidth: .infinity).frame(height: 41)
-        .background(skin.skin.palette.accent.opacity(highlighted ? 0.21 : 0.09), in: RoundedRectangle(cornerRadius: 9))
+        .background(skin.skin.palette.accent.opacity(highlighted ? 0.24 : adding ? 0.16 : 0.09), in: RoundedRectangle(cornerRadius: 9))
         .overlay {
-          if highlighted {
+          if highlighted || adding {
             RoundedRectangle(cornerRadius: 9).strokeBorder(skin.skin.palette.accent.opacity(0.55), lineWidth: 1)
           }
         }
