@@ -283,8 +283,17 @@ enum QuiverEmblem: String, CaseIterable {
   private func show(_ module: NotchModule, from view: NSView? = nil) {
     let rect = view.flatMap { v in v.window.map { $0.convertToScreen(v.convert(v.bounds, to: nil)) } } ?? anchor
     endKeyboardBrowsing()
-    // A satellite owns its own anchor. Promoting its preview must keep that same origin.
-    shelf.openArrow(module, at: view is QuickPinButton ? rect : rect.map(toolAnchor))
+    // Promoting a preview kept at a satellite uses the same geometry.
+    let anchored = rect.map { view is QuickPinButton ? satelliteAnchor($0, module: module) : toolAnchor($0) }
+    shelf.openArrow(module, at: anchored)
+  }
+
+  private func satelliteAnchor(_ pin: CGRect, module: NotchModule) -> CGRect {
+    if module == .music { return pin }
+    // The larger panels clear Scout and the full orbit before opening above or below.
+    let bottom = max(screenBounds.minY, center.y - 105)
+    let top = min(screenBounds.maxY, center.y + 105)
+    return CGRect(x: pin.minX, y: bottom, width: pin.width, height: top - bottom)
   }
 
   func toolAnchor(_ button: CGRect) -> CGRect {
@@ -634,7 +643,7 @@ enum QuiverEmblem: String, CaseIterable {
           let module = pin.module else { return }
         let work = DispatchWorkItem { [weak self, weak panel] in
           guard let self, let panel, panel.frame.contains(NSEvent.mouseLocation) else { return }
-          self.shelf.previewArrow(module, at: panel.frame)
+          self.shelf.previewArrow(module, at: self.satelliteAnchor(panel.frame, module: module))
         }
         self.pinPreviewWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.20, execute: work)

@@ -464,7 +464,10 @@ func captureWorkspaceFilms(using fixture: URL) throws {
     throw CocoaError(.fileNoSuchFile)
   }
   mouse(.mouseMoved, CGPoint(x: pin.midX, y: pin.midY))
-  check("hovering the Calculator pin opens a preview") { windowFrame("Skippy · Calculator") != nil }
+  check("Calculator preview clears Scout and the orbit") {
+    guard let calculator = windowFrame("Skippy · Calculator") else { return false }
+    return !calculator.intersects(scout) && !calculator.intersects(pin)
+  }
   try startFilm("Calculator hover, click and keyboard")
   mouse(.mouseMoved, CGPoint(x: 15, y: 180))
   check("passive calculator preview closes when the pointer leaves") { windowFrame("Skippy · Calculator") == nil }
