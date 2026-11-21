@@ -8,10 +8,15 @@ on:
         type: boolean
         default: false
         description: Run native Mac checks without repeating simulator boots
+      verified_build_run:
+        type: string
+        default: ""
+        description: Exercise a developer build from the specified completed workspace recording run
 permissions:
   contents: read
 jobs:
   native-macos:
+    if: ${{ !inputs.verified_build_run }}
     runs-on: macos-15
     timeout-minutes: 25
     steps:
@@ -86,7 +91,7 @@ jobs:
             build/recordings/
             build/diagnostics/
   simulators:
-    if: ${{ !inputs.mac_only && github.ref_name != 'skippy/native-workspace' }}
+    if: ${{ !inputs.verified_build_run && !inputs.mac_only && github.ref_name != 'skippy/native-workspace' }}
     runs-on: macos-15
     timeout-minutes: 20
     steps:
@@ -100,3 +105,34 @@ jobs:
         with:
           name: Apple-simulators
           path: build/devices
+  existing-build-ui:
+    if: ${{ inputs.verified_build_run }}
+    runs-on: macos-15
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Skippy-tested-universal
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.verified_build_run }}
+          path: build
+      - name: Verify and exercise the archived Mac application
+        run: |
+          ditto -x -k build/Skippy-developer.zip build
+          codesign --verify --strict build/Skippy.app
+          lipo build/Skippy.app/Contents/MacOS/Skippy -verify_arch arm64 x86_64
+          defaults write com.yourcompany.parcel hasSeenWelcome -bool YES
+          defaults write com.yourcompany.parcel skippy.surface -string Floating
+          defaults write com.apple.universalaccess reduceMotion -bool false
+          bash Scripts/apple-terminal.sh mac
+          sleep 3
+          open -a "$PWD/build/Skippy.app" "$PWD/Samples/Launch notes.txt" "$PWD/Samples/A little place.png"
+          sleep 2
+          app_pid="$(pgrep -x Skippy | head -1)"
+          test -n "$app_pid"
+          swift Scripts/check-arrow-navigation.swift "$app_pid"

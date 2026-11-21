@@ -319,6 +319,7 @@ func verifyContent(_ name: String) {
       control(kAXButtonRole, "Undo").flatMap { attribute($0, kAXEnabledAttribute) as? Bool } == false
     }
     check("close drawing overlay") { press("Done") }
+    check("drawing canvas is closed") { windowFrame("Skippy · Markup canvas") == nil }
   default: break
   }
 }
@@ -518,7 +519,9 @@ case "capture": selected = Array(arrows[16...])
 case "preferences": selected = []
 case "searchhandoff": selected = ["Search"]
 case "downloadhandoff": selected = ["Downloads"]
-default: selected = arrows + ["Convert files", "Compress files", "Extract archive"]
+default:
+  // Starting the full-screen whiteboard intentionally dismisses the arrow panel.
+  selected = Array(arrows.dropLast()) + ["Convert files", "Compress files", "Extract archive", "Draw on screen"]
 }
 for name in selected {
   // A system sampler or capture tool may still be restoring the prior panel.
