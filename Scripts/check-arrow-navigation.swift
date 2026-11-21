@@ -460,7 +460,7 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   for y in stride(from: 0, to: image.pixelsHigh, by: 2) {
     for x in stride(from: 0, to: image.pixelsWide, by: 2) {
       if let colour = image.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
-        colour.redComponent > 0.76, colour.greenComponent < 0.22, colour.blueComponent < 0.22 {
+        colour.redComponent > 0.76, colour.greenComponent < 0.37, colour.blueComponent < 0.37 {
         markFound = true
         break
       }

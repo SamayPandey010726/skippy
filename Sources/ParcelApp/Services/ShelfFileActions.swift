@@ -98,7 +98,7 @@ enum ShelfArchivePipeline {
     panel.hidesOnDeactivate = false
     panel.contentView = NSHostingView(rootView: ShelfFileActionView(store: ParcelRuntime.store,
       operation: operation, urls: urls))
-    panel.appearance = NSAppearance(named: .darkAqua)
+    panel.appearance = NSAppearance(named: .aqua)
     panel.center()
     window = panel
     panel.makeKeyAndOrderFront(nil)
@@ -214,7 +214,9 @@ struct ShelfFileActionView: View {
         }
       }.padding(15)
     }
-    .preferredColorScheme(.dark)
+    .preferredColorScheme(.light)
+    .background(Ink.paper)
+    .tint(Ink.green)
     .confirmationDialog("Move the original to Trash?", isPresented: $confirmDiscard) {
       Button("Move to Trash", role: .destructive) { changeOriginal(replace: false) }
     } message: { Text("The completed conversion stays in the File Shelf.") }

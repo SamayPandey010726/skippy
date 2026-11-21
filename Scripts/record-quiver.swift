@@ -23,9 +23,9 @@ func pointer(_ point: CGPoint, _ type: CGEventType = .mouseMoved) {
 // A quiet desktop backdrop keeps the native panels legible on the headless runner.
 final class Backdrop: NSView {
   override func draw(_ dirtyRect: NSRect) {
-    NSGradient(colors: [NSColor(calibratedRed: 0.20, green: 0.36, blue: 0.31, alpha: 1),
-      NSColor(calibratedRed: 0.57, green: 0.69, blue: 0.56, alpha: 1),
-      NSColor(calibratedRed: 0.80, green: 0.83, blue: 0.68, alpha: 1)])?.draw(in: bounds, angle: 35)
+    NSGradient(colors: [NSColor(calibratedRed: 0.22, green: 0.36, blue: 0.55, alpha: 1),
+      NSColor(calibratedRed: 0.53, green: 0.68, blue: 0.82, alpha: 1),
+      NSColor(calibratedRed: 0.76, green: 0.84, blue: 0.92, alpha: 1)])?.draw(in: bounds, angle: 35)
   }
 }
 let recorderApp = NSApplication.shared

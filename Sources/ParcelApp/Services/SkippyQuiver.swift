@@ -382,7 +382,7 @@ enum QuiverEmblem: String, CaseIterable {
     icons.append(strip.addIcon("More arrows", image: NSImage(systemSymbolName: "ellipsis", accessibilityDescription: nil),
       frame: .zero, inMenu: surface == .menu) { [weak self] _ in self?.openArrowFinder() })
     let dark = SkinStore.shared.skin == .night
-    let ink = dark ? NSColor(white: 0.94, alpha: 1) : NSColor(calibratedRed: 0.15, green: 0.23, blue: 0.21, alpha: 1)
+    let ink = dark ? NSColor(white: 0.94, alpha: 1) : NSColor(calibratedRed: 0.17, green: 0.23, blue: 0.29, alpha: 1)
     for icon in icons {
       icon.contentTintColor = surface == .menu ? .labelColor : ink
       if surface == .floating {
@@ -392,7 +392,7 @@ enum QuiverEmblem: String, CaseIterable {
       }
     }
     strip.layer?.backgroundColor = surface == .menu ? NSColor.clear.cgColor :
-      (dark ? NSColor(calibratedRed: 0.13, green: 0.17, blue: 0.22, alpha: 0.97) : NSColor(calibratedRed: 0.97, green: 0.975, blue: 0.945, alpha: 0.98)).cgColor
+      (dark ? NSColor(calibratedRed: 0.13, green: 0.17, blue: 0.22, alpha: 0.97) : NSColor(calibratedRed: 0.946, green: 0.96, blue: 0.985, alpha: 0.98)).cgColor
     strip.layer?.borderWidth = surface == .menu ? 0 : 0.8
     strip.layer?.borderColor = ink.withAlphaComponent(0.18).cgColor
     let mark = QuiverMark(frame: .zero)
@@ -482,9 +482,9 @@ enum QuiverEmblem: String, CaseIterable {
     panel.hasShadow = true; panel.ignoresMouseEvents = true; panel.isReleasedWhenClosed = false
     panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     let face = QuiverMark(frame: CGRect(origin: .zero, size: frame.size))
-    face.emblem = emblem; face.ink = .white
+    face.emblem = emblem; face.ink = NSColor(calibratedRed: 0.17, green: 0.23, blue: 0.29, alpha: 1)
     face.wantsLayer = true; face.layer?.cornerRadius = 14
-    face.layer?.backgroundColor = NSColor(calibratedRed: 0.13, green: 0.17, blue: 0.22, alpha: 1).cgColor
+    face.layer?.backgroundColor = NSColor(calibratedRed: 0.946, green: 0.96, blue: 0.985, alpha: 0.98).cgColor
     panel.contentView = face
     return panel
   }
@@ -553,9 +553,11 @@ enum QuiverEmblem: String, CaseIterable {
         ?? app.map { tools.icon(for: $0) }
       button.imageScaling = .scaleProportionallyDown
       button.imagePosition = .imageOnly; button.isBordered = false
-      button.contentTintColor = .white; button.wantsLayer = true
+      button.contentTintColor = NSColor(calibratedRed: 0.17, green: 0.23, blue: 0.29, alpha: 1); button.wantsLayer = true
       button.layer?.cornerRadius = 14
-      button.layer?.backgroundColor = NSColor(calibratedRed: 0.17, green: 0.23, blue: 0.30, alpha: 1).cgColor
+      button.layer?.backgroundColor = NSColor(calibratedRed: 0.97, green: 0.98, blue: 1.0, alpha: 1).cgColor
+      button.layer?.borderColor = NSColor(calibratedRed: 0.55, green: 0.66, blue: 0.74, alpha: 0.6).cgColor
+      button.layer?.borderWidth = 0.7
       button.toolTip = title
       button.setAccessibilityLabel(title + " quick pin")
       button.setAccessibilityHelp("Click to open. Drag around Skippy to reposition.")

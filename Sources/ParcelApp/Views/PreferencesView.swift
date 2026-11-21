@@ -10,6 +10,7 @@ struct PreferencesView: View {
   @ObservedObject private var quiver = SkippyQuiver.shared
   @State private var tab = 0
   @State private var sectionQuery = ""
+  @State private var displayedPin: String?
   @ObservedObject private var quickPins = QuickPinStore.shared
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   private let sections: [(id: Int, title: String, icon: String, keywords: String)] = [
@@ -61,8 +62,10 @@ struct PreferencesView: View {
   var body: some View {
     HStack(spacing: 0) {
       VStack(alignment: .leading, spacing: 10) {
-        Text("Skippy").font(.system(size: 18, weight: .semibold))
-          .padding(.horizontal, 6)
+        HStack(spacing: 7) {
+          ScoutPreview().frame(width: 23, height: 21)
+          Text("Skippy").font(.system(size: 18, weight: .semibold))
+        }.padding(.horizontal, 5)
         TextField("Search Settings", text: $sectionQuery)
           .textFieldStyle(.roundedBorder)
           .accessibilityLabel("Search Settings")
@@ -112,7 +115,7 @@ struct PreferencesView: View {
     .frame(minWidth: 640, minHeight: 470)
     .background(Ink.paper).foregroundStyle(Ink.text)
     .tint(Ink.green)
-    .preferredColorScheme(.dark)
+    .preferredColorScheme(.light)
     .animation(reduceMotion ? nil : .smooth(duration: 0.23), value: tab)
   }
   private var keyboardShortcuts: some View {
@@ -287,6 +290,13 @@ struct PreferencesView: View {
           store.savePreferences()
         } catch { message = error.localizedDescription }
       }))
+      Picker("Close inactive panels after", selection: Binding(get: { courier.idleTimeout }, set: { courier.idleTimeout = $0 })) {
+        Text("5 seconds").tag(TimeInterval(5))
+        Text("10 seconds").tag(TimeInterval(10))
+        Text("30 seconds").tag(TimeInterval(30))
+        Text("1 minute").tag(TimeInterval(60))
+        Text("Never").tag(TimeInterval(0))
+      }
       Text("Animations follow the macOS Reduce Motion setting.").font(.caption).foregroundStyle(.secondary)
     }
   }
@@ -333,39 +343,68 @@ struct PreferencesView: View {
 
   private var pinSettings: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text("Quick Pins").font(.headline)
-      Toggle("Always show Quick Pins by default", isOn: $quickPins.alwaysVisible)
-      Text("The first three appear around Scout or in the attached strip. More lists all pins. Use arrows below to change their order.")
-        .font(.caption).foregroundStyle(.secondary)
-      Menu("Add Quick Pin") {
-        ForEach(NotchModule.allCases.filter { $0 != .dashboard && !quickPins.contains($0.id) }) { module in
-          Button(module.title) { quickPins.toggle(module.id) }
-        }
-        ForEach(tools.pinnedApps.filter { !quickPins.contains($0.id) }) { app in
-          Button(app.name) { quickPins.toggle(app.id) }
-        }
+      HStack {
+        Text("Quick Pins").font(.headline)
+        Spacer()
+        Menu("Add Pin…") {
+          ForEach(NotchModule.allCases.filter { $0 != .dashboard && !quickPins.contains($0.id) }) { module in
+            Button(module.title) { quickPins.toggle(module.id); displayedPin = module.id }
+          }
+          ForEach(tools.pinnedApps.filter { !quickPins.contains($0.id) }) { app in
+            Button(app.name) { quickPins.toggle(app.id); displayedPin = app.id }
+          }
+        }.fixedSize()
       }
-      ForEach(quickPins.pins) { pin in
-        let title = pin.module?.title ?? tools.pinnedApps.first(where: { $0.id == pin.id })?.name ?? pin.id
-        VStack(alignment: .leading, spacing: 8) {
-          HStack {
-            Text(title).font(.headline)
-            Spacer()
-            Button { quickPins.move(pin.id, by: -1) } label: { Image(systemName: "arrow.up") }
-              .accessibilityLabel("Move " + title + " up").disabled(pin == quickPins.pins.first)
-            Button { quickPins.move(pin.id, by: 1) } label: { Image(systemName: "arrow.down") }
-              .accessibilityLabel("Move " + title + " down").disabled(pin == quickPins.pins.last)
-            Button("Unpin") { quickPins.toggle(pin.id) }.accessibilityLabel("Unpin " + title)
+      let selected = quickPins.pins.first(where: { $0.id == displayedPin }) ?? quickPins.pins.first
+      if quickPins.pins.isEmpty {
+        Text("Add a tool to place it around Scout.").font(.caption).foregroundStyle(.secondary)
+      } else {
+        VStack(spacing: 0) {
+          ForEach(quickPins.pins) { pin in
+            let title = pin.module?.title ?? tools.pinnedApps.first(where: { $0.id == pin.id })?.name ?? pin.id
+            HStack(spacing: 7) {
+              Button { displayedPin = pin.id } label: {
+                HStack {
+                  Image(systemName: pin.module?.symbol ?? "app").frame(width: 24, height: 24)
+                    .foregroundStyle(Ink.green)
+                  Text(title)
+                  Spacer()
+                }.contentShape(Rectangle())
+              }.buttonStyle(.plain).accessibilityAddTraits(selected?.id == pin.id ? .isSelected : [])
+              Button { quickPins.move(pin.id, by: -1) } label: { Image(systemName: "arrow.up") }
+                .accessibilityLabel("Move " + title + " up").disabled(pin == quickPins.pins.first)
+              Button { quickPins.move(pin.id, by: 1) } label: { Image(systemName: "arrow.down") }
+                .accessibilityLabel("Move " + title + " down").disabled(pin == quickPins.pins.last)
+              Button { quickPins.toggle(pin.id) } label: { Image(systemName: "xmark") }
+                .accessibilityLabel("Unpin " + title)
+            }.buttonStyle(.borderless).padding(.horizontal, 7).frame(height: 34)
+              .background(selected?.id == pin.id ? Ink.paleGreen : .clear)
+            if pin != quickPins.pins.last { Divider() }
           }
-          Picker("Floating position", selection: Binding(get: { pin.position }, set: { quickPins.position(pin.id, at: $0) })) {
-            ForEach(QuickPinPosition.allCases) { slot in Text(slot.title).tag(slot) }
+        }.background(Ink.canvas, in: RoundedRectangle(cornerRadius: 8))
+          .clipShape(RoundedRectangle(cornerRadius: 8))
+          .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Ink.line.opacity(0.65)))
+      }
+      Divider()
+      Text("Display").font(.headline)
+      Picker("Default visibility", selection: $quickPins.alwaysVisible) {
+        Text("On hover").tag(false)
+        Text("Always visible").tag(true)
+      }.pickerStyle(.segmented)
+      if let pin = selected {
+        HStack(alignment: .center, spacing: 10) {
+          VStack(alignment: .leading, spacing: 9) {
+            Picker("Visibility for this pin", selection: Binding(get: { pin.alwaysVisible }, set: { quickPins.setVisibility(pin.id, always: $0) })) {
+              Text("Use default").tag(nil as Bool?)
+              Text("On hover").tag(false as Bool?)
+              Text("Always visible").tag(true as Bool?)
+            }
+            Picker("Position", selection: Binding(get: { pin.position }, set: { quickPins.position(pin.id, at: $0) })) {
+              ForEach(QuickPinPosition.allCases) { slot in Text(slot.title).tag(slot) }
+            }
           }
-          Picker("Visibility", selection: Binding(get: { pin.alwaysVisible }, set: { quickPins.setVisibility(pin.id, always: $0) })) {
-            Text("Use default").tag(nil as Bool?)
-            Text("On hover").tag(false as Bool?)
-            Text("Always visible").tag(true as Bool?)
-          }
-        }.padding(10).background(Ink.canvas, in: RoundedRectangle(cornerRadius: 9))
+          pinPreview(selected: pin.id)
+        }
       }
       Divider()
       Text("Launcher and widgets").font(.headline)
@@ -392,6 +431,23 @@ struct PreferencesView: View {
       }
       Button("Reset widget layout", action: notchWidgets.reset)
     }
+  }
+
+  private func pinPreview(selected: String) -> some View {
+    ZStack {
+      RoundedRectangle(cornerRadius: 13).fill(Ink.cream)
+      Circle().strokeBorder(Ink.green.opacity(0.6), style: StrokeStyle(lineWidth: 1.4, dash: [3, 3]))
+        .frame(width: 94, height: 94)
+      ScoutPreview().frame(width: 30, height: 26)
+      ForEach(quickPins.pins.prefix(3)) { pin in
+        Image(systemName: pin.module?.symbol ?? "app")
+          .font(.system(size: 12, weight: .medium)).frame(width: 25, height: 25)
+          .background(.white, in: Circle())
+          .overlay(Circle().strokeBorder(pin.id == selected ? Ink.green : Ink.line, lineWidth: 1.5))
+          .offset(x: pin.position.offset.x * 0.54, y: -pin.position.offset.y * 0.54)
+      }
+    }.frame(width: 130, height: 130).accessibilityHidden(true)
+      .animation(reduceMotion ? nil : .smooth(duration: 0.23), value: quickPins.pins)
   }
 
   private var files: some View {
@@ -626,5 +682,23 @@ struct PreferencesView: View {
         ).font(.system(size: 11)).foregroundStyle(Ink.secondary)
       }
     }
+  }
+}
+
+private struct ScoutPreview: View {
+  var body: some View {
+    GeometryReader { geometry in
+      let w = geometry.size.width, h = geometry.size.height
+      ZStack {
+        RoundedRectangle(cornerRadius: w * 0.23).fill(Ink.text)
+          .frame(width: w * 0.9, height: h * 0.68).offset(y: h * 0.09)
+        Capsule().fill(Ink.text).frame(width: w * 0.14, height: h * 0.30)
+          .rotationEffect(.degrees(34)).offset(x: w * 0.37, y: -h * 0.35)
+        HStack(spacing: w * 0.16) {
+          Capsule().fill(.white)
+          Capsule().fill(.white)
+        }.frame(width: w * 0.48, height: h * 0.30).offset(y: h * 0.09)
+      }.frame(maxWidth: .infinity, maxHeight: .infinity)
+    }.accessibilityHidden(true)
   }
 }

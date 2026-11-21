@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 enum Ink {
-  private static var palette: SkinPalette { ParcelSkin.night.palette }
+  private static var palette: SkinPalette { ParcelSkin.slate.palette }
   static var paper: Color { palette.paper }
   static var cream: Color { palette.cream }
   static var canvas: Color { palette.canvas }
