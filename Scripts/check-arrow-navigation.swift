@@ -530,13 +530,14 @@ for name in selected {
   }
   try startFilm(name == "QR tools" ? "QR generator" : name)
   key(kVK_ANSI_K, flags: .maskCommand)
-  check("finder accepts keyboard focus") {
-    guard let value = attribute(application, kAXFocusedUIElementAttribute), CFGetTypeID(value) == AXUIElementGetTypeID() else { return false }
-    return labels(value as! AXUIElement).contains("Find an arrow")
-  }
+  check("finder is ready for keyboard input") { control(kAXTextFieldRole, "Find an arrow") != nil }
   beat(1.3)
   key(kVK_ANSI_A, flags: .maskCommand)
   typeText(name.lowercased())
+  check("typing changes the finder query") {
+    guard let search = control(kAXTextFieldRole, "Find an arrow") else { return false }
+    return labels(search).contains(name.lowercased())
+  }
   beat(0.9)
   key(kVK_Return)
   check("open " + name) { panels().contains { $0[kCGWindowName as String] as? String == "Skippy · " + name } }

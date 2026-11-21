@@ -124,6 +124,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   @Published private(set) var choosingArrow = false
   @Published var arrowQuery = ""
   @Published var arrowIndex = 0
+  @Published private(set) var arrowFocusRequest = 0
   @Published var keepArrowOpen = false
   @Published private(set) var isArrowPreview = false
   var quiverAnchor: (() -> CGRect?)?
@@ -631,8 +632,9 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   func chooseArrow() {
     isArrowPreview = false
     if !toolsVisible { showModule(.dashboard) }
-    choosingArrow = true
     focusForKeyboard()
+    choosingArrow = true
+    arrowFocusRequest += 1
   }
   func cancelChoosingArrow() { choosingArrow = false; focusForKeyboard() }
   func focusForKeyboard() {

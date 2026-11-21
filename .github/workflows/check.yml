@@ -23,6 +23,7 @@ jobs:
       - name: Compiler and native tests
         run: PARCEL_PREVIEW_DIRECTORY="$RUNNER_TEMP/skippy-layout-review" swift test
       - name: Compile and bundle Skippy
+        id: bundle
         run: |
           bash Scripts/build-macos.sh --universal
           lipo -info build/Skippy.app/Contents/MacOS/Skippy
@@ -61,6 +62,7 @@ jobs:
           sleep 2
           swift Scripts/check-arrow-navigation.swift "$(pgrep -x Skippy | head -1)"
       - name: Check real menu-bar hover and pointer handoff
+        if: ${{ !cancelled() && steps.bundle.outcome == 'success' }}
         run: |
           pkill -x Skippy
           defaults write com.yourcompany.parcel skippy.surface -string "Menu bar"
@@ -73,6 +75,7 @@ jobs:
           mkdir -p build/diagnostics
           if [[ -f build/frames/File-Shelf.png ]]; then cp build/frames/File-Shelf.png build/diagnostics/; fi
       - name: Archive developer build
+        if: ${{ !cancelled() && steps.bundle.outcome == 'success' }}
         run: codesign --verify --strict build/Skippy.app && ditto -c -k --keepParent build/Skippy.app build/Skippy-developer.zip
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}

@@ -1905,7 +1905,7 @@ private struct ArrowFinder: View {
 
   var body: some View {
     VStack(spacing: 8) {
-      ArrowSearchField(query: $shelf.arrowQuery, move: { step in
+      ArrowSearchField(query: $shelf.arrowQuery, focusRequest: shelf.arrowFocusRequest, move: { step in
         shelf.arrowIndex = min(max(0, shelf.arrowIndex + step), max(0, matches.count - 1))
       }, submit: {
         if matches.indices.contains(shelf.arrowIndex) { select(matches[shelf.arrowIndex]) }
@@ -1969,6 +1969,7 @@ private struct ArrowFinder: View {
 
 private struct ArrowSearchField: NSViewRepresentable {
   @Binding var query: String
+  let focusRequest: Int
   var move: (Int) -> Void
   var submit: () -> Void
   var cancel: () -> Void
@@ -1986,6 +1987,7 @@ private struct ArrowSearchField: NSViewRepresentable {
 
   final class Coordinator: NSObject, NSSearchFieldDelegate {
     var parent: ArrowSearchField
+    var lastFocusRequest: Int?
     init(_ parent: ArrowSearchField) { self.parent = parent }
     func controlTextDidChange(_ notification: Notification) {
       guard let field = notification.object as? NSSearchField else { return }
@@ -2013,5 +2015,12 @@ private struct ArrowSearchField: NSViewRepresentable {
   func updateNSView(_ field: Field, context: Context) {
     context.coordinator.parent = self
     if field.stringValue != query { field.stringValue = query }
+    if context.coordinator.lastFocusRequest != focusRequest {
+      context.coordinator.lastFocusRequest = focusRequest
+      DispatchQueue.main.async { [weak field] in
+        guard let field, let window = field.window, window.isVisible else { return }
+        window.makeFirstResponder(field)
+      }
+    }
   }
 }
