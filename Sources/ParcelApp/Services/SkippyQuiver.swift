@@ -147,13 +147,22 @@ enum QuiverEmblem: String, CaseIterable {
       panel.alphaValue = animate && origin == nil ? 0 : 1
       if animate, let origin { panel.setFrame(origin, display: true) }
       panel.orderFrontRegardless()
+      let revealAfterLanding = { [weak self, weak panel] in
+        guard origin != nil, let self, let panel, self.floating === panel,
+          panel.isVisible, panel.frame.contains(NSEvent.mouseLocation) else { return }
+        self.hover(true)
+      }
       if animate {
-        NSAnimationContext.runAnimationGroup { context in
+        NSAnimationContext.runAnimationGroup({ context in
           context.duration = origin == nil ? 0.14 : 0.24
           context.timingFunction = CAMediaTimingFunction(name: .easeOut)
           panel.animator().setFrame(destination, display: true)
           panel.animator().alphaValue = 1
-        }
+        }, completionHandler: {
+          MainActor.assumeIsolated { revealAfterLanding() }
+        })
+      } else {
+        revealAfterLanding()
       }
     }
   }

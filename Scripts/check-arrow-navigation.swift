@@ -598,8 +598,7 @@ func captureWorkspaceFilms(using fixture: URL) throws {
     guard let strip = windowFrame("Skippy quiver") else { return false }
     return abs(strip.maxX - bounds.maxX) < 12
   }
-  mouse(.mouseMoved, CGPoint(x: bounds.maxX - 14, y: bounds.midY))
-  check("the edge launcher opens its vertical strip") { (windowFrame("Skippy quiver")?.height ?? 0) > 90 }
+  check("the edge launcher opens its vertical strip on landing") { (windowFrame("Skippy quiver")?.height ?? 0) > 90 }
   beat(1.5)
   try finishFilm()
 }
