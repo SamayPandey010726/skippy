@@ -2001,7 +2001,7 @@ private struct ArrowFinder: View {
         shelf.arrowIndex = min(max(0, shelf.arrowIndex + stride), max(0, matches.count - 1))
       }, submit: {
         if matches.indices.contains(shelf.arrowIndex) { select(matches[shelf.arrowIndex]) }
-      }, cancel: shelf.cancelChoosingArrow, columnCount: columns)
+      }, cancel: shelf.cancelChoosingArrow, columnCount: columns, mayFocus: { shelf.choosingArrow })
       .frame(height: 27)
       if matches.isEmpty {
         Text("No matching arrows").foregroundStyle(.secondary).frame(maxHeight: .infinity)
@@ -2082,14 +2082,20 @@ private struct ArrowSearchField: NSViewRepresentable {
   var submit: () -> Void
   var cancel: () -> Void
   let columnCount: Int
+  let mayFocus: () -> Bool
 
   final class Field: NSSearchField {
+    var mayFocus: () -> Bool = { false }
     override func viewDidMoveToWindow() {
       super.viewDidMoveToWindow()
+      requestFocus()
+    }
+
+    func requestFocus() {
       guard window != nil else { return }
       DispatchQueue.main.async { [weak self] in
-        guard let self, let window = self.window else { return }
-        window.makeFirstResponder(self)
+        guard let self, self.mayFocus(), let window = self.window, window.isKeyWindow else { return }
+        if self.currentEditor() == nil { window.makeFirstResponder(self) }
       }
     }
   }
@@ -2119,17 +2125,16 @@ private struct ArrowSearchField: NSViewRepresentable {
     field.placeholderString = "Find an arrow"
     field.setAccessibilityLabel("Find an arrow")
     field.delegate = context.coordinator
+    field.mayFocus = mayFocus
     return field
   }
   func updateNSView(_ field: Field, context: Context) {
     context.coordinator.parent = self
+    field.mayFocus = mayFocus
     if field.stringValue != query { field.stringValue = query }
     if context.coordinator.lastFocusRequest != focusRequest {
       context.coordinator.lastFocusRequest = focusRequest
-      DispatchQueue.main.async { [weak field] in
-        guard let field, let window = field.window, window.isVisible else { return }
-        window.makeFirstResponder(field)
-      }
+      field.requestFocus()
     }
   }
 }

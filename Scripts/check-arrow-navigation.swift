@@ -603,6 +603,7 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   }
   beat(1.3)
   check("close markup without deleting the captures") { press("Done") }
+  examples.forEach { $0.orderOut(nil) }
   useArrow(kVK_ANSI_4, "Screenshots")
   check("four annotated screenshots are listed") { contains("4 regions") }
   check("copy the composite PNG") { press("Copy joined") }
@@ -663,16 +664,14 @@ private func exerciseConnectedPlacements(bounds: CGRect, expectedMusicOffset: CG
 
   key(kVK_Escape)
   guard let strip = windowFrame("Skippy quiver") else { throw CocoaError(.fileNoSuchFile) }
-  let scout = CGPoint(x: strip.midX, y: bounds.midY)
-  mouse(.mouseMoved, scout)
-  beat(0.40)
-  mouse(.leftMouseDown, scout); mouse(.leftMouseUp, scout)
+  check("the right rail’s Scout icon opens the Drawer") { press("Skippy, browse arrows") }
   check("Drawer opens inward from the right rail") {
     control(kAXTextFieldRole, "Find an arrow") != nil && (windowFrame("Skippy · Skippy")?.maxX ?? bounds.maxX) < strip.minX + 2
   }
-  typeText("file shelf"); key(kVK_Return)
+  beat(0.35); typeText("file shelf"); key(kVK_Return)
   check("Drawer launches the File Shelf") { windowFrame("Skippy · File Shelf") != nil }
   beat(0.7); key(kVK_Escape)
+  check("File Shelf closes before moving Scout") { windowFrame("Skippy · File Shelf") == nil }
 
   try dragScout(to: CGPoint(x: dock.minX + 4, y: bounds.midY - 45))
   check("left rail is attached to the display edge") { (windowFrame("Skippy quiver")?.minX ?? 500) <= dock.minX + 10 }

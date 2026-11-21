@@ -748,10 +748,9 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   func focusForKeyboard() {
     NSApp.activate(ignoringOtherApps: true)
     panel?.makeKey()
-    if !choosingArrow && activeModule == .calculator && toolsVisible {
-      calculatorFocusRequest += 1
-    } else if let host {
-      panel?.makeFirstResponder(host)
+    if !choosingArrow {
+      if activeModule == .calculator && toolsVisible { calculatorFocusRequest += 1 }
+      else if let host { panel?.makeFirstResponder(host) }
     }
     recordActivity()
   }

@@ -144,7 +144,9 @@ struct WorkspaceCalculatorView: View {
       } else {
         let committed = history?.result == model.expression
         CalculatorInput(expression: $model.expression, focusRequest: shelf.calculatorFocusRequest,
-          showsHistory: committed, evaluate: model.evaluate)
+          showsHistory: committed, mayFocus: {
+            shelf.activeModule == .calculator && shelf.toolsVisible && !shelf.choosingArrow && !shelf.isArrowPreview
+          }, evaluate: model.evaluate)
           .frame(height: 20)
           .overlay(alignment: .trailing) {
             if committed {
@@ -188,6 +190,7 @@ private struct CalculatorInput: NSViewRepresentable {
   @Binding var expression: String
   let focusRequest: Int
   let showsHistory: Bool
+  let mayFocus: () -> Bool
   let evaluate: () -> Void
 
   final class Coordinator: NSObject, NSTextFieldDelegate {
@@ -237,7 +240,7 @@ private struct CalculatorInput: NSViewRepresentable {
     guard coordinator.lastFocusRequest != focusRequest else { return }
     coordinator.lastFocusRequest = focusRequest
     DispatchQueue.main.async { [weak field] in
-      guard let field, let window = field.window, window.isKeyWindow else { return }
+      guard mayFocus(), let field, let window = field.window, window.isKeyWindow else { return }
       if field.currentEditor() == nil { window.makeFirstResponder(field) }
     }
   }

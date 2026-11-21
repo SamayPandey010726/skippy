@@ -572,6 +572,7 @@ enum QuiverEmblem: String, CaseIterable {
     panel.ignoresMouseEvents = true; panel.isReleasedWhenClosed = false
     let bar = NSVisualEffectView(frame: CGRect(origin: .zero, size: size))
     bar.material = .popover; bar.state = .active; bar.wantsLayer = true
+    bar.appearance = NSAppearance(named: SkinStore.shared.skin == .night ? .darkAqua : .aqua)
     bar.layer?.cornerRadius = 16; bar.layer?.masksToBounds = true
     bar.layer?.borderColor = NSColor.systemTeal.withAlphaComponent(0.7).cgColor
     bar.layer?.borderWidth = 1.1
