@@ -1,5 +1,7 @@
 # Skippy
 
+[Native workspace guide and complete shortcut list](Docs/SKIPPY-WORKSPACE.md)
+
 Skippy is a native macOS quiver. Hover over its mark to unfold your pinned tools. Click an arrow for File Shelf, Clipboard, Notes, Timer or another tool. Settings lets you attach the mark to the menu bar, notch, desktop, screen edges or Dock.
 
 [Mac feature videos](Docs/SKIPPY-MAC-REVIEW.md) · [Local Mac handoff and recording guide](HANDOFF.md) · [Product and feature brief](SKIPPY-BRIEF.md) · [Design and build plan](Docs/SKIPPY-PLAN.md) · [Mac checks](.github/workflows/check.yml)
