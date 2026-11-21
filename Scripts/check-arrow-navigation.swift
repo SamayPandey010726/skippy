@@ -481,6 +481,14 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   check("the destination is a separate File Shelf") {
     windowFrame("Parcels File Shelf") != nil && descendants().flatMap(labels).contains { $0.contains("Skippy QA.pdf") }
   }
+  check("enter File Shelf selection mode") { press("Select") }
+  check("select the text and image fixtures") { press("Launch notes.txt") && press("A little place.png") }
+  check("create one stack from both files") { press("Stack selected") }
+  check("the stack row is ready to drag") { control(kAXButtonRole, "Stack") != nil }
+  if let stack = control(kAXButtonRole, "Stack"), let point = center(of: stack) {
+    stroke(from: point, to: CGPoint(x: point.x - 130, y: point.y + 150))
+    beat(0.75)
+  }
   if let resultShelf = windowFrame("Parcels File Shelf") {
     let close = CGPoint(x: resultShelf.minX + 13, y: resultShelf.minY + 14)
     mouse(.leftMouseDown, close); mouse(.leftMouseUp, close)

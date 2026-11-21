@@ -1767,6 +1767,7 @@ struct ParcelsShelfContents: View {
   @ObservedObject var store: ParcelStore
   var skin: ParcelSkin
   var highlighted: [URL] = []
+  @State private var selecting = false
   @State private var openStack: UUID?
   @State private var stackRename = ""
   @State private var renamingStack = false
@@ -1785,10 +1786,15 @@ struct ParcelsShelfContents: View {
           }
           NotchActionButton(title: "Paste", symbol: "doc.on.clipboard", tint: skin.palette.accent, action: shelf.pasteFiles)
           NotchActionButton(title: "Pack", symbol: "archivebox", tint: skin.palette.accent, action: shelf.pack)
-          if store.selectedItems.count > 1 {
-            Button("Stack selected") { store.stackSelected() }
-          }
           Spacer()
+          if selecting && store.selectedItems.count > 1 {
+            Button("Stack selected") { store.stackSelected(); selecting = false }
+          } else {
+            Button(selecting ? "Done" : "Select") {
+              if !selecting { store.selectBox(box.id) }
+              selecting.toggle()
+            }
+          }
         }
         Divider().opacity(0.45)
         if let openStack, box.items.contains(where: { $0.stackID == openStack }) {
@@ -1822,7 +1828,7 @@ struct ParcelsShelfContents: View {
     let grouped = members.count > 1
     let title = grouped ? item.stackName ?? "Stack" : item.effectiveName
     let open = {
-      if NSEvent.modifierFlags.contains(.command) {
+      if selecting || NSEvent.modifierFlags.contains(.command) {
         if store.selectedBox != box.id { store.selectBox(box.id) }
         store.toggleSelection(item.id)
       } else if grouped { openStack = item.stackID }
@@ -1855,7 +1861,7 @@ struct ParcelsShelfContents: View {
       .overlay {
         DragOutSurface(urls: available.map(\.effectiveURL), tap: open, menu: { _ in
           shelf.fileContextMenu(for: item)
-        })
+        }, label: title, stackTitle: grouped ? title : nil)
       }
       .accessibilityLabel(title)
       .help(grouped ? "Open stack · Drag all items · Command-click to select" : "Open file · Command-click to select")

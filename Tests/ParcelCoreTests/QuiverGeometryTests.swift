@@ -49,4 +49,16 @@ final class QuiverGeometryTests: XCTestCase {
     XCTAssertEqual(QuiverSurface.snapped(at: CGPoint(x: -700, y: 110), screen: screen, visible: visible), .dock)
     XCTAssertEqual(QuiverSurface.snapped(at: CGPoint(x: -700, y: 134), screen: screen, visible: visible), .bottom)
   }
+  func testCompanionPanelOpensBesideThePinAndFlipsAtTheRightEdge() {
+    let screen = CGRect(x: -1440, y: 0, width: 1440, height: 900)
+    let size = CGSize(width: 278, height: 143)
+    let center = CGRect(x: -600, y: 300, width: 28, height: 28)
+    let left = QuiverSurface.companionPanel(at: center, within: screen, size: size)
+    XCTAssertEqual(left.minX, center.maxX + 13)
+    let edge = CGRect(x: -38, y: 8, width: 28, height: 28)
+    let right = QuiverSurface.companionPanel(at: edge, within: screen, size: size)
+    XCTAssertEqual(right.maxX, edge.minX - 13)
+    XCTAssertTrue(screen.contains(right))
+  }
+
 }

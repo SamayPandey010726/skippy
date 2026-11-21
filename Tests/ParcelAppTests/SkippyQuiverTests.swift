@@ -71,6 +71,7 @@ final class SkippyQuiverTests: XCTestCase {
     button.performClick(nil)
     XCTAssertEqual(shelf.activeModule, .notes)
     XCTAssertTrue(shelf.isVisible)
+    try await Task.sleep(for: .milliseconds(240))
     let panel = try XCTUnwrap(shelf.presentationFrame)
     let screen = try XCTUnwrap(button.window?.screen)
     XCTAssertTrue(screen.visibleFrame.contains(panel))

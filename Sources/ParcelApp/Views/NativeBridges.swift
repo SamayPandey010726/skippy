@@ -235,6 +235,8 @@ struct DragOutSurface: NSViewRepresentable {
   var enabled: Bool = true
   var tap: () -> Void = {}
   var menu: ((NSView) -> NSMenu)? = nil
+  var label: String? = nil
+  var stackTitle: String? = nil
   func makeNSView(context: Context) -> SendingView { SendingView() }
   func updateNSView(_ view: SendingView, context: Context) {
     view.urls = urls
@@ -242,10 +244,13 @@ struct DragOutSurface: NSViewRepresentable {
     view.enabled = enabled
     view.tap = tap
     view.courierMenu = menu
+    view.setAccessibilityLabel(label)
+    view.stackTitle = stackTitle
   }
   @MainActor class SendingView: NSView, NSDraggingSource {
     var urls: [URL] = []
     var outgoingText: String?
+    var stackTitle: String?
     var enabled = true
     var tap: () -> Void = {}
     var doubleTap: (() -> Void)?
@@ -354,8 +359,13 @@ struct DragOutSurface: NSViewRepresentable {
       // Don't let our own drag-out summon the drop popup.
       DragMonitor.shared.suppressNextOwnDrag(allowQuickConvert: true)
       let origin = convert(event.locationInWindow, from: nil)
+      let pile = stackTitle.flatMap { valid.count > 1 ? Self.pileBadge($0, count: valid.count) : nil }
       let items = valid.enumerated().map { idx, url -> NSDraggingItem in
         let item = NSDraggingItem(pasteboardWriter: NativeFileDragWriter(url))
+        if let pile {
+          item.setDraggingFrame(Self.centeredDragFrame(at: origin, size: pile.size), contents: idx == 0 ? pile : nil)
+          return item
+        }
         let image =
           url.pathExtension.lowercased() == "zip"
           ? NativeArtwork.icon(size: 92) : NSWorkspace.shared.icon(forFile: url.path)
@@ -386,6 +396,26 @@ struct DragOutSurface: NSViewRepresentable {
       DragMonitor.shared.finishOwnDrag()
       outgoingDragChanged(false)
     }
+    private static func pileBadge(_ title: String, count: Int) -> NSImage {
+      NSImage(size: CGSize(width: 140, height: 52), flipped: false) { bounds in
+        let back = NSBezierPath(roundedRect: bounds.insetBy(dx: 3, dy: 3), xRadius: 11, yRadius: 11)
+        NSColor(calibratedRed: 0.92, green: 0.95, blue: 0.98, alpha: 0.99).setFill()
+        back.fill()
+        NSColor(calibratedRed: 0.33, green: 0.61, blue: 0.65, alpha: 0.65).setStroke()
+        back.stroke()
+        NSImage(systemSymbolName: "square.stack", accessibilityDescription: nil)?
+          .draw(in: CGRect(x: 12, y: 16, width: 22, height: 21))
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        (title as NSString).draw(in: CGRect(x: 42, y: 25, width: 87, height: 15), withAttributes: [
+          .font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.black,
+          .paragraphStyle: paragraph])
+        ("\(count) items" as NSString).draw(at: CGPoint(x: 42, y: 12), withAttributes: [
+          .font: NSFont.systemFont(ofSize: 9), .foregroundColor: NSColor.darkGray])
+        return true
+      }
+    }
+
     static func centeredDragFrame(at point: CGPoint, size: CGSize, offset: CGPoint = .zero) -> CGRect {
       CGRect(x: point.x - size.width / 2 + offset.x, y: point.y - size.height / 2 + offset.y,
         width: size.width, height: size.height)
