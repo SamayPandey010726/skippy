@@ -26,6 +26,7 @@ struct QuickPin: Codable, Identifiable, Equatable {
   var id: String
   var position: QuickPinPosition
   var alwaysVisible: Bool?
+  var displayOffsets: [String: CGPoint]? = nil
   var module: NotchModule? { NotchModule(rawValue: id) }
 }
 
@@ -37,10 +38,14 @@ struct QuickPin: Codable, Identifiable, Equatable {
   @Published var alwaysVisible: Bool {
     didSet { defaults.set(alwaysVisible, forKey: "skippy.alwaysShowPins") }
   }
+  @Published var showConnectors: Bool {
+    didSet { defaults.set(showConnectors, forKey: "skippy.showPinConnectors") }
+  }
   private let defaults: UserDefaults
   init(defaults: UserDefaults = .standard) {
     self.defaults = defaults
     alwaysVisible = defaults.bool(forKey: "skippy.alwaysShowPins")
+    showConnectors = defaults.object(forKey: "skippy.showPinConnectors") as? Bool ?? true
     pins = defaults.data(forKey: "skippy.quickPins").flatMap { try? JSONDecoder().decode([QuickPin].self, from: $0) } ?? []
   }
   func contains(_ id: String) -> Bool { pins.contains { $0.id == id } }
@@ -58,8 +63,21 @@ struct QuickPin: Codable, Identifiable, Equatable {
       revised[occupied].position = revised[source].position
     }
     revised[source].position = slot
+    revised[source].displayOffsets = nil
     pins = revised
   }
+  func move(_ id: String, to offset: CGPoint, on display: String) {
+    guard let index = pins.firstIndex(where: { $0.id == id }) else { return }
+    var positions = pins[index].displayOffsets ?? [:]
+    positions[display] = offset
+    var pin = pins[index]
+    pin.displayOffsets = positions
+    pin.position = QuickPinPosition.allCases.min {
+      hypot($0.offset.x - offset.x, $0.offset.y - offset.y) < hypot($1.offset.x - offset.x, $1.offset.y - offset.y)
+    } ?? pin.position
+    pins[index] = pin
+  }
+
   func setVisibility(_ id: String, always: Bool?) {
     guard let index = pins.firstIndex(where: { $0.id == id }) else { return }
     pins[index].alwaysVisible = always
@@ -73,7 +91,7 @@ struct QuickPin: Codable, Identifiable, Equatable {
 final class QuickPinButton: NSButton {
   var hover: ((Bool) -> Void)?
   var open: (() -> Void)?
-  var movePin: ((CGPoint) -> Void)?
+  var movePin: ((CGPoint, Bool) -> CGPoint)?
   private var tracking: NSTrackingArea?
 
   override func updateTrackingAreas() {
@@ -95,13 +113,14 @@ final class QuickPinButton: NSButton {
       let pointer = NSEvent.mouseLocation
       let dx = pointer.x - first.x, dy = pointer.y - first.y
       if next.type == .leftMouseUp {
-        if moved { movePin(CGPoint(x: window.frame.midX, y: window.frame.midY)) }
+        if moved { _ = movePin(CGPoint(x: window.frame.midX, y: window.frame.midY), true) }
         else if window.frame.contains(pointer) { open?() }
         return
       }
       if moved || hypot(dx, dy) > 4 {
         moved = true
-        window.setFrameOrigin(CGPoint(x: origin.x + dx, y: origin.y + dy))
+        let newCenter = movePin(CGPoint(x: origin.x + dx + bounds.midX, y: origin.y + dy + bounds.midY), false)
+        window.setFrameOrigin(CGPoint(x: newCenter.x - bounds.midX, y: newCenter.y - bounds.midY))
       }
     }
   }

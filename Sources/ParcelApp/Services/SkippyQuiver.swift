@@ -33,6 +33,10 @@ enum QuiverEmblem: String, CaseIterable {
   private var attachmentOrigin: CGRect?
   private var attachmentHint: NSPanel?
   private var handoffPanel: NSPanel?
+  private var connectorPanel: NSPanel?
+  private let connectorView = QuiverConnectorView()
+  private let pinDiameter: CGFloat = 42
+  private var activePin: String?
   private var progress: CGFloat = 0
   private var motion: Timer?
   private var pointerMonitor: Any?
@@ -70,9 +74,10 @@ enum QuiverEmblem: String, CaseIterable {
     installed = true
     shelf.quiverFloating = { [weak self] in self?.surface == .floating }
     shelf.quiverAnchor = { [weak self] in self?.anchor }
+    shelf.arrowGeometryChanged = { [weak self] in self?.showSatellites() }
     shelf.quiverPanelPointer = { [weak self] inside in
       guard let self else { return }
-      if inside { self.foldWork?.cancel() }
+      if inside { self.foldWork?.cancel(); self.foldWork = nil }
       else if !self.stripContainsPointer { self.hover(false) }
     }
     strip.pointer = { [weak self] in self?.hover($0) }
@@ -80,6 +85,15 @@ enum QuiverEmblem: String, CaseIterable {
     attach()
     quickPins.$pins.combineLatest(quickPins.$alwaysVisible).dropFirst()
       .receive(on: RunLoop.main).sink { [weak self] _ in self?.layout() }.store(in: &subscriptions)
+    quickPins.$showConnectors.dropFirst().receive(on: RunLoop.main)
+      .sink { [weak self] _ in self?.updateConnectors() }.store(in: &subscriptions)
+    NotificationCenter.default.publisher(for: NSWindow.didMoveNotification)
+      .sink { [weak self] notification in
+        guard let self, let window = notification.object as? NSWindow else { return }
+        if window === self.floating || self.satellites.values.contains(where: { $0 === window }) {
+          self.updateConnectors()
+        }
+      }.store(in: &subscriptions)
     SkinStore.shared.$skin.dropFirst().receive(on: RunLoop.main).sink { [weak self] _ in self?.layout() }.store(in: &subscriptions)
     widgets.$widgets.combineLatest(tools.$pinnedApps).receive(on: RunLoop.main).sink { [weak self] _ in self?.layout() }.store(in: &subscriptions)
     NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)
@@ -107,7 +121,7 @@ enum QuiverEmblem: String, CaseIterable {
     let origin = attachmentOrigin
     attachmentOrigin = nil
     endKeyboardBrowsing()
-    foldWork?.cancel(); previewWork?.cancel(); motion?.invalidate()
+    foldWork?.cancel(); foldWork = nil; previewWork?.cancel(); pinPreviewWork?.cancel(); motion?.invalidate()
     if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor); self.pointerMonitor = nil }
     unfolded = false; progress = 0
     shelf.dismiss()
@@ -115,6 +129,8 @@ enum QuiverEmblem: String, CaseIterable {
     if let status { NSStatusBar.system.removeStatusItem(status); self.status = nil }
     floating?.orderOut(nil); floating = nil
     for satellite in satellites.values { satellite.orderOut(nil) }
+    connectorPanel?.orderOut(nil)
+    activePin = nil
     dockHover?.stop(); dockHover = nil; dockTile = nil
     if surface == .dock {
       NSApp.setActivationPolicy(.regular)
@@ -152,6 +168,7 @@ enum QuiverEmblem: String, CaseIterable {
           panel.isVisible, self.surface != .floating else { return }
         self.hover(true)
         if !panel.frame.contains(NSEvent.mouseLocation) { self.hover(false) }
+        self.updateConnectors()
       }
       if animate {
         NSAnimationContext.runAnimationGroup({ context in
@@ -183,6 +200,7 @@ enum QuiverEmblem: String, CaseIterable {
       setUnfolded(false)
       floating?.orderOut(nil)
       for satellite in satellites.values { satellite.orderOut(nil) }
+      connectorPanel?.orderOut(nil)
     } else if surface != .dock {
       floating?.orderFrontRegardless()
       showSatellites()
@@ -191,24 +209,32 @@ enum QuiverEmblem: String, CaseIterable {
 
   func hover(_ inside: Bool) {
     guard !settingsPresented, !dragging, keyboardMonitor == nil else { return }
-    foldWork?.cancel()
     if inside {
+      foldWork?.cancel()
+      foldWork = nil
       if !unfolded, defaults.object(forKey: "skippy.hoverLauncher") as? Bool ?? true { setUnfolded(true) }
     } else {
       (previewTarget as? ArrowButton)?.pointing = false
-      previewTarget = nil; previewWork?.cancel()
-      let work = DispatchWorkItem { [weak self] in
-        guard let self else { return }
-        if self.stripContainsPointer { self.trackArrow(); return }
-        if let frame = self.shelf.presentationFrame, frame.contains(NSEvent.mouseLocation) {
-          return
-        }
-        self.shelf.dismissArrowPreview()
-        self.setUnfolded(false)
-      }
-      foldWork = work
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.55, execute: work)
+      previewTarget = nil
+      previewWork?.cancel()
+      scheduleFold()
     }
+  }
+
+  private func scheduleFold() {
+    guard foldWork == nil else { return }
+    let work = DispatchWorkItem { [weak self] in
+      guard let self else { return }
+      self.foldWork = nil
+      let pointer = NSEvent.mouseLocation
+      if let frame = self.shelf.presentationFrame, frame.contains(pointer) { return }
+      if self.stripContainsPointer { self.trackArrow(); return }
+      if self.connectorView.containsPointer(pointer) { self.scheduleFold(); return }
+      self.shelf.dismissArrowPreview()
+      self.setUnfolded(false)
+    }
+    foldWork = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.22, execute: work)
   }
 
   private func setUnfolded(_ open: Bool) {
@@ -255,13 +281,18 @@ enum QuiverEmblem: String, CaseIterable {
   private var stripContainsPointer: Bool {
     guard let window = strip.window, window.isVisible else { return false }
     let pointer = NSEvent.mouseLocation
-    return satellites.values.contains { $0.isVisible && $0.frame.contains(pointer) }
-      || strip.bounds.contains(strip.convert(window.convertPoint(fromScreen: pointer), from: nil))
+    if satellites.values.contains(where: { $0.isVisible && $0.frame.contains(pointer) }) { return true }
+    let local = strip.convert(window.convertPoint(fromScreen: pointer), from: nil)
+    if surface != .floating { return strip.bounds.contains(local) }
+    if satellites.isEmpty && unfolded { return strip.bounds.contains(local) }
+    return mark?.frame.contains(local) == true || icons.contains { !$0.isHidden && $0.frame.contains(local) }
   }
 
   private func trackArrow() {
     guard unfolded, keyboardMonitor == nil, let window = strip.window else { return }
-    let point = strip.convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
+    let pointer = NSEvent.mouseLocation
+    if !stripContainsPointer, shelf.presentationFrame?.contains(pointer) != true { scheduleFold() }
+    let point = strip.convert(window.convertPoint(fromScreen: pointer), from: nil)
     let button = icons.first { !$0.isHidden && $0.isEnabled && $0.frame.contains(point) }
     guard previewTarget !== button else { return }
     previewWork?.cancel()
@@ -274,32 +305,21 @@ enum QuiverEmblem: String, CaseIterable {
       guard let self, let button, let window = button.window, self.unfolded else { return }
       let rect = window.convertToScreen(button.convert(button.bounds, to: nil))
       guard rect.contains(NSEvent.mouseLocation) else { return }
-      self.shelf.previewArrow(module, at: self.toolAnchor(rect))
+      self.shelf.previewArrow(module, at: self.toolAnchor(rect), source: rect)
     }
     previewWork = work
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.23, execute: work)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.13, execute: work)
   }
 
   private func show(_ module: NotchModule, from view: NSView? = nil) {
     let rect = view.flatMap { v in v.window.map { $0.convertToScreen(v.convert(v.bounds, to: nil)) } } ?? anchor
     endKeyboardBrowsing()
-    // Promoting a preview kept at a satellite uses the same geometry.
-    let anchored = rect.map { view is QuickPinButton ? satelliteAnchor($0, module: module) : toolAnchor($0) }
-    shelf.openArrow(module, at: anchored)
-  }
-
-  private func satelliteAnchor(_ pin: CGRect, module: NotchModule) -> CGRect {
-    if module == .music { return pin }
-    // The larger panels clear Scout and the full orbit before opening above or below.
-    let bottom = max(screenBounds.minY, center.y - 105)
-    let top = min(screenBounds.maxY, center.y + 105)
-    return CGRect(x: pin.minX, y: bottom, width: pin.width, height: top - bottom)
+    let pin = (view as? QuickPinButton)?.identifier?.rawValue
+    shelf.openArrow(module, at: rect.map { pin == nil ? toolAnchor($0) : $0 }, source: rect, pin: pin)
   }
 
   func toolAnchor(_ button: CGRect) -> CGRect {
-    guard let f = floating?.frame else { return button }
-    if surface == .left || surface == .right { return f }
-    guard surface == .floating else { return button }
+    guard let f = floating?.frame, surface == .floating else { return button }
     return CGRect(x: button.minX, y: f.minY, width: button.width, height: f.height)
   }
 
@@ -421,7 +441,7 @@ enum QuiverEmblem: String, CaseIterable {
     mark.emblem = emblem
     mark.ink = ink
     mark.inMenu = surface == .menu
-    if surface == .floating { styleFloatingButton(mark, fill: background, ink: ink, radius: 21) }
+    if surface == .floating { styleFloatingButton(mark, fill: background, ink: ink, radius: 30) }
     mark.setAccessibilityLabel("Skippy, browse arrows")
     mark.tap = { [weak self] in
       guard let self else { return }
@@ -432,12 +452,10 @@ enum QuiverEmblem: String, CaseIterable {
     mark.beginDrop = { [weak self] in self?.shelf.beginPrimaryDrop() }
     mark.dragHover = { [weak self] inside in self?.hover(inside) }
     mark.registerForDraggedTypes([.fileURL, .png, .tiff, .URL, .string] + NSFilePromiseReceiver.readableDraggedTypes.map { .init($0) })
-    if surface != .dock {
-      mark.windowMovement = WindowMoveActions(begin: {}, drag: { [weak self, weak mark] press in
-        guard let self, let mark else { return }
-        self.dragLauncher(from: mark, press: press)
-      }, end: {})
-    }
+    mark.windowMovement = WindowMoveActions(begin: {}, drag: { [weak self, weak mark] press in
+      guard let self, let mark else { return }
+      self.dragLauncher(from: mark, press: press)
+    }, end: {})
     strip.addSubview(mark)
     render()
     rebuildSatellites()
@@ -453,6 +471,7 @@ enum QuiverEmblem: String, CaseIterable {
     dragging = true
     hoverCleanup()
     for satellite in satellites.values { satellite.orderOut(nil) }
+    connectorPanel?.orderOut(nil)
     floating?.orderOut(nil)
     badge.orderFrontRegardless()
     var lastSurface = QuiverSurface.floating
@@ -492,7 +511,7 @@ enum QuiverEmblem: String, CaseIterable {
 
   private func hoverCleanup() {
     endKeyboardBrowsing()
-    foldWork?.cancel()
+    foldWork?.cancel(); foldWork = nil
     previewWork?.cancel()
     pinPreviewWork?.cancel()
     motion?.invalidate()
@@ -505,9 +524,13 @@ enum QuiverEmblem: String, CaseIterable {
     panel.hasShadow = true; panel.ignoresMouseEvents = true; panel.isReleasedWhenClosed = false
     panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     let face = QuiverMark(frame: CGRect(origin: .zero, size: frame.size))
-    face.emblem = emblem; face.ink = NSColor(calibratedRed: 0.17, green: 0.23, blue: 0.29, alpha: 1)
-    face.wantsLayer = true; face.layer?.cornerRadius = 14
-    face.layer?.backgroundColor = NSColor(calibratedRed: 0.946, green: 0.96, blue: 0.985, alpha: 0.98).cgColor
+    let dark = SkinStore.shared.skin == .night
+    face.emblem = emblem
+    face.ink = dark ? NSColor(white: 0.94, alpha: 1) : NSColor(calibratedRed: 0.17, green: 0.23, blue: 0.29, alpha: 1)
+    face.wantsLayer = true
+    face.layer?.cornerRadius = min(frame.width, frame.height) / 2
+    face.layer?.backgroundColor = (dark ? NSColor(calibratedRed: 0.13, green: 0.17, blue: 0.22, alpha: 1)
+      : NSColor(calibratedRed: 0.946, green: 0.96, blue: 0.985, alpha: 1)).cgColor
     panel.contentView = face
     return panel
   }
@@ -588,23 +611,19 @@ enum QuiverEmblem: String, CaseIterable {
     for id in Array(satellites.keys) where !keys.contains(id) {
       satellites.removeValue(forKey: id)?.orderOut(nil)
     }
+    var occupied: [CGPoint] = []
     for pin in presentable {
       let app = tools.pinnedApps.first { $0.id == pin.id }
       guard let title = pin.module?.title ?? app?.name else { continue }
-      let offset = pin.position.offset
-      let x = min(max(screenBounds.minX + 14, center.x + offset.x), screenBounds.maxX - 14)
-      let y = min(max(screenBounds.minY + 14, center.y + offset.y), screenBounds.maxY - 14)
-      let frame = CGRect(x: x - 14, y: y - 14, width: 28, height: 28)
+      let displayID = display.map(DropPopupController.displayID(for:))
+      let offset = displayID.flatMap { pin.displayOffsets?[$0] } ?? pin.position.offset
+      let point = pinCenter(CGPoint(x: center.x + offset.x, y: center.y + offset.y), avoiding: occupied)
+      occupied.append(point)
+      let radius = pinDiameter / 2
+      let frame = CGRect(x: point.x - radius, y: point.y - radius, width: pinDiameter, height: pinDiameter)
       if let existing = satellites[pin.id] {
-        if existing.frame != frame {
-          if existing.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            NSAnimationContext.runAnimationGroup { context in
-              context.duration = 0.19
-              context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-              existing.animator().setFrame(frame, display: true)
-            }
-          } else { existing.setFrame(frame, display: false) }
-        }
+        if existing.frame != frame { existing.setFrame(frame, display: true) }
+        applyPinAppearance(existing.contentView as? QuickPinButton, active: pin.id == shelf.arrowSourcePin || pin.id == activePin)
         continue
       }
       let panel = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -613,15 +632,15 @@ enum QuiverEmblem: String, CaseIterable {
       panel.backgroundColor = .clear; panel.isOpaque = false; panel.hasShadow = true
       panel.title = "Skippy pin · " + title
       let button = QuickPinButton(frame: CGRect(origin: .zero, size: frame.size))
+      button.identifier = NSUserInterfaceItemIdentifier(pin.id)
+      button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
       button.image = pin.module.flatMap { NSImage(systemSymbolName: $0.symbol, accessibilityDescription: nil) }
         ?? app.map { tools.icon(for: $0) }
       button.imageScaling = .scaleProportionallyDown
       button.imagePosition = .imageOnly; button.isBordered = false
-      button.contentTintColor = NSColor(calibratedRed: 0.17, green: 0.23, blue: 0.29, alpha: 1); button.wantsLayer = true
-      button.layer?.cornerRadius = 14
-      button.layer?.backgroundColor = NSColor(calibratedRed: 0.97, green: 0.98, blue: 1.0, alpha: 1).cgColor
-      button.layer?.borderColor = NSColor(calibratedRed: 0.55, green: 0.66, blue: 0.74, alpha: 0.6).cgColor
-      button.layer?.borderWidth = 0.7
+      button.wantsLayer = true
+      button.layer?.cornerRadius = pinDiameter / 2
+      applyPinAppearance(button, active: false)
       button.toolTip = title
       button.setAccessibilityLabel(title + " quick pin")
       button.setAccessibilityHelp("Click to open. Drag around Skippy to reposition.")
@@ -632,31 +651,39 @@ enum QuiverEmblem: String, CaseIterable {
         if let module = pin.module { self.show(module, from: button) }
         else if let app { self.tools.launch(app) }
       }
-      button.hover = { [weak self, weak panel, weak button] inside in
+      button.hover = { [weak self, weak panel] inside in
         guard let self else { return }
-        button?.layer?.borderWidth = inside ? 1.5 : 0.7
-        button?.layer?.borderColor = inside ? NSColor.systemTeal.cgColor
-          : NSColor(calibratedRed: 0.55, green: 0.66, blue: 0.74, alpha: 0.6).cgColor
+        if inside { self.activePin = pin.id }
+        else if self.activePin == pin.id { self.activePin = nil }
+        self.updateConnectors()
         self.hover(inside)
         self.pinPreviewWork?.cancel()
         guard inside, self.defaults.object(forKey: "skippy.hoverArrowPreviews") as? Bool ?? true,
           let module = pin.module else { return }
         let work = DispatchWorkItem { [weak self, weak panel] in
           guard let self, let panel, panel.frame.contains(NSEvent.mouseLocation) else { return }
-          self.shelf.previewArrow(module, at: self.satelliteAnchor(panel.frame, module: module))
+          self.shelf.previewArrow(module, at: panel.frame, source: panel.frame, pin: pin.id)
         }
         self.pinPreviewWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.20, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.13, execute: work)
       }
-      button.movePin = { [weak self] pointer in
-        guard let self else { return }
-        let center = self.center
-        func distance(_ slot: QuickPinPosition) -> CGFloat {
-          hypot(center.x + slot.offset.x - pointer.x, center.y + slot.offset.y - pointer.y)
+      button.movePin = { [weak self, weak panel] pointer, finished in
+        guard let self, let panel else { return pointer }
+        self.pinPreviewWork?.cancel()
+        self.foldWork?.cancel(); self.foldWork = nil
+        let occupied = self.satellites.compactMap { id, other in
+          id == pin.id ? nil : CGPoint(x: other.frame.midX, y: other.frame.midY)
         }
-        if let slot = QuickPinPosition.allCases.min(by: { distance($0) < distance($1) }) {
-          self.quickPins.position(pin.id, at: slot)
+        let point = self.pinCenter(pointer, avoiding: occupied)
+        let radius = self.pinDiameter / 2
+        self.shelf.movePinAnchor(pin.id, to: CGRect(x: point.x - radius, y: point.y - radius,
+          width: panel.frame.width, height: panel.frame.height))
+        if finished, let screen = self.display {
+          self.quickPins.move(pin.id, to: CGPoint(x: point.x - self.center.x, y: point.y - self.center.y),
+            on: DropPopupController.displayID(for: screen))
+          self.hover(self.stripContainsPointer)
         }
+        return point
       }
       panel.contentView = button
       satellites[pin.id] = panel
@@ -667,7 +694,7 @@ enum QuiverEmblem: String, CaseIterable {
   private func showSatellites() {
     for pin in quickPins.pins.prefix(3) {
       guard let panel = satellites[pin.id] else { continue }
-      if !settingsPresented && (unfolded || quickPins.isAlwaysVisible(pin)) {
+      if !settingsPresented && !dragging && (unfolded || quickPins.isAlwaysVisible(pin) || shelf.arrowSourcePin == pin.id) {
         if !panel.isVisible {
           let animate = !quickPins.isAlwaysVisible(pin) && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
           panel.alphaValue = animate ? 0 : 1
@@ -681,6 +708,84 @@ enum QuiverEmblem: String, CaseIterable {
         }
       } else if panel.isVisible { panel.orderOut(nil) }
     }
+    updateConnectors()
+  }
+
+  private func pinCenter(_ point: CGPoint, avoiding occupied: [CGPoint]) -> CGPoint {
+    let inset = pinDiameter / 2 + 3
+    let bounds = screenBounds.insetBy(dx: inset, dy: inset)
+    func clamped(_ point: CGPoint) -> CGPoint {
+      CGPoint(x: min(max(point.x, bounds.minX), bounds.maxX), y: min(max(point.y, bounds.minY), bounds.maxY))
+    }
+    func clear(_ point: CGPoint) -> Bool {
+      hypot(point.x - center.x, point.y - center.y) >= 55 &&
+        occupied.allSatisfy { hypot($0.x - point.x, $0.y - point.y) >= pinDiameter + 4 }
+    }
+    let proposed = clamped(point)
+    if clear(proposed) { return proposed }
+    let angle = atan2(point.y - center.y, point.x - center.x)
+    let nearScout = clamped(CGPoint(x: center.x + 56 * cos(angle), y: center.y + 56 * sin(angle)))
+    if clear(nearScout) { return nearScout }
+    return QuickPinPosition.allCases.map {
+      clamped(CGPoint(x: center.x + $0.offset.x, y: center.y + $0.offset.y))
+    }.filter(clear).min {
+      hypot($0.x - point.x, $0.y - point.y) < hypot($1.x - point.x, $1.y - point.y)
+    } ?? proposed
+  }
+
+  private func applyPinAppearance(_ button: QuickPinButton?, active: Bool) {
+    let dark = SkinStore.shared.skin == .night
+    let bright = NSColor(calibratedRed: 0.60, green: 0.88, blue: 0.88, alpha: 1)
+    let fill = dark ? NSColor(calibratedRed: 0.147, green: 0.204, blue: 0.26, alpha: 1)
+      : NSColor(calibratedRed: 0.957, green: 0.977, blue: 0.994, alpha: 1)
+    let ink = dark ? NSColor(white: 0.93, alpha: 1) : NSColor(calibratedRed: 0.17, green: 0.23, blue: 0.29, alpha: 1)
+    button?.layer?.backgroundColor = active ? fill.blended(withFraction: 0.14, of: .systemTeal)?.cgColor : fill.cgColor
+    button?.layer?.borderColor = active ? (dark ? bright : .systemTeal).cgColor : ink.withAlphaComponent(0.35).cgColor
+    button?.layer?.borderWidth = active ? 1.0 : 0.75
+    button?.contentTintColor = active && dark ? bright : ink
+  }
+
+  private func updateConnectors() {
+    guard !settingsPresented, !dragging, let scout = anchor else {
+      connectorView.segments = []
+      connectorPanel?.orderOut(nil)
+      return
+    }
+    var segments: [QuiverConnectorView.Segment] = []
+    for (id, panel) in satellites where panel.isVisible {
+      let active = id == (shelf.arrowSourcePin ?? activePin)
+      applyPinAppearance(panel.contentView as? QuickPinButton, active: active)
+      segments.append(.init(from: scout.centerPoint, to: panel.frame.centerPoint, active: active))
+    }
+    if let source = shelf.arrowSource, let card = shelf.presentationFrame {
+      let from = (shelf.arrowSourcePin.flatMap { satellites[$0]?.frame } ?? source).centerPoint
+      let end = CGPoint(x: min(max(from.x, card.minX + 9), card.maxX - 9),
+                        y: min(max(from.y, card.minY + 9), card.maxY - 9))
+      segments.append(.init(from: from, to: end, active: true))
+    }
+    connectorView.segments = segments
+    guard quickPins.showConnectors, !segments.isEmpty else {
+      connectorPanel?.orderOut(nil)
+      return
+    }
+    let frame = segments.reduce(CGRect.null) { frame, line in
+      frame.union(CGRect(x: min(line.from.x, line.to.x), y: min(line.from.y, line.to.y),
+        width: max(1, abs(line.from.x - line.to.x)), height: max(1, abs(line.from.y - line.to.y))))
+    }.insetBy(dx: -3, dy: -3)
+    if connectorPanel == nil {
+      let panel = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+      panel.title = "Skippy connectors"
+      panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue - 1)
+      panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = false
+      panel.ignoresMouseEvents = true; panel.hidesOnDeactivate = false; panel.isReleasedWhenClosed = false
+      panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
+      panel.contentView = connectorView
+      connectorPanel = panel
+    }
+    connectorView.screenOrigin = frame.origin
+    if connectorPanel?.frame != frame { connectorPanel?.setFrame(frame, display: false) }
+    connectorView.needsDisplay = true
+    if connectorPanel?.isVisible == false { connectorPanel?.orderFrontRegardless() }
   }
 
   func beginKeyboardBrowsing() {
@@ -743,7 +848,7 @@ enum QuiverEmblem: String, CaseIterable {
   func openArrowFinder() {
     endKeyboardBrowsing()
     previewWork?.cancel()
-    shelf.openArrow(.dashboard, at: anchor.map(toolAnchor))
+    shelf.openArrow(.dashboard, at: anchor.map(toolAnchor), source: anchor)
     shelf.chooseArrow()
   }
 
@@ -777,6 +882,7 @@ enum QuiverEmblem: String, CaseIterable {
       icon.isHidden = progress == 0 || !showPrimary
       icon.isEnabled = showPrimary && unfolded && progress > 0.68
     }
+    updateConnectors()
   }
 }
 
@@ -868,6 +974,45 @@ final class QuiverMark: FileDropSurface.ReceivingView {
       p.line(to: CGPoint(x: x + dx + length + 5, y: y + dy + length))
       p.line(to: CGPoint(x: x + dx + 5, y: y + dy))
       p.close(); p.fill()
+    }
+  }
+}
+
+private extension CGRect {
+  var centerPoint: CGPoint { CGPoint(x: midX, y: midY) }
+}
+
+private final class QuiverConnectorView: NSView {
+  struct Segment {
+    let from: CGPoint
+    let to: CGPoint
+    let active: Bool
+  }
+
+  var segments: [Segment] = []
+  var screenOrigin = CGPoint.zero
+
+  func containsPointer(_ pointer: CGPoint) -> Bool {
+    segments.contains { segment in
+      let dx = segment.to.x - segment.from.x, dy = segment.to.y - segment.from.y
+      let lengthSquared = dx * dx + dy * dy
+      guard lengthSquared > 0 else { return false }
+      let t = ((pointer.x - segment.from.x) * dx + (pointer.y - segment.from.y) * dy) / lengthSquared
+      guard t >= 0, t <= 1 else { return false }
+      return hypot(pointer.x - segment.from.x - t * dx, pointer.y - segment.from.y - t * dy) <= 9
+    }
+  }
+
+  override func draw(_ dirtyRect: NSRect) {
+    for segment in segments {
+      let path = NSBezierPath()
+      path.move(to: CGPoint(x: segment.from.x - screenOrigin.x, y: segment.from.y - screenOrigin.y))
+      path.line(to: CGPoint(x: segment.to.x - screenOrigin.x, y: segment.to.y - screenOrigin.y))
+      path.lineWidth = segment.active ? 1.25 : 0.85
+      let ink = segment.active ? NSColor(calibratedRed: 0.59, green: 0.90, blue: 0.89, alpha: 0.94)
+        : NSColor(calibratedRed: 0.62, green: 0.75, blue: 0.83, alpha: 0.78)
+      ink.setStroke()
+      path.stroke()
     }
   }
 }

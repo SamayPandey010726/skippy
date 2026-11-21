@@ -57,14 +57,14 @@ enum ParcelSkin: String, Codable, CaseIterable, Identifiable {
         line: Color(red: 0.87, green: 0.86, blue: 0.79))
     case .night:
       return SkinPalette(
-        paper: Color(red: 0.10, green: 0.11, blue: 0.14),
-        cream: Color(red: 0.15, green: 0.16, blue: 0.20),
-        canvas: Color(red: 0.18, green: 0.19, blue: 0.24),
-        accent: Color(red: 0.65, green: 0.80, blue: 0.72),
-        accentSoft: Color(red: 0.50, green: 0.65, blue: 0.58),
-        text: Color(red: 0.93, green: 0.94, blue: 0.92),
-        secondary: Color(red: 0.72, green: 0.75, blue: 0.70),
-        line: Color(red: 0.28, green: 0.29, blue: 0.34))
+        paper: Color(red: 0.094, green: 0.145, blue: 0.196),
+        cream: Color(red: 0.128, green: 0.187, blue: 0.246),
+        canvas: Color(red: 0.16, green: 0.22, blue: 0.28),
+        accent: Color(red: 0.61, green: 0.88, blue: 0.86),
+        accentSoft: Color(red: 0.35, green: 0.61, blue: 0.62),
+        text: Color(red: 0.93, green: 0.96, blue: 0.99),
+        secondary: Color(red: 0.68, green: 0.75, blue: 0.82),
+        line: Color(red: 0.26, green: 0.34, blue: 0.42))
     case .slate:
       return SkinPalette(
         paper: Color(red: 0.943, green: 0.952, blue: 0.968),
@@ -110,6 +110,6 @@ final class SkinStore: ObservableObject {
     }
   }
   private init() {
-    skin = .slate
+    skin = UserDefaults.standard.string(forKey: "parcel-skin").flatMap(ParcelSkin.init(rawValue:)) ?? .night
   }
 }

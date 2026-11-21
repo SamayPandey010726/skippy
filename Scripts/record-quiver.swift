@@ -63,7 +63,7 @@ guard let baselineFocus, NSWorkspace.shared.frontmostApplication?.bundleIdentifi
   throw RecordingError.focusChanged
 }
 let screen = CGDisplayBounds(CGMainDisplayID())
-guard let mark = windows().first(where: { (26...42).contains($0.width) && (24...44).contains($0.height) }) else {
+guard let mark = windows().first(where: { (59...61).contains($0.width) && (59...61).contains($0.height) }) else {
   print("Skippy windows:", windows()); throw RecordingError.missingWindow
 }
 let center = CGPoint(x: mark.midX, y: mark.midY)
@@ -102,10 +102,10 @@ func glide(_ from: CGPoint, _ to: CGPoint) throws {
 let away = CGPoint(x: center.x - 140, y: center.y + 65)
 pointer(away); pause(0.65)
 try glide(away, center); pause(0.7)
-guard let strip = windows().first(where: { (120...150).contains($0.width) && (120...150).contains($0.height) }) else {
+guard let strip = windows().first(where: { (175...180).contains($0.width) && (175...180).contains($0.height) }) else {
   print("After hover:", windows()); throw RecordingError.hoverFailed
 }
-let shelf = CGPoint(x: strip.midX, y: strip.midY - 51)
+let shelf = CGPoint(x: strip.midX, y: strip.midY - 59)
 try glide(center, shelf)
 for _ in 0..<50 {
   if windows().contains(where: { $0.width >= 300 && $0.height >= 160 }) { break }
@@ -118,14 +118,14 @@ guard NSWorkspace.shared.frontmostApplication?.processIdentifier == baselineFocu
   throw RecordingError.focusChanged
 }
 print("PASS hovering preserved foreground application")
-let notes = CGPoint(x: strip.midX, y: strip.midY + 51)
+let notes = CGPoint(x: strip.midX, y: strip.midY + 59)
 try glide(shelf, notes)
 pause(0.55)
 pointer(notes, .leftMouseDown); pointer(notes, .leftMouseUp); pause(0.65)
 try glide(notes, center)
 pointer(center, .leftMouseDown); pointer(center, .leftMouseUp); pause(1.2)
 guard windows().contains(where: { abs($0.width-strip.width) <= 1 && abs($0.height-strip.height) <= 1 }),
-      windows().contains(where: { (275...305).contains($0.width) && $0.height >= 270 }) else {
+      windows().contains(where: { (310...329).contains($0.width) && $0.height >= 270 }) else {
   throw RecordingError.panelFailed
 }
 print("PASS Scout opens the searchable arrow list next to the stable wheel")

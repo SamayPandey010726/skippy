@@ -6,6 +6,10 @@ on:
         type: string
         default: ""
         description: Record visible Settings using a validated universal workspace artifact
+      connected_walkthrough:
+        type: boolean
+        default: false
+        description: Record one continuous walkthrough of the connected native Mac workspace
       workspace_only:
         type: boolean
         default: false
@@ -28,12 +32,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        batch: ${{ fromJSON(inputs.settings_from_run && '["settings-review"]' || inputs.workspace_only && '["workspace"]' || inputs.preferences_only && '["preferences"]' || inputs.handoffs_only && '["searchhandoff","downloadhandoff"]' || '["wheel","files","utilities","system","capture","preferences"]') }}
+        batch: ${{ fromJSON(inputs.settings_from_run && '["settings-review"]' || inputs.connected_walkthrough && '["connected"]' || inputs.workspace_only && '["workspace"]' || inputs.preferences_only && '["preferences"]' || inputs.handoffs_only && '["searchhandoff","downloadhandoff"]' || '["wheel","files","utilities","system","capture","preferences"]') }}
     name: Film ${{ matrix.batch }}
     env:
       SKIPPY_FILM_BATCH: ${{ matrix.batch }}
       SKIPPY_REUSE_BUILD: ${{ inputs.settings_from_run != '' }}
-      SKIPPY_UNIVERSAL: ${{ inputs.workspace_only || inputs.preferences_only || (inputs.handoffs_only && matrix.batch == 'searchhandoff') }}
+      SKIPPY_UNIVERSAL: ${{ inputs.connected_walkthrough || inputs.workspace_only || inputs.preferences_only || (inputs.handoffs_only && matrix.batch == 'searchhandoff') }}
     runs-on: macos-15
     timeout-minutes: 40
     steps:
@@ -59,6 +63,19 @@ jobs:
           codesign --verify --strict build/Skippy.app
       - name: Record native interactions
         run: bash Scripts/record-feature-library.sh
+      - name: Verify the continuous video
+        if: ${{ inputs.connected_walkthrough }}
+        run: |
+          movie=$(find build -path '*/Connected workspace/WindowServer.mp4' -print -quit)
+          test -n "$movie"
+          ffmpeg -hide_banner -loglevel error -i "$movie" -map 0:v:0 -f null -
+          ffprobe -v error -show_entries stream=width,height,codec_name:format=duration "$movie"
+          ffmpeg -hide_banner -loglevel error -i "$movie" -map 0:v:0 -c copy -movflags +faststart "build/Skippy - Connected workspace.mp4"
+      - uses: actions/upload-artifact@v4
+        if: ${{ inputs.connected_walkthrough }}
+        with:
+          name: Skippy-connected-walkthrough
+          path: build/Skippy - Connected workspace.mp4
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -66,18 +83,18 @@ jobs:
           path: build/feature-review.*/build/feature-captures/
           if-no-files-found: ignore
       - name: Verify and archive tested universal app
-        if: ${{ inputs.workspace_only || inputs.preferences_only || (inputs.handoffs_only && matrix.batch == 'searchhandoff') }}
+        if: ${{ inputs.connected_walkthrough || inputs.workspace_only || inputs.preferences_only || (inputs.handoffs_only && matrix.batch == 'searchhandoff') }}
         run: |
           lipo build/Skippy.app/Contents/MacOS/Skippy -verify_arch arm64 x86_64
           codesign --verify --strict build/Skippy.app
           ditto -c -k --keepParent build/Skippy.app build/Skippy-developer.zip
       - uses: actions/upload-artifact@v4
-        if: ${{ inputs.workspace_only || inputs.preferences_only || (inputs.handoffs_only && matrix.batch == 'searchhandoff') }}
+        if: ${{ inputs.connected_walkthrough || inputs.workspace_only || inputs.preferences_only || (inputs.handoffs_only && matrix.batch == 'searchhandoff') }}
         with:
           name: Skippy-tested-universal
           path: build/Skippy-developer.zip
   package:
-    if: ${{ !inputs.settings_from_run && !inputs.workspace_only && !inputs.preferences_only && !inputs.handoffs_only }}
+    if: ${{ !inputs.settings_from_run && !inputs.connected_walkthrough && !inputs.workspace_only && !inputs.preferences_only && !inputs.handoffs_only }}
     needs: record
     runs-on: ubuntu-latest
     steps:

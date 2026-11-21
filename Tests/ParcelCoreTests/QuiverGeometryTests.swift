@@ -20,7 +20,7 @@ final class QuiverGeometryTests: XCTestCase {
         if step == 20 {
           for (i, rect) in wheel.buttons.enumerated() {
             XCTAssertFalse(rect.intersects(local))
-            XCTAssertEqual(hypot(rect.midX - local.midX, rect.midY - local.midY), 51, accuracy: 1)
+            XCTAssertEqual(hypot(rect.midX - local.midX, rect.midY - local.midY), 59, accuracy: 1)
             for other in wheel.buttons.dropFirst(i + 1) {
               XCTAssertFalse(rect.intersects(other), "Adjacent targets must be individually selectable")
             }

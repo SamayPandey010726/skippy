@@ -387,6 +387,7 @@ struct PreferencesView: View {
       }
       Divider()
       Text("Display").font(.headline)
+      Toggle("Show connector lines", isOn: $quickPins.showConnectors)
       Picker("Default visibility", selection: $quickPins.alwaysVisible) {
         Text("On hover").tag(false)
         Text("Always visible").tag(true)

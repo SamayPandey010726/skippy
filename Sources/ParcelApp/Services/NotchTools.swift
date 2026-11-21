@@ -27,11 +27,11 @@ enum NotchModule: String, CaseIterable, Identifiable {
     case .clipboard: "Clipboard"
     case .extract: "Extract text"
     case .color: "Pick colour"
-    case .timer: "Timer"
+    case .timer: "Temporal"
     case .notes: "Notes"
     case .qr: "QR tools"
     case .search: "Search"
-    case .launcher: "Apps"
+    case .launcher: "Quick Launch"
     case .music: "Music"
     case .downloads: "Downloads"
     case .awake: "Stay awake"
@@ -64,7 +64,7 @@ enum NotchModule: String, CaseIterable, Identifiable {
     case .recent: "clock.arrow.circlepath"
     case .system: "gauge.with.dots.needle.67percent"
     case .calendar: "calendar"
-    case .calculator: "plus.forwardslash.minus"
+    case .calculator: "calculator"
     case .screenshot: "rectangle.dashed.badge.record"
     case .draw: "pencil.tip.crop.circle"
     case .convert: "arrow.trianglehead.clockwise"
@@ -80,6 +80,33 @@ struct PinnedNotchApp: Codable, Identifiable, Equatable {
   var id: String { bundleIdentifier }
 }
 
+@MainActor extension PinnedNotchApp {
+  static let defaultMail = PinnedNotchApp(bundleIdentifier: "skippy.defaultMail", name: "Mail")
+  static let defaultBrowser = PinnedNotchApp(bundleIdentifier: "skippy.defaultBrowser", name: "Safari")
+
+  var installedURL: URL? {
+    let workspace = NSWorkspace.shared
+    switch self {
+    case .defaultMail:
+      return workspace.urlForApplication(toOpen: URL(string: "mailto:")!)
+        ?? workspace.urlForApplication(withBundleIdentifier: "com.apple.mail")
+    case .defaultBrowser:
+      return workspace.urlForApplication(toOpen: URL(string: "https://example.com")!)
+        ?? workspace.urlForApplication(withBundleIdentifier: "com.apple.Safari")
+    default:
+      return workspace.urlForApplication(withBundleIdentifier: bundleIdentifier)
+    }
+  }
+
+  var installedName: String {
+    guard let url = installedURL else { return name }
+    let bundle = Bundle(url: url)
+    return bundle?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+      ?? bundle?.object(forInfoDictionaryKey: "CFBundleName") as? String
+      ?? url.deletingPathExtension().lastPathComponent
+  }
+}
+
 struct NotchMacro: Codable, Identifiable {
   var id = UUID()
   var name: String
@@ -93,10 +120,12 @@ struct NotchMacro: Codable, Identifiable {
   @Published var timerMinutes = 25
   @Published var keepAwakeDuringTimer = false
   @Published private(set) var timerEnd: Date?
+  @Published private(set) var timerPaused = false
   @Published private(set) var remaining: TimeInterval = 0
   @Published private(set) var ocrText = ""
   @Published private(set) var qrText = ""
-  @Published private(set) var pickedColour = "#5B8C6A"
+  @Published private(set) var pickedColour = "#729CBB"
+  @Published private(set) var recentColours: [String] = []
   @Published private(set) var audioTitle = "Choose an audio file"
   @Published private(set) var isPlaying = false
   @Published private(set) var mediaTitle = "Nothing playing"
@@ -108,6 +137,11 @@ struct NotchMacro: Codable, Identifiable {
   @Published private(set) var pinnedApps: [PinnedNotchApp] {
     didSet {
       if let data = try? JSONEncoder().encode(pinnedApps) { defaults.set(data, forKey: "parcel.notch.pinnedApps.v1") }
+    }
+  }
+  @Published private(set) var quickLaunchApps: [PinnedNotchApp] = [] {
+    didSet {
+      if let data = try? JSONEncoder().encode(quickLaunchApps) { defaults.set(data, forKey: "skippy.quickLaunch") }
     }
   }
   @Published private(set) var status = "Ready"
@@ -131,22 +165,38 @@ struct NotchMacro: Codable, Identifiable {
   init(defaults: UserDefaults = .standard) {
     self.defaults = defaults
     note = defaults.string(forKey: "parcel.notch.note") ?? ""
-    pinnedApps = defaults.data(forKey: "parcel.notch.pinnedApps.v1")
+    let savedColours = defaults.stringArray(forKey: "skippy.sampledColours") ?? []
+    recentColours = savedColours
+    pickedColour = savedColours.first ?? "#729CBB"
+    let existingPins = defaults.data(forKey: "parcel.notch.pinnedApps.v1")
       .flatMap { try? JSONDecoder().decode([PinnedNotchApp].self, from: $0) } ?? []
+    pinnedApps = existingPins
     macros = defaults.data(forKey: "parcels.macros.v1")
       .flatMap { try? JSONDecoder().decode([NotchMacro].self, from: $0) } ?? [
         NotchMacro(name: "Open Downloads", command: "open ~/Downloads"),
         NotchMacro(name: "Open Calculator", command: "open -a Calculator")
       ]
+    let defaultsForLaunch: [PinnedNotchApp] = [.defaultMail, .defaultBrowser,
+      .init(bundleIdentifier: "com.apple.iCal", name: "Calendar"), .init(bundleIdentifier: "com.apple.Notes", name: "Notes"),
+      .init(bundleIdentifier: "com.apple.Music", name: "Music"), .init(bundleIdentifier: "com.apple.Preview", name: "Preview")]
+    var seen = Set<String>()
+    let initialLaunch = (defaultsForLaunch + existingPins).filter { seen.insert($0.id).inserted }
+    quickLaunchApps = defaults.data(forKey: "skippy.quickLaunch")
+      .flatMap { try? JSONDecoder().decode([PinnedNotchApp].self, from: $0) } ?? initialLaunch
     super.init()
   }
 
   func startTimer() {
+    timerPaused = false
+    runTimer(for: TimeInterval(max(1, min(180, timerMinutes)) * 60))
+    status = "Timer started"
+  }
+
+  private func runTimer(for seconds: TimeInterval) {
     if keepAwakeDuringTimer && !isKeepingAwake {
       toggleStayAwake()
       timerEnabledAwake = isKeepingAwake
     }
-    let seconds = TimeInterval(max(1, min(180, timerMinutes)) * 60)
     timerEnd = Date().addingTimeInterval(seconds)
     remaining = seconds
     clock?.invalidate()
@@ -156,15 +206,42 @@ struct NotchMacro: Codable, Identifiable {
     RunLoop.main.add(timer, forMode: .common)
     clock = timer
     requestNotificationPermission()
-    status = "Timer started"
+  }
+
+  func toggleTimerPause() {
+    if let end = timerEnd {
+      remaining = max(1, end.timeIntervalSinceNow)
+      timerPaused = true
+      stopClock()
+    } else if timerPaused {
+      timerPaused = false
+      runTimer(for: remaining)
+    }
+  }
+
+  func adjustTimer(by minutes: Int) {
+    timerMinutes = max(1, min(180, timerMinutes + minutes))
+    if let end = timerEnd {
+      remaining = max(1, min(10_800, end.timeIntervalSinceNow + Double(minutes) * 60))
+      timerEnd = Date().addingTimeInterval(remaining)
+      requestNotificationPermission()
+    } else if timerPaused {
+      remaining = max(1, min(10_800, remaining + Double(minutes) * 60))
+    }
   }
 
   func stopTimer() {
-    clock?.invalidate(); clock = nil; timerEnd = nil; remaining = 0
+    stopClock()
+    timerPaused = false
+    remaining = 0
+    status = "Timer stopped"
+  }
+
+  private func stopClock() {
+    clock?.invalidate(); clock = nil; timerEnd = nil
     if timerEnabledAwake && isKeepingAwake { toggleStayAwake() }
     timerEnabledAwake = false
     UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["parcel-notch-timer"])
-    status = "Timer stopped"
   }
 
   private func tick() {
@@ -198,14 +275,20 @@ struct NotchMacro: Codable, Identifiable {
     UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "parcel-notch-timer", content: content, trigger: trigger))
   }
 
+  func copyColour(_ hex: String) {
+    pickedColour = hex
+    recentColours = Array(([hex] + recentColours.filter { $0 != hex }).prefix(6))
+    defaults.set(recentColours, forKey: "skippy.sampledColours")
+    copyText(hex, label: "Colour")
+  }
+
   func pickColour() {
     let restore = DropPopupController.shared.beginScreenSelection()
     NSColorSampler().show { [weak self] colour in
       Task { @MainActor in
         defer { restore() }
         guard let colour, let hex = Self.hexValue(for: colour) else { return }
-        self?.pickedColour = hex
-        self?.copyText(hex, label: "Colour")
+        self?.copyColour(hex)
       }
     }
   }
@@ -521,18 +604,45 @@ struct NotchMacro: Codable, Identifiable {
   }
 
   func choosePinnedApp() {
-    let panel = NSOpenPanel()
-    panel.allowedContentTypes = [.applicationBundle]
-    panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
-    panel.message = "Choose an app to pin to Skippy"
-    guard panel.runModal() == .OK, let url = panel.url,
-      let bundle = Bundle(url: url), let id = bundle.bundleIdentifier else { return }
-    guard !pinnedApps.contains(where: { $0.bundleIdentifier == id }) else { status = "App is already pinned"; return }
-    pinnedApps.append(PinnedNotchApp(bundleIdentifier: id, name: url.deletingPathExtension().lastPathComponent))
+    guard let app = chooseApplication(message: "Choose an app to pin to Skippy") else { return }
+    guard !pinnedApps.contains(where: { $0.id == app.id }) else { status = "App is already pinned"; return }
+    pinnedApps.append(app)
     status = "App pinned"
   }
 
+  func addQuickLaunchApp(replacing old: PinnedNotchApp? = nil) {
+    guard let app = chooseApplication(message: old == nil ? "Choose an app for Quick Launch" : "Choose a replacement app") else { return }
+    if app.id != old?.id && quickLaunchApps.contains(where: { $0.id == app.id }) {
+      status = "\(app.name) is already in Quick Launch"
+      return
+    }
+    if let old, let index = quickLaunchApps.firstIndex(where: { $0.id == old.id }) {
+      quickLaunchApps[index] = app
+    } else {
+      quickLaunchApps.append(app)
+    }
+  }
+
+  private func chooseApplication(message: String) -> PinnedNotchApp? {
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [.applicationBundle]
+    panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
+    panel.message = message
+    panel.prompt = "Choose"
+    guard panel.runModal() == .OK, let url = panel.url,
+      let bundle = Bundle(url: url), let id = bundle.bundleIdentifier else { return nil }
+    return PinnedNotchApp(bundleIdentifier: id, name: url.deletingPathExtension().lastPathComponent)
+  }
+
   func unpinApp(_ app: PinnedNotchApp) { pinnedApps.removeAll { $0.id == app.id } }
+
+  func removeQuickLaunchApp(_ app: PinnedNotchApp) { quickLaunchApps.removeAll { $0.id == app.id } }
+
+  func moveQuickLaunchApp(_ app: PinnedNotchApp, by step: Int) {
+    guard let index = quickLaunchApps.firstIndex(where: { $0.id == app.id }),
+      quickLaunchApps.indices.contains(index + step) else { return }
+    quickLaunchApps.swapAt(index, index + step)
+  }
 
   func isPinned(_ app: NSRunningApplication) -> Bool {
     guard let id = app.bundleIdentifier else { return false }
@@ -540,16 +650,19 @@ struct NotchMacro: Codable, Identifiable {
   }
 
   func icon(for app: PinnedNotchApp) -> NSImage {
-    guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.bundleIdentifier) else { return NSImage() }
+    guard let url = app.installedURL else { return NSImage(systemSymbolName: "app.dashed", accessibilityDescription: nil) ?? NSImage() }
     return NSWorkspace.shared.icon(forFile: url.path)
   }
 
-  func launch(_ app: PinnedNotchApp) {
-    guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.bundleIdentifier) else {
+  func launch(_ app: PinnedNotchApp, onOpen: (@MainActor () -> Void)? = nil) {
+    guard let url = app.installedURL else {
       status = "\(app.name) is no longer installed"; return
     }
     NSWorkspace.shared.openApplication(at: url, configuration: .init()) { [weak self] _, error in
-      if let error { Task { @MainActor in self?.status = "Could not open \(app.name): \(error.localizedDescription)" } }
+      Task { @MainActor in
+        if let error { self?.status = "Could not open \(app.name): \(error.localizedDescription)" }
+        else { onOpen?() }
+      }
     }
   }
 
@@ -732,9 +845,6 @@ struct NotchToolsView: View {
   @State private var feedbackRevision = 0
   @State private var qrInput = ""
   @State private var webQuery = ""
-  @State private var calculation = ""
-  @State private var scientific = false
-  @FocusState private var calculationFocused: Bool
   @State private var showingMacros = false
   @State private var macroName = ""
   @State private var macroCommand = ""
@@ -745,7 +855,7 @@ struct NotchToolsView: View {
 
   var body: some View {
     VStack(spacing: 7) {
-      if !shelf.choosingArrow { header }
+      if !shelf.choosingArrow && shelf.activeModule != .calculator { header }
       Group {
         if shelf.choosingArrow { ArrowFinder(shelf: shelf) }
         else if shelf.activeModule == .dashboard { widgetDashboard }
@@ -754,6 +864,7 @@ struct NotchToolsView: View {
         .id(shelf.choosingArrow ? "finder" : shelf.activeModule.rawValue)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .transition(.opacity.combined(with: .offset(y: 4)))
+      if shelf.choosingArrow || ![.calculator, .launcher, .color, .timer, .clipboard].contains(shelf.activeModule) {
       HStack {
         if let feedback {
           Text(feedback).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
@@ -761,7 +872,7 @@ struct NotchToolsView: View {
         Spacer()
         if shelf.choosingArrow {
           Text("↑ ↓  Select     ↩  Open     Esc  Back").font(.system(size: 11)).foregroundStyle(.secondary)
-        } else if shelf.activeModule != .music {
+        } else if ![.music, .calculator, .launcher, .color, .timer, .clipboard].contains(shelf.activeModule) {
           Button(action: shelf.chooseArrow) {
             Label("Find an arrow", systemImage: "magnifyingglass")
             Text(shortcuts.binding(for: .chooseArrow).displayName).monospaced()
@@ -771,10 +882,12 @@ struct NotchToolsView: View {
         }
 
       }
+      }
     }
-    .padding(.horizontal, 12).padding(.top, 9).padding(.bottom, 7)
+    .padding(.horizontal, 12).padding(.top, 9).padding(.bottom, 9)
     .animation(reduceMotion ? nil : .smooth(duration: 0.23), value: shelf.activeModule)
     .animation(reduceMotion ? nil : .smooth(duration: 0.23), value: shelf.choosingArrow)
+    .onChange(of: shelf.activeModule) { _, module in if module != .launcher { showingMacros = false } }
     .onReceive(tools.$status.dropFirst()) { status in
       feedback = status
       feedbackRevision += 1
@@ -807,7 +920,27 @@ struct NotchToolsView: View {
     }
   }
 
-  private var header: some View {
+  @ViewBuilder private var header: some View {
+    if [.launcher, .color, .timer, .clipboard, .music].contains(shelf.activeModule) {
+      HStack(spacing: 7) {
+        Image(systemName: shelf.activeModule.symbol).foregroundStyle(skin.palette.accent)
+        Text(shelf.activeModule.title).font(.system(size: 13, weight: .semibold))
+        Spacer()
+        if shelf.activeModule == .launcher && !shelf.isArrowPreview {
+          Button {
+            showingMacros.toggle()
+            shelf.setQuickLaunchCommands(showingMacros)
+          } label: { Image(systemName: showingMacros ? "square.grid.2x2" : "terminal") }
+            .buttonStyle(.plain).help(showingMacros ? "Show apps" : "Show commands")
+            .accessibilityLabel(showingMacros ? "Show apps" : "Show commands")
+        }
+        Button(action: shelf.toggleArrowRetention) { Image(systemName: shelf.keepArrowOpen ? "pin.fill" : "pin") }
+          .buttonStyle(.plain).help(shelf.keepArrowOpen ? "Unpin panel" : "Keep panel open")
+          .accessibilityLabel(shelf.keepArrowOpen ? "Unpin panel" : "Keep panel open")
+        Button(action: shelf.dismiss) { Image(systemName: "xmark") }
+          .buttonStyle(.plain).help("Close Skippy").accessibilityLabel("Close Skippy")
+      }.font(.system(size: 12, weight: .medium)).frame(height: 22)
+    } else {
     HStack(spacing: 7) {
       NotchIconButton(symbol: "xmark", help: "Close Skippy", action: shelf.dismiss)
       ZStack {
@@ -836,6 +969,7 @@ struct NotchToolsView: View {
       }
       NotchIconButton(symbol: "gearshape", help: "Settings", action: AppController.shared.openPreferences)
     }
+    }
   }
 
   private var headerSubtitle: String {
@@ -849,7 +983,7 @@ struct NotchToolsView: View {
     case .notes: "Saved automatically"
     case .qr: "Create or read a code"
     case .search: "Search without opening a browser first"
-    case .launcher: "Running on this Mac"
+    case .launcher: " "
     case .music: tools.mediaSource ?? "Local and system playback"
     case .downloads: "Recent files, ready to open"
     case .awake: tools.isKeepingAwake ? "Sleep is paused" : "Keep long tasks running"
@@ -874,14 +1008,16 @@ struct NotchToolsView: View {
     case .notes: notesView
     case .qr: qrView
     case .search: searchView
-    case .launcher: launcherView
+    case .launcher:
+      if showingMacros { macroView }
+      else { WorkspaceQuickLaunch(shelf: shelf) }
     case .music: musicView
     case .downloads: downloadsView
     case .awake: awakeView
     case .recent: recentView
     case .system: systemView
     case .calendar: calendarView
-    case .calculator: calculatorView
+    case .calculator: WorkspaceCalculatorView(shelf: shelf)
     case .screenshot: screenshotView
     case .draw: drawView
     case .convert: ShelfFileActionView(store: store, operation: .convert)
@@ -1204,60 +1340,47 @@ struct NotchToolsView: View {
   }
 
   private var colourView: some View {
-    HStack(spacing: 18) {
-      ZStack {
-        Circle().stroke(Color.white.opacity(0.14), lineWidth: 8).frame(width: 116, height: 116)
-        Circle().fill(Color(nsColor: NSColor(hex: tools.pickedColour) ?? .systemGreen)).frame(width: 91, height: 91)
-          .shadow(color: Color(nsColor: NSColor(hex: tools.pickedColour) ?? .systemGreen).opacity(0.35), radius: 18)
-        Image(systemName: "eyedropper").font(.system(size: 20, weight: .medium)).foregroundStyle(.white)
-      }
-      VStack(alignment: .leading, spacing: 10) {
-        NotchSectionTitle(title: "Current colour", symbol: "paintpalette")
-        Text(tools.pickedColour).font(.system(size: 24, weight: .semibold, design: .rounded)).monospaced()
-        Text("Pick anywhere on any display. The HEX value is copied instantly.")
-          .font(.system(size: 9)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-        NotchActionButton(title: "Pick a pixel", symbol: "eyedropper.halffull", tint: skin.palette.accent,
-          action: tools.pickColour)
-      }.frame(maxWidth: 230, alignment: .leading)
+    VStack(spacing: 9) {
+      HStack(spacing: 8) {
+        ForEach(Array((tools.recentColours.isEmpty ? [tools.pickedColour] : tools.recentColours).prefix(4)), id: \.self) { hex in
+          Button { tools.copyColour(hex) } label: {
+            Circle().fill(Color(nsColor: NSColor(hex: hex) ?? .gray)).frame(width: 23, height: 23)
+              .overlay { Circle().strokeBorder(Color.primary.opacity(0.14)) }
+          }.buttonStyle(.plain).help("Copy " + hex).accessibilityLabel("Copy " + hex)
+        }
+        Spacer(minLength: 0)
+        Text(tools.pickedColour).font(.system(size: 18, weight: .medium, design: .monospaced))
+          .lineLimit(1).minimumScaleFactor(0.72)
+        Button { tools.copyColour(tools.pickedColour) } label: { Image(systemName: "doc.on.doc") }
+          .buttonStyle(.plain).help("Copy current colour").accessibilityLabel("Copy current colour")
+      }.padding(.vertical, 8)
+      NotchActionButton(title: "Pick a pixel", symbol: "eyedropper.halffull", tint: skin.palette.accent,
+        action: tools.pickColour)
     }.frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
   private var timerView: some View {
-    HStack(spacing: 18) {
-      ZStack {
-        Circle().stroke(Color.primary.opacity(0.08), lineWidth: 8)
-        Circle().trim(from: 0, to: timerProgress).stroke(skin.palette.accent,
-          style: StrokeStyle(lineWidth: 8, lineCap: .round)).rotationEffect(.degrees(-90))
-          .animation(.linear(duration: 0.25), value: tools.remaining)
-        Text(timerLabel).font(.system(size: 25, weight: .semibold, design: .rounded)).monospacedDigit()
-      }.frame(width: 126, height: 126)
-      VStack(alignment: .leading, spacing: 11) {
-        NotchSectionTitle(title: "Focus timer", symbol: "timer")
-        Stepper("\(tools.timerMinutes) minutes", value: $tools.timerMinutes, in: 1...180)
-          .font(.system(size: 11, weight: .medium)).frame(width: 170)
-        Toggle("Keep Mac awake", isOn: $tools.keepAwakeDuringTimer)
-          .toggleStyle(.checkbox).font(.system(size: 10))
-        HStack(spacing: 6) {
-          NotchActionButton(title: tools.timerEnd == nil ? "Start" : "Restart",
-            symbol: tools.timerEnd == nil ? "play.fill" : "arrow.clockwise", tint: skin.palette.accent,
-            action: tools.startTimer)
-          if tools.timerEnd != nil {
-            NotchActionButton(title: "Stop", symbol: "stop.fill", tint: .red, action: tools.stopTimer)
-          }
+    VStack(spacing: 7) {
+      Text(timerLabel).font(.system(size: 40, weight: .light).monospacedDigit())
+        .accessibilityLabel("Time remaining " + timerLabel)
+      HStack(spacing: 5) {
+        Button("−5") { tools.adjustTimer(by: -5) }.help("Subtract five minutes").accessibilityLabel("Subtract five minutes")
+        Button("+5") { tools.adjustTimer(by: 5) }.help("Add five minutes").accessibilityLabel("Add five minutes")
+        if tools.timerEnd != nil || tools.timerPaused {
+          Button(tools.timerPaused ? "Resume" : "Pause", action: tools.toggleTimerPause)
+          Button(action: tools.stopTimer) { Image(systemName: "stop.fill") }.help("Stop").accessibilityLabel("Stop")
+        } else {
+          Button("Start", action: tools.startTimer)
         }
-        Text("Reopen the Timer arrow to check your countdown.").font(.system(size: 8.5)).foregroundStyle(.secondary)
-      }
+      }.buttonStyle(.bordered).tint(skin.palette.accent)
+      Toggle("Keep Mac awake", isOn: $tools.keepAwakeDuringTimer).font(.system(size: 11))
     }.frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
-  private var timerProgress: CGFloat {
-    guard tools.timerEnd != nil else { return 0 }
-    return max(0, min(1, tools.remaining / TimeInterval(max(1, tools.timerMinutes) * 60)))
-  }
-
   private var timerLabel: String {
-    let value = tools.timerEnd == nil ? TimeInterval(tools.timerMinutes * 60) : tools.remaining
-    return String(format: "%02d:%02d", Int(value) / 60, Int(value) % 60)
+    let value = (tools.timerEnd == nil && !tools.timerPaused) ? TimeInterval(tools.timerMinutes * 60) : tools.remaining
+    let seconds = Int(ceil(value))
+    return String(format: "%02d:%02d", seconds / 60, seconds % 60)
   }
 
   private var notesView: some View {
@@ -1338,65 +1461,6 @@ struct NotchToolsView: View {
       Text("Your query opens in the default browser. Skippy never records it.").font(.system(size: 8.5)).foregroundStyle(.secondary)
       Spacer()
     }.frame(maxWidth: 390)
-  }
-
-  private var launcherView: some View {
-    VStack(spacing: 7) {
-      Picker("Launcher", selection: $showingMacros) {
-        Text("Apps").tag(false)
-        Text("Commands").tag(true)
-      }.pickerStyle(.segmented).labelsHidden()
-      if showingMacros { macroView }
-      else { appLauncherGrid }
-    }
-  }
-
-  private var appLauncherGrid: some View {
-    ScrollView(showsIndicators: false) {
-      HStack {
-        Text("PINNED").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
-        Spacer()
-        Button("Add app…") { tools.choosePinnedApp() }.buttonStyle(.borderless)
-      }.padding(.bottom, 4)
-      LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 9) {
-        ForEach(tools.pinnedApps) { app in
-          Button { tools.launch(app) } label: {
-            VStack(spacing: 5) {
-              Image(nsImage: tools.icon(for: app)).resizable().frame(width: 34, height: 34)
-              Text(app.name).font(.system(size: 8.5, weight: .medium)).lineLimit(1)
-            }.frame(maxWidth: .infinity)
-          }.buttonStyle(.plain).contextMenu { Button("Unpin") { tools.unpinApp(app) } }
-        }
-      }
-      if !tools.launchableApps.isEmpty {
-        Text("RUNNING").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
-          .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 7)
-      }
-      LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 9) {
-        ForEach(tools.launchableApps, id: \.processIdentifier) { app in
-          ZStack(alignment: .topTrailing) {
-            Button { tools.activate(app) } label: {
-              VStack(spacing: 5) {
-                Image(nsImage: app.icon ?? NSImage()).resizable().frame(width: 34, height: 34)
-                Text(app.localizedName ?? "App").font(.system(size: 8.5, weight: .medium)).lineLimit(1)
-              }
-              .frame(maxWidth: .infinity).padding(.vertical, 5)
-              .background(Color.primary.opacity(0.001), in: RoundedRectangle(cornerRadius: 11))
-            }.buttonStyle(.plain)
-              .contextMenu {
-                Button(tools.isPinned(app) ? "Remove from quiver" : "Pin to quiver") { tools.togglePinned(app) }
-                Button("Open") { tools.activate(app) }
-              }
-            Button { tools.togglePinned(app) } label: {
-              Image(systemName: tools.isPinned(app) ? "pin.fill" : "pin")
-                .font(.system(size: 10, weight: .semibold)).frame(width: 20, height: 20)
-                .background(.regularMaterial, in: Circle())
-            }.buttonStyle(.plain)
-              .accessibilityLabel((tools.isPinned(app) ? "Unpin " : "Pin ") + (app.localizedName ?? "application"))
-          }
-        }
-      }
-    }
   }
 
   private var macroView: some View {
@@ -1565,68 +1629,6 @@ struct NotchToolsView: View {
         }
       }
     }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-  }
-
-  private var calculatorResult: String? {
-    var parser = NotchCalculator(calculation)
-    guard let result = parser.evaluate() else { return nil }
-    return String(format: "%.10g", result)
-  }
-
-  private var calculatorView: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 8) {
-        HStack {
-          TextField("e.g. (24 + 8) / 2", text: $calculation)
-            .textFieldStyle(.roundedBorder).font(.system(size: 16, design: .monospaced))
-            .focused($calculationFocused)
-            .onSubmit { evaluateCalculation() }
-            .accessibilityLabel("Expression")
-          Button(scientific ? "Basic" : "Scientific") { scientific.toggle() }
-        }
-        HStack {
-          Text(calculatorResult ?? "—")
-            .font(.system(size: 22, weight: .semibold, design: .monospaced)).textSelection(.enabled)
-            .accessibilityLabel("Result " + (calculatorResult ?? "unavailable"))
-          Spacer()
-          NotchActionButton(title: "Copy", symbol: "doc.on.doc", tint: skin.palette.accent) {
-            guard let answer = calculatorResult else { return }
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(answer, forType: .string)
-          }.disabled(calculatorResult == nil)
-        }
-        let keys = ["AC", "(", ")", "÷", "7", "8", "9", "×", "4", "5", "6", "−",
-                    "1", "2", "3", "+", "0", ".", "%", "="]
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 5), count: 4), spacing: 4) {
-          if scientific {
-            ForEach(["sin(", "cos(", "tan(", "sqrt(", "log(", "ln(", "π", "^"], id: \.self) { key in
-              calculationButton(key)
-            }
-          }
-          ForEach(keys, id: \.self) { key in calculationButton(key) }
-        }
-      }.padding(7)
-    }
-    .onAppear { if !shelf.isArrowPreview { calculationFocused = true } }
-    .onChange(of: shelf.isArrowPreview) { _, preview in if !preview { calculationFocused = true } }
-    .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: scientific)
-  }
-
-  private func evaluateCalculation() {
-    var parser = NotchCalculator(calculation)
-    if let answer = parser.evaluate() { calculation = String(answer) }
-  }
-
-  private func calculationButton(_ key: String) -> some View {
-    Button {
-      switch key {
-      case "AC": calculation = ""
-      case "=": evaluateCalculation()
-      default: calculation += key
-      }
-    } label: {
-      Text(key).font(.system(.callout, design: .monospaced)).frame(maxWidth: .infinity).frame(height: 23)
-    }.buttonStyle(.bordered)
   }
 
   private var screenshotView: some View {
@@ -1927,90 +1929,108 @@ private struct ArrowFinder: View {
     }
   }
 
-  private var sections: [(String, [Entry])] {
-    let entries = NotchModule.allCases.filter { $0 != .dashboard }.map(Entry.tool) + tools.pinnedApps.map(Entry.app)
+  @ObservedObject private var skin = SkinStore.shared
+  @FocusState private var focused: String?
+  @State private var hovered: String?
+  private let columns = 4
+
+  private var matches: [Entry] {
+    let catalogue = NotchModule.allCases.filter { $0 != .dashboard }.map(Entry.tool) + tools.pinnedApps.map(Entry.app)
     let query = shelf.arrowQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-    if !query.isEmpty { return [("", entries.filter { $0.title.localizedCaseInsensitiveContains(query) })] }
-    let pins = quickPins.pins.compactMap { pin in entries.first { $0.id == pin.id } }
-    let groups: [(String, [NotchModule])] = [
-      ("Files", [.parcel, .convert, .compress, .extractArchive, .downloads, .recent]),
-      ("Capture and create", [.screenshot, .draw, .extract, .color, .qr]),
-      ("Everyday", [.clipboard, .notes, .calculator, .timer, .calendar, .music, .search, .launcher, .awake, .system])
-    ]
-    let regular = groups.map { name, modules in
-      (name, modules.filter { !quickPins.contains($0.id) }.map(Entry.tool))
+    if !query.isEmpty {
+      return catalogue.filter {
+        $0.title.localizedCaseInsensitiveContains(query)
+          || ($0.id == NotchModule.timer.id && "Timer".localizedCaseInsensitiveContains(query))
+          || ($0.id == NotchModule.launcher.id && "Apps".localizedCaseInsensitiveContains(query))
+      }
     }
-    return [("Quick Pins", pins)] + regular + [
-      ("Apps", tools.pinnedApps.filter { !quickPins.contains($0.id) }.map(Entry.app))
-    ]
+    let primaries: [NotchModule] = [.parcel, .color, .calculator, .timer, .screenshot, .draw, .launcher, .music,
+      .clipboard, .qr, .convert, .compress, .notes, .calendar, .search, .system]
+    let ids = quickPins.pins.map(\.id) + primaries.map(\.id)
+    var seen = Set<String>()
+    return (ids.compactMap { id in catalogue.first { $0.id == id } } + catalogue).filter { seen.insert($0.id).inserted }
   }
 
-  private var matches: [Entry] { sections.flatMap { $0.1 } }
-
   var body: some View {
-    VStack(spacing: 8) {
+    let selected = matches.first { $0.id == (hovered ?? focused) }
+      ?? (matches.indices.contains(shelf.arrowIndex) ? matches[shelf.arrowIndex] : nil)
+    VStack(spacing: 6) {
+      HStack(spacing: 7) {
+        Image(systemName: "square.grid.2x2").foregroundStyle(skin.skin.palette.accent)
+        Text("Drawer").font(.system(size: 13, weight: .semibold))
+        Spacer()
+        Button(action: shelf.cancelChoosingArrow) { Image(systemName: "xmark").font(.system(size: 11)) }
+          .buttonStyle(.plain).accessibilityLabel("Back to tool").help("Back to tool")
+      }.frame(height: 19)
       ArrowSearchField(query: $shelf.arrowQuery, focusRequest: shelf.arrowFocusRequest, move: { step in
-        shelf.arrowIndex = min(max(0, shelf.arrowIndex + step), max(0, matches.count - 1))
+        let stride = matches.count <= columns && abs(step) == columns ? step / columns : step
+        shelf.arrowIndex = min(max(0, shelf.arrowIndex + stride), max(0, matches.count - 1))
       }, submit: {
         if matches.indices.contains(shelf.arrowIndex) { select(matches[shelf.arrowIndex]) }
-      }, cancel: shelf.cancelChoosingArrow)
-      .frame(height: 29)
-      HStack {
-        Text("\(NotchModule.allCases.count - 1) tools").font(.caption.weight(.semibold))
-        Spacer()
-        Button(action: shelf.cancelChoosingArrow) { Image(systemName: "xmark").font(.caption) }
-          .buttonStyle(.plain).accessibilityLabel("Back to tool")
-      }.foregroundStyle(.secondary).padding(.horizontal, 3)
+      }, cancel: shelf.cancelChoosingArrow, columnCount: columns)
+      .frame(height: 27)
       if matches.isEmpty {
-        Text("No matching arrows").foregroundStyle(.secondary)
-        Spacer()
+        Text("No matching arrows").foregroundStyle(.secondary).frame(maxHeight: .infinity)
       } else {
         ScrollViewReader { scroll in
           ScrollView {
-            LazyVStack(spacing: 3) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 7), count: columns), spacing: 6) {
               ForEach(Array(matches.enumerated()), id: \.element.id) { position, entry in
-                if let heading = sections.first(where: { !$0.0.isEmpty && $0.1.first?.id == entry.id })?.0 {
-                  Text(heading).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 7).padding(.top, 4)
-                }
-                HStack(spacing: 4) {
-                  Button { select(entry) } label: {
-                    HStack {
-                      switch entry {
-                      case .tool(let module):
-                        Image(systemName: module.symbol).frame(width: 22)
-                      case .app(let app):
-                        Image(nsImage: tools.icon(for: app)).resizable().scaledToFit().frame(width: 22, height: 17)
-                      }
-                      Text(entry.title)
-                      Spacer()
-                      if case .tool(let module) = entry {
-                        Text(shortcuts.binding(for: .arrow(module)).displayName).font(.caption.monospaced())
-                          .foregroundStyle(.secondary)
-                      }
-                    }.padding(.leading, 8).frame(height: 30).contentShape(Rectangle())
-                  }.buttonStyle(.plain)
-                  let pinned = quickPins.contains(entry.id)
-                  Button { quickPins.toggle(entry.id) } label: {
-                    Image(systemName: pinned ? "pin.fill" : "pin").frame(width: 28, height: 28)
-                  }.buttonStyle(.borderless)
-                    .help(pinned ? "Remove Quick Pin" : "Add Quick Pin")
-                    .accessibilityLabel((pinned ? "Unpin " : "Pin ") + entry.title)
-                }.background(shelf.arrowIndex == position ? Ink.green.opacity(0.15) : .clear,
-                  in: RoundedRectangle(cornerRadius: 6)).id(entry.id)
+                tile(entry, highlighted: entry.id == selected?.id).id(entry.id)
               }
-            }
+            }.padding(2)
           }
           .onChange(of: shelf.arrowIndex, initial: true) { _, i in
             if matches.indices.contains(i) { scroll.scrollTo(matches[i].id) }
           }
         }
       }
+      HStack {
+        if let selected {
+          Text(selected.title).font(.system(size: 11, weight: .medium)).lineLimit(1)
+          Spacer()
+          if case .tool(let module) = selected {
+            Text(shortcuts.binding(for: .arrow(module)).displayName).font(.system(size: 11).monospaced())
+              .foregroundStyle(.secondary)
+          }
+          let pinned = quickPins.contains(selected.id)
+          Button { quickPins.toggle(selected.id) } label: {
+            Image(systemName: pinned ? "pin.fill" : "pin").frame(width: 22, height: 20)
+          }.buttonStyle(.plain).help(pinned ? "Remove Quick Pin" : "Add Quick Pin")
+            .accessibilityLabel((pinned ? "Unpin " : "Pin ") + selected.title)
+        } else { Spacer() }
+      }.frame(height: 20)
     }
     .onChange(of: shelf.arrowQuery) { _, _ in shelf.arrowIndex = 0 }
     .onChange(of: matches.map(\.id)) { _, ids in
       if !ids.indices.contains(shelf.arrowIndex) { shelf.arrowIndex = 0 }
     }
+  }
+
+  private func tile(_ entry: Entry, highlighted: Bool) -> some View {
+    let tint = skin.skin.palette.accent
+    return Button { select(entry) } label: {
+      Group {
+        switch entry {
+        case .tool(let module): Image(systemName: module.symbol).font(.system(size: 17, weight: .medium))
+        case .app(let app): Image(nsImage: tools.icon(for: app)).resizable().scaledToFit().frame(width: 23, height: 23)
+        }
+      }.foregroundStyle(highlighted ? tint : .primary)
+        .frame(maxWidth: .infinity).frame(height: 37)
+        .background(highlighted ? tint.opacity(0.19) : Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+          if highlighted { RoundedRectangle(cornerRadius: 8).strokeBorder(tint.opacity(0.54), lineWidth: 1) }
+        }
+        .contentShape(Rectangle())
+    }.buttonStyle(WorkspaceKeyStyle()).help(entry.title).accessibilityLabel(entry.title)
+      .focused($focused, equals: entry.id)
+      .onHover { inside in
+        if inside { hovered = entry.id }
+        else if hovered == entry.id { hovered = nil }
+      }
+      .contextMenu {
+        Button(quickPins.contains(entry.id) ? "Remove Quick Pin" : "Add Quick Pin") { quickPins.toggle(entry.id) }
+      }
   }
 
   private func select(_ entry: Entry) {
@@ -2027,6 +2047,7 @@ private struct ArrowSearchField: NSViewRepresentable {
   var move: (Int) -> Void
   var submit: () -> Void
   var cancel: () -> Void
+  let columnCount: Int
 
   final class Field: NSSearchField {
     override func viewDidMoveToWindow() {
@@ -2049,8 +2070,8 @@ private struct ArrowSearchField: NSViewRepresentable {
     }
     func control(_ control: NSControl, textView: NSTextView, doCommandBy command: Selector) -> Bool {
       switch command {
-      case #selector(NSResponder.moveDown(_:)): parent.move(1)
-      case #selector(NSResponder.moveUp(_:)): parent.move(-1)
+      case #selector(NSResponder.moveDown(_:)): parent.move(parent.columnCount)
+      case #selector(NSResponder.moveUp(_:)): parent.move(-parent.columnCount)
       case #selector(NSResponder.insertNewline(_:)): parent.submit()
       case #selector(NSResponder.cancelOperation(_:)): parent.cancel()
       default: return false

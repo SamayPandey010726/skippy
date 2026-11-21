@@ -129,6 +129,12 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   @Published private(set) var isArrowPreview = false
   var quiverAnchor: (() -> CGRect?)?
   var quiverPanelPointer: ((Bool) -> Void)?
+  var arrowGeometryChanged: (() -> Void)?
+  private(set) var arrowSource: CGRect?
+  private(set) var arrowSourcePin: String?
+  @Published private(set) var calculatorScientific = false
+  private(set) var calculatorExpandsRight = false
+  @Published private var quickLaunchCommands = false
   private var quiverPointerInside = false
   var presentationFrame: CGRect? { panel?.isVisible == true ? panel?.frame : nil }
   private var menuAnchor: CGRect?
@@ -249,18 +255,44 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     if expanded, let anchor = menuAnchor, quiverAnchor != nil {
       let bounds = NSScreen.screens.first { $0.frame.intersects(anchor) }?.visibleFrame ?? visibleScreen
       let dimensions: CGSize
-      if choosingArrow { dimensions = CGSize(width: 290, height: 306) }
+      if choosingArrow { dimensions = CGSize(width: 320, height: 294) }
+      else if toolsVisible && activeModule == .calculator {
+        dimensions = CGSize(width: isArrowPreview ? 268 : (calculatorScientific ? 409 : 268),
+                            height: isArrowPreview ? 125 : 346)
+      }
+      else if toolsVisible && activeModule == .launcher {
+        dimensions = quickLaunchCommands ? CGSize(width: 380, height: 322) : CGSize(width: 320, height: 154)
+      }
+      else if toolsVisible && activeModule == .color { dimensions = CGSize(width: 262, height: 145) }
+      else if toolsVisible && activeModule == .timer { dimensions = CGSize(width: 236, height: 176) }
+      else if toolsVisible && activeModule == .clipboard { dimensions = CGSize(width: 302, height: 214) }
       else if toolsVisible && activeModule == .music { dimensions = CGSize(width: 278, height: 143) }
       else if toolsVisible && activeModule == .parcel { dimensions = CGSize(width: 340, height: 310) }
       else if toolsVisible && [.convert, .compress, .extractArchive].contains(activeModule) {
         dimensions = CGSize(width: 372, height: 298)
       } else { dimensions = CGSize(width: 460, height: 340) }
       let size = CGSize(width: dimensions.width * interfaceScale, height: dimensions.height * interfaceScale)
-      let companion = toolsVisible && activeModule == .music && !choosingArrow && quiverFloating()
+      let companion = arrowSourcePin != nil && quiverFloating()
       let scoutCenter = quiverAnchor?()?.midX ?? anchor.midX
       let preferRight = anchor.midX >= scoutCenter
-      let frame = companion ? QuiverSurface.companionPanel(at: anchor, within: bounds, size: size, preferRight: preferRight)
-        : QuiverSurface.panel(at: anchor, within: bounds, size: size)
+      let frame: CGRect
+      if companion {
+        if toolsVisible && activeModule == .calculator && !choosingArrow {
+          let basic = QuiverSurface.companionPanel(at: anchor, within: bounds,
+            size: CGSize(width: 268 * interfaceScale, height: size.height), preferRight: preferRight)
+          let fitsLeft = basic.minX - (size.width - basic.width) >= bounds.minX
+          let fitsRight = basic.minX + size.width <= bounds.maxX
+          let preferredRight = basic.minX >= anchor.maxX
+          let growRight = preferredRight ? (fitsRight || !fitsLeft) : (!fitsLeft && fitsRight)
+          let x = growRight ? basic.minX : basic.maxX - size.width
+          frame = CGRect(x: min(max(x, bounds.minX), bounds.maxX - min(size.width, bounds.width)), y: basic.minY,
+            width: min(size.width, bounds.width), height: basic.height)
+        } else {
+          frame = QuiverSurface.companionPanel(at: anchor, within: bounds, size: size, preferRight: preferRight)
+        }
+      } else {
+        frame = QuiverSurface.panel(at: anchor, within: bounds, size: size)
+      }
       return CourierPlacement(frame: frame, courier: .zero, pane: CGRect(origin: .zero, size: frame.size), side: .bottom)
     }
     if parkedInMenuBar && !expanded {
@@ -434,7 +466,10 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       // A local click belongs to Parcel (the notch, a child tool, Settings, or a native menu).
       // Do not infer that it was outside from the global cursor position: keyboard and
       // Accessibility-driven activation can legitimately click without moving the pointer.
-      if event.window === self?.panel { self?.isArrowPreview = false }
+      if let self, event.window === self.panel, self.isArrowPreview {
+        self.isArrowPreview = false
+        self.fitContents()
+      }
       self?.recordActivity()
       return event
     }) { eventMonitors.append(monitor) }
@@ -491,6 +526,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     expanded = false
     visible = false
     panel?.orderOut(nil)
+    arrowGeometryChanged?()
   }
   func togglePopup() {
     expanded && isVisible ? dismiss() : summon()
@@ -519,7 +555,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     recordActivity()
     closeFilePreview()
     if !visible { summon() }
-    if activeModule != module { keepArrowOpen = false }
+    if activeModule != module { keepArrowOpen = false; quickLaunchCommands = false }
     activeModule = module
     panel?.title = "Skippy · " + module.title
     choosingArrow = false
@@ -582,6 +618,8 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     guard !moving, !receiving, store?.busy != true else { return }
     choosingArrow = false; isArrowPreview = false
     menuAnchor = quiverAnchor?()
+    arrowSource = menuAnchor
+    arrowSourcePin = nil
     parkedInMenuBar = true
     waitForPointerExit = false
     show(expand: true)
@@ -600,29 +638,37 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   }
   var quiverFloating: () -> Bool = { false }
 
-  func openArrow(_ module: NotchModule, at anchor: CGRect?) {
-    if visible && expanded && activeModule == module && toolsVisible && !isArrowPreview && !choosingArrow {
+  func openArrow(_ module: NotchModule, at anchor: CGRect?, source: CGRect? = nil, pin: String? = nil) {
+    if visible && expanded && activeModule == module && toolsVisible && !isArrowPreview && !choosingArrow
+      && (pin == nil || pin == arrowSourcePin) {
       focusForKeyboard()
       return
     }
-    presentArrow(module, at: anchor, preview: false)
+    let preserveAnchor = visible && toolsVisible && module == activeModule && anchor == nil
+    presentArrow(module, at: preserveAnchor ? menuAnchor : anchor, source: preserveAnchor ? arrowSource : source,
+                 pin: preserveAnchor ? arrowSourcePin : pin, preview: false)
     focusForKeyboard()
   }
 
-  func previewArrow(_ module: NotchModule, at anchor: CGRect) {
+  func previewArrow(_ module: NotchModule, at anchor: CGRect, source: CGRect? = nil, pin: String? = nil) {
     guard !isVisible || !expanded || isArrowPreview else { return }
-    presentArrow(module, at: anchor, preview: true)
+    presentArrow(module, at: anchor, source: source, pin: pin, preview: true)
   }
 
-  private func presentArrow(_ module: NotchModule, at anchor: CGRect?, preview: Bool) {
+  private func presentArrow(_ module: NotchModule, at anchor: CGRect?, source: CGRect?, pin: String?, preview: Bool) {
     guard !moving, !receiving, store?.busy != true else { return }
     let wasVisible = visible
-    if preview { isArrowPreview = true }
+    let promotingCalculator = module == .calculator && wasVisible && activeModule == module && isArrowPreview && !preview
+    let oldFrame = panel?.frame
     menuAnchor = anchor ?? quiverAnchor?()
+    arrowSource = source ?? anchor ?? quiverAnchor?()
+    arrowSourcePin = pin
     parkedInMenuBar = true
+    isArrowPreview = preview
     if !wasVisible { show(expand: true) }
     showModule(module)
     isArrowPreview = preview
+    if promotingCalculator, let oldFrame { animateArrowResize(from: oldFrame) }
     if !wasVisible, let panel, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
       let destination = panel.frame
       let toward: CGFloat = menuAnchor.map { $0.midX < destination.midX ? -1.0 : 1.0 } ?? 1
@@ -635,6 +681,45 @@ private final class CourierHostingView: NSHostingView<AnyView> {
         panel.animator().alphaValue = 1
       }
     }
+    arrowGeometryChanged?()
+  }
+
+  func setQuickLaunchCommands(_ shown: Bool) {
+    quickLaunchCommands = shown
+    if let frame = panel?.frame { animateArrowResize(from: frame) }
+  }
+
+  func toggleCalculatorMode() {
+    guard let panel else { return }
+    let before = panel.frame
+    calculatorScientific.toggle()
+    if calculatorScientific {
+      let after = arrangement.frame
+      calculatorExpandsRight = abs(after.minX - before.minX) <= abs(after.maxX - before.maxX)
+    }
+    animateArrowResize(from: before)
+  }
+
+  private func animateArrowResize(from before: CGRect) {
+    guard let panel else { return }
+    let target = arrangement.frame
+    guard before != target, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+      fitContents()
+      return
+    }
+    panel.setFrame(before, display: false)
+    NSAnimationContext.runAnimationGroup { context in
+      context.duration = 0.20
+      context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+      panel.animator().setFrame(target, display: true)
+    }
+  }
+
+  func movePinAnchor(_ id: String, to frame: CGRect) {
+    guard arrowSourcePin == id, visible else { return }
+    menuAnchor = frame
+    arrowSource = frame
+    fitContents()
   }
 
   func toggleArrowRetention() {
@@ -654,6 +739,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     choosingArrow = true
     arrowFocusRequest += 1
     fitContents()
+    arrowGeometryChanged?()
   }
   func cancelChoosingArrow() { choosingArrow = false; fitContents(); focusForKeyboard() }
   func focusForKeyboard() {
@@ -1035,7 +1121,12 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     } catch { report(error.localizedDescription) }
   }
   private func handleEditorShortcut(_ event: NSEvent) -> Bool {
-    guard event.window === panel, let editor = panel?.firstResponder as? NSTextView,
+    guard event.window === panel else { return false }
+    if event.keyCode == 53, activeModule == .calculator && toolsVisible && !choosingArrow {
+      dismiss()
+      return true
+    }
+    guard let editor = panel?.firstResponder as? NSTextView,
           event.modifierFlags.intersection([.command, .shift, .control, .option]) == .command else { return false }
     switch event.charactersIgnoringModifiers?.lowercased() {
     case "a": editor.selectAll(nil)
@@ -1531,6 +1622,8 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       !DragMonitor.shared.isSending else { return }
     closeFilePreview()
     isArrowPreview = false; choosingArrow = false; keepArrowOpen = false
+    arrowSource = nil; arrowSourcePin = nil
+    arrowGeometryChanged?()
     if quiverPointerInside { quiverPointerInside = false; quiverPanelPointer?(false) }
     awaitingSummonedPointerEntry = false
     hideClipboard()
@@ -1773,6 +1866,11 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     host.keyHandler = { [weak self] event in self?.handleCourierKey(event) == true }
     host.sizingOptions = []
     panel.contentView = host
+    for notification in [NSWindow.didMoveNotification, NSWindow.didResizeNotification] {
+      observers.append(NotificationCenter.default.addObserver(forName: notification, object: panel, queue: .main) { [weak self] _ in
+        MainActor.assumeIsolated { self?.arrowGeometryChanged?() }
+      })
+    }
     self.host = host
     self.panel = panel
     for (name, active) in [(NSMenu.didBeginTrackingNotification, true), (NSMenu.didEndTrackingNotification, false)] {
@@ -1851,7 +1949,7 @@ struct DropPopupView: View {
         .background {
           if showsPaneSurface {
             ZStack {
-              if reduceTransparency || solidSurface { palette.paper }
+              if reduceTransparency || solidSurface || shelf.toolsVisible { palette.paper }
               else { CourierGlass(); palette.paper.opacity(activeSkin == .night ? 0.58 : 0.35) }
             }.clipShape(ParcelNotchShape(attachedToMenuBar: shelf.parkedInMenuBar && shelf.quiverAnchor == nil))
           }

@@ -5,6 +5,7 @@ import CoreGraphics
 
 let pid = Int(CommandLine.arguments[1])!
 let filming = ProcessInfo.processInfo.environment["SKIPPY_FEATURE_FILMS"] == "1"
+let continuous = ProcessInfo.processInfo.environment["SKIPPY_FILM_BATCH"] == "connected"
 func beat(_ seconds: Double) {
   if filming { Thread.sleep(forTimeInterval: seconds) }
 }
@@ -39,7 +40,9 @@ func panels() -> [[String: Any]] {
     guard info[kCGWindowOwnerPID as String] as? Int == pid,
           let bounds = info[kCGWindowBounds as String] as? NSDictionary,
           let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary) else { return false }
-    return rect.width >= 260 && rect.height >= 135 && (info[kCGWindowName as String] as? String != "Parcels File Shelf")
+    let name = info[kCGWindowName as String] as? String ?? ""
+    return name.hasPrefix("Skippy · ") || name == "Skippy Settings"
+      || (rect.width >= 260 && rect.height >= 135 && !["Parcels File Shelf", "Skippy connectors"].contains(name))
   }
 }
 // The source is a live region of the macOS display. Capture begins before the finder opens.
@@ -49,7 +52,7 @@ final class FeatureFilm {
   let directory: URL
   let start: Date
   let region: CGRect
-  init(_ title: String, about panel: CGRect, desktop: Bool = false) throws {
+  init(_ title: String, about panel: CGRect, desktop: Bool = false, fullDisplay: Bool = false) throws {
     directory = URL(fileURLWithPath: "build/feature-captures", isDirectory: true)
       .appendingPathComponent(title, isDirectory: true)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -57,11 +60,11 @@ final class FeatureFilm {
     let width = min(desktop ? screen.width : max(880, (panel.height + 32) * 16 / 9),
       screen.width, screen.height * 16 / 9)
     let height = width * 9 / 16
-    region = CGRect(x: desktop ? (screen.width - width) / 2 : min(max(0, panel.midX - width / 2), screen.width - width),
+    region = fullDisplay ? screen : CGRect(x: desktop ? (screen.width - width) / 2 : min(max(0, panel.midX - width / 2), screen.width - width),
                     y: desktop ? 0 : min(max(0, panel.midY - height / 2 - 24), screen.height - height),
                     width: width, height: height)
     recorder.executableURL = URL(fileURLWithPath: "build/display-recorder")
-    recorder.arguments = [directory.path] + [region.minX, region.minY, region.width, region.height].map { String(Double($0)) } + ["HD"]
+    recorder.arguments = [directory.path] + [region.minX, region.minY, region.width, region.height].map { String(Double($0)) } + (fullDisplay ? [] : ["HD"])
     recorder.standardInput = signal
     try recorder.run()
     let ready = directory.appendingPathComponent("capture.ready").path
@@ -80,13 +83,13 @@ final class FeatureFilm {
 }
 var film: FeatureFilm?
 func startFilm(_ title: String, desktop: Bool = false) throws {
-  guard filming else { return }
+  guard filming, !continuous else { return }
   guard let b = panels().first?[kCGWindowBounds as String] as? NSDictionary,
         let pane = CGRect(dictionaryRepresentation: b as CFDictionary) else { throw CocoaError(.fileNoSuchFile) }
   film = try FeatureFilm(title, about: pane, desktop: desktop)
   beat(0.6)
 }
-func finishFilm() throws { try film?.finish(); film = nil }
+func finishFilm() throws { if !continuous { try film?.finish(); film = nil } }
 func demonstrationPoint(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
   guard let region = film?.region else { return CGPoint(x: x, y: y) }
   return CGPoint(x: region.minX + x, y: region.minY + y)
@@ -211,9 +214,11 @@ func verifyContent(_ name: String) {
     check("sample actual screen pixel into pasteboard") {
       board.string(forType: .string)?.range(of: "^#[0-9A-F]{6}$", options: .regularExpression) != nil
     }
-  case "Timer":
+  case "Temporal":
     check("start timer") { press("Start") }
-    beat(3)
+    beat(1.5)
+    check("pause active countdown") { press("Pause") }
+    check("resume countdown") { press("Resume") }
     check("stop active countdown") { press("Stop") }
     check("timer returns to start") { control(kAXButtonRole, "Start") != nil }
   case "Notes":
@@ -245,11 +250,11 @@ func verifyContent(_ name: String) {
       print("Search handler:", browserID ?? "unknown", "foreground:", NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "unknown")
       returnFromExternalApp()
     }
-  case "Apps":
-    check("list running Finder") { contains("Finder") }
-    check("pin Finder") { press("Pin Finder") }
-    check("unpin Finder") { press("Unpin Finder") }
-    check("pin state restored") { control(kAXButtonRole, "Pin Finder") != nil }
+  case "Quick Launch":
+    check("the real app icon tiles include Safari and Mail") {
+      control(kAXButtonRole, "Safari") != nil && control(kAXButtonRole, "Mail") != nil
+    }
+    check("Quick Launch offers the macOS Applications picker") { control(kAXButtonRole, "Add Mac application") != nil }
   case "Music":
     check("local playback picker available") { control(kAXButtonRole, "Play a local file") != nil }
     if let button = control(kAXButtonRole, "Play a local file"), let point = center(of: button) {
@@ -428,13 +433,18 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   key(kVK_ANSI_S, flags: [.maskCommand, .maskShift])
   check("Command-Shift-S expands Scout from the desktop") { (windowFrame("Skippy quiver")?.width ?? 0) >= 125 }
   key(kVK_Escape)
-  check("Escape collapses Scout") { (windowFrame("Skippy quiver")?.width ?? 0) < 45 }
+  check("Escape collapses Scout") { (windowFrame("Skippy quiver")?.width ?? 0) <= 61 }
 
   mouse(.mouseMoved, CGPoint(x: 14, y: 180))
+  if continuous {
+    film = try FeatureFilm("Connected workspace", about: .zero, fullDisplay: true)
+    beat(1.0)
+  }
   guard let scout = windowFrame("Skippy quiver") else { throw CocoaError(.fileNoSuchFile) }
   mouse(.mouseMoved, CGPoint(x: scout.midX, y: scout.midY))
-  check("Music appears on hover as a separate pin") { windowFrame("Skippy pin · Music") != nil }
+  check("Music appears on hover beside Scout") { windowFrame("Skippy pin · Music") != nil }
   guard let music = windowFrame("Skippy pin · Music") else { throw CocoaError(.fileNoSuchFile) }
+  check("Scout's connector layer is visible") { windowFrame("Skippy connectors") != nil }
   mouse(.mouseMoved, CGPoint(x: music.midX, y: music.midY))
   check("Music opens a compact companion card beside its satellite") {
     guard let card = windowFrame("Skippy · Music") else { return false }
@@ -443,7 +453,7 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   try startFilm("Music Quick Pin", desktop: true)
   let destination = CGPoint(x: scout.midX + 61, y: scout.midY + 61)
   stroke(from: CGPoint(x: music.midX, y: music.midY), to: destination)
-  check("Music pin settles into its new slot") {
+  check("Music pin follows the drag and stays where released") {
     guard let moved = windowFrame("Skippy pin · Music") else { return false }
     return abs(moved.midX - destination.x) < 12 && abs(moved.midY - destination.y) < 12
   }
@@ -466,7 +476,7 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   mouse(.mouseMoved, CGPoint(x: pin.midX, y: pin.midY))
   check("Calculator preview clears Scout and the orbit") {
     guard let calculator = windowFrame("Skippy · Calculator") else { return false }
-    return !calculator.intersects(scout) && !calculator.intersects(pin)
+    return !calculator.intersects(scout) && !calculator.intersects(pin) && calculator.height < 137
   }
   try startFilm("Calculator hover, click and keyboard")
   mouse(.mouseMoved, CGPoint(x: 15, y: 180))
@@ -480,6 +490,13 @@ func captureWorkspaceFilms(using fixture: URL) throws {
     guard let focused = attribute(application, kAXFocusedUIElementAttribute),
       CFGetTypeID(focused) == AXUIElementGetTypeID() else { return false }
     return labels(focused as! AXUIElement).contains("Expression") || labels(focused as! AXUIElement).contains("e.g. (24 + 8) / 2")
+  }
+  enter("420*1.19"); key(kVK_Return)
+  check("keyboard calculation shows the result") { contains("Result 499.8") || contains("499.8") }
+  check("scientific controls expand the same Calculator") { press("Scientific mode") }
+  check("scientific mode keeps Calculator and its pin separate") {
+    guard let card = windowFrame("Skippy · Calculator") else { return false }
+    return card.width > 380 && !card.intersects(pin)
   }
   enter("sqrt(81)+2^3")
   check("copy result from scientific expression") { press("Copy") }
@@ -497,6 +514,9 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   check("display all placements") { contains("Floating") && contains("Notch") && contains("Dock") && contains("Menu bar") }
   check("open Pins settings") { press("Pins") }
   check("show pinned Calculator") { contains("Calculator") }
+  check("connector visibility is configurable") {
+    control(kAXCheckBoxRole, "Show connector lines") != nil || control("AXSwitch", "Show connector lines") != nil
+  }
   check("open Shortcuts settings") { press("Shortcuts") }
   check("show editable launcher hotkey") { contains("Open Skippy shortcut") }
   try finishFilm()
@@ -597,7 +617,7 @@ func captureWorkspaceFilms(using fixture: URL) throws {
 
   try startFilm("Scout attaches to the right edge", desktop: true)
   mouse(.mouseMoved, CGPoint(x: 15, y: 180))
-  check("floating Scout retracts before dragging") { (windowFrame("Skippy quiver")?.width ?? 200) < 45 }
+  check("floating Scout retracts before dragging") { (windowFrame("Skippy quiver")?.width ?? 200) <= 61 }
   guard let badge = windowFrame("Skippy quiver") else { throw CocoaError(.fileNoSuchFile) }
   let edge = CGPoint(x: bounds.maxX - 4, y: bounds.midY)
   stroke(from: CGPoint(x: badge.midX, y: badge.midY), to: edge)
@@ -608,6 +628,147 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   check("the edge launcher opens its vertical strip on landing") { (windowFrame("Skippy quiver")?.height ?? 0) > 90 }
   beat(1.5)
   try finishFilm()
+
+  if continuous {
+    try exerciseConnectedPlacements(bounds: bounds, expectedMusicOffset: CGPoint(x: destination.x - scout.midX, y: destination.y - scout.midY),
+                                    backdrop: backdrop)
+    try film?.finish()
+    film = nil
+  }
+}
+
+private func exerciseConnectedPlacements(bounds: CGRect, expectedMusicOffset: CGPoint, backdrop: NSWindow?) throws {
+  let screen = NSScreen.main!
+  let dock = CGRect(x: screen.visibleFrame.minX, y: screen.frame.maxY - screen.visibleFrame.maxY,
+                    width: screen.visibleFrame.width, height: screen.visibleFrame.height)
+  let away = CGPoint(x: bounds.midX, y: bounds.midY + 85)
+  func dragScout(to point: CGPoint) throws {
+    mouse(.mouseMoved, away)
+    check("Scout collapses to its drag grip") {
+      if let frame = windowFrame("Skippy quiver") { return frame.width <= 61 && frame.height <= 61 }
+      return false
+    }
+    guard let start = windowFrame("Skippy quiver") else { throw CocoaError(.fileNoSuchFile) }
+    stroke(from: CGPoint(x: start.midX, y: start.midY), to: point)
+    beat(0.45)
+  }
+
+  key(kVK_Escape)
+  guard let strip = windowFrame("Skippy quiver") else { throw CocoaError(.fileNoSuchFile) }
+  let scout = CGPoint(x: strip.midX, y: bounds.midY)
+  mouse(.mouseMoved, scout)
+  beat(0.40)
+  mouse(.leftMouseDown, scout); mouse(.leftMouseUp, scout)
+  check("Drawer opens inward from the right rail") {
+    control(kAXTextFieldRole, "Find an arrow") != nil && (windowFrame("Skippy · Skippy")?.maxX ?? bounds.maxX) < strip.minX + 2
+  }
+  typeText("file shelf"); key(kVK_Return)
+  check("Drawer launches the File Shelf") { windowFrame("Skippy · File Shelf") != nil }
+  beat(0.7); key(kVK_Escape)
+
+  try dragScout(to: CGPoint(x: dock.minX + 4, y: bounds.midY - 45))
+  check("left rail is attached to the display edge") { (windowFrame("Skippy quiver")?.minX ?? 500) <= dock.minX + 10 }
+  useArrow(kVK_ANSI_I, "Pick colour")
+  verifyContent("Pick colour")
+  key(kVK_Escape)
+
+  try dragScout(to: CGPoint(x: bounds.midX, y: dock.minY + 4))
+  check("notch placement sits under the menu bar") {
+    guard let frame = windowFrame("Skippy quiver") else { return false }
+    return abs(frame.midX - bounds.midX) <= 125 && abs(frame.minY - dock.minY) <= 55
+  }
+  useArrow(kVK_ANSI_T, "Temporal")
+  verifyContent("Temporal")
+  key(kVK_Escape)
+
+  try dragScout(to: CGPoint(x: bounds.midX - 170, y: dock.minY + 5))
+  check("top attachment remains below the menu bar") {
+    guard let frame = windowFrame("Skippy quiver") else { return false }
+    return frame.minY <= dock.minY + 10 && frame.midX < bounds.midX - 80
+  }
+  useArrow(kVK_ANSI_Q, "QR tools")
+  verifyContent("QR tools")
+  key(kVK_Escape)
+
+  try dragScout(to: CGPoint(x: dock.midX - 150, y: dock.maxY - 4))
+  check("bottom attachment keeps Scout above the Dock") {
+    guard let frame = windowFrame("Skippy quiver") else { return false }
+    return abs(frame.maxY - dock.maxY) <= 8
+  }
+  useArrow(kVK_ANSI_C, "Clipboard")
+  verifyContent("Clipboard")
+  key(kVK_Escape)
+
+  try dragScout(to: CGPoint(x: bounds.maxX - 40, y: dock.minY + 4))
+  check("Scout hands off to the real menu bar item") {
+    attribute(application, kAXExtrasMenuBarAttribute) != nil && windowFrame("Skippy quiver") == nil
+  }
+  useArrow(kVK_ANSI_A, "Quick Launch")
+  verifyContent("Quick Launch")
+  backdrop?.orderOut(nil)
+  guard let add = control(kAXButtonRole, "Add Mac application"), let point = center(of: add) else { throw CocoaError(.fileNoSuchFile) }
+  mouse(.mouseMoved, point); mouse(.leftMouseDown, point); mouse(.leftMouseUp, point)
+  check("the native picker is open") { control(kAXButtonRole, "Choose") != nil }
+  key(kVK_ANSI_G, flags: [.maskCommand, .maskShift])
+  Thread.sleep(forTimeInterval: 0.35)
+  let pasteboard = NSPasteboard.general
+  pasteboard.clearContents(); pasteboard.setString("/System/Applications/TextEdit.app", forType: .string)
+  key(kVK_ANSI_V, flags: .maskCommand)
+  beat(0.55); key(kVK_Return)
+  check("select TextEdit in the Applications picker") {
+    guard let choose = control(kAXButtonRole, "Choose"), attribute(choose, kAXEnabledAttribute) as? Bool == true else { return false }
+    return AXUIElementPerformAction(choose, kAXPressAction as CFString) == .success
+  }
+  check("the chosen app appears as an icon") { control(kAXButtonRole, "TextEdit") != nil }
+  check("launch the chosen app") { press("TextEdit") }
+  check("TextEdit becomes active and Quick Launch closes") {
+    NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.TextEdit" && windowFrame("Skippy · Quick Launch") == nil
+  }
+  beat(0.65)
+  backdrop?.orderFrontRegardless()
+
+  let extras = attribute(application, kAXExtrasMenuBarAttribute)
+  let status = extras.flatMap { attribute($0 as! AXUIElement, kAXChildrenAttribute) as? [AXUIElement] }?.first
+  guard let status, let statusPoint = center(of: status) else { throw CocoaError(.fileNoSuchFile) }
+  stroke(from: statusPoint, to: CGPoint(x: bounds.midX, y: bounds.maxY - 4))
+  check("Scout switches to the real Dock tile", attempts: 80) {
+    NSRunningApplication(processIdentifier: pid_t(pid))?.activationPolicy == .regular
+  }
+  // The registered Dock tile moves as other apps activate. Find its real Accessibility frame.
+  let tile: CGPoint? = {
+    guard let dock = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock").first else { return nil }
+    var queue = [AXUIElementCreateApplication(dock.processIdentifier)]
+    var index = 0
+    while index < queue.count && index < 320 {
+      let node = queue[index]; index += 1
+      if let url = attribute(node, kAXURLAttribute) as? URL, url.lastPathComponent == "Skippy.app" { return center(of: node) }
+      queue += attribute(node, kAXChildrenAttribute) as? [AXUIElement] ?? []
+    }
+    return nil
+  }()
+  guard let tile else { throw CocoaError(.fileNoSuchFile) }
+  mouse(.mouseMoved, tile)
+  check("the Dock tile reveals the attached strip") { (windowFrame("Skippy quiver")?.width ?? 0) > 110 }
+  useArrow(kVK_ANSI_M, "Music")
+  verifyContent("Music")
+  key(kVK_Escape)
+  mouse(.mouseMoved, tile)
+  check("the Dock strip can be detached again") { (windowFrame("Skippy quiver")?.width ?? 0) > 110 }
+  guard let dockStrip = windowFrame("Skippy quiver") else { throw CocoaError(.fileNoSuchFile) }
+  let markX = tile.x <= bounds.midX ? dockStrip.minX + 15 : dockStrip.maxX - 15
+  stroke(from: CGPoint(x: markX, y: dockStrip.midY), to: CGPoint(x: bounds.midX + 100, y: bounds.midY - 65))
+  check("Scout returns to floating") {
+    guard let frame = windowFrame("Skippy quiver") else { return false }
+    return frame.minX > 80 && abs(frame.width - frame.height) < 2
+  }
+  guard let floating = windowFrame("Skippy quiver") else { throw CocoaError(.fileNoSuchFile) }
+  mouse(.mouseMoved, CGPoint(x: floating.midX, y: floating.midY))
+  check("the floating Music offset is restored") {
+    guard let restored = windowFrame("Skippy pin · Music") else { return false }
+    return abs((restored.midX - floating.midX) - expectedMusicOffset.x) < 13
+      && abs((restored.midY - floating.midY) - expectedMusicOffset.y) < 13
+  }
+  beat(2)
 }
 
 let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
@@ -616,7 +777,7 @@ let fixture = downloads.appendingPathComponent("Skippy QA.txt")
 try Data("Skippy test fixture".utf8).write(to: fixture, options: .withoutOverwriting)
 defer { try? FileManager.default.removeItem(at: fixture) }
 check("Accessibility can exercise UI controls") { AXIsProcessTrusted() }
-if ProcessInfo.processInfo.environment["SKIPPY_FILM_BATCH"] == "workspace" {
+if continuous || ProcessInfo.processInfo.environment["SKIPPY_FILM_BATCH"] == "workspace" {
   try captureWorkspaceFilms(using: fixture)
   exit(0)
 }
@@ -659,8 +820,8 @@ key(kVK_Escape)
 check("Escape cancels search and preserves the current tool") {
   panels().contains { $0[kCGWindowName as String] as? String == "Skippy · Calculator" } && !contains("No matching arrows")
 }
-let arrows = ["File Shelf", "Clipboard", "Extract text", "Pick colour", "Timer", "Notes", "QR tools", "Search",
-              "Apps", "Music", "Downloads", "Stay awake", "Recent actions", "Mac", "Calendar", "Calculator", "Screenshots", "Draw on screen"]
+let arrows = ["File Shelf", "Clipboard", "Extract text", "Pick colour", "Temporal", "Notes", "QR tools", "Search",
+              "Quick Launch", "Music", "Downloads", "Stay awake", "Recent actions", "Mac", "Calendar", "Calculator", "Screenshots", "Draw on screen"]
 let batch = ProcessInfo.processInfo.environment["SKIPPY_FILM_BATCH"] ?? "all"
 let selected: [String]
 switch batch {

@@ -63,6 +63,7 @@ struct NotchCalculator {
     while index < input.count, input[index].isLetter { index += 1 }
     if index > start {
       let function = String(input[start..<index]).lowercased()
+      if function == "e", index == input.count || input[index] != "(" { return M_E }
       guard consume("("), let value = sum(), consume(")") else { return nil }
       switch function {
       case "sin": return sin(value)
@@ -71,6 +72,9 @@ struct NotchCalculator {
       case "sqrt": return sqrt(value)
       case "log": return log10(value)
       case "ln": return log(value)
+      case "fact":
+        guard value >= 0, value <= 170, value == value.rounded() else { return nil }
+        return (1..<(Int(value) + 1)).reduce(1.0) { $0 * Double($1) }
       default: return nil
       }
     }
