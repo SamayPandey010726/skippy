@@ -57,7 +57,10 @@ struct CaptureComposition {
 
   func capture(_ mode: WorkspaceCaptureMode, ink: CGImage? = nil, on screen: NSScreen? = nil,
                completion: @escaping (Result<[CGImage], Error>) -> Void) {
-    guard !working, panel == nil else { return }
+    guard !working, panel == nil else {
+      completion(.failure(CaptureError.busy))
+      return
+    }
     guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
       completion(.failure(CaptureError.permission))
       return
@@ -69,11 +72,13 @@ struct CaptureComposition {
     }
     working = true
     let restore = DropPopupController.shared.beginScreenSelection()
+    let restoreQuiver = SkippyQuiver.shared.suspendForCapture()
     let finish: (Result<[CGImage], Error>) -> Void = { result in
       self.panel?.orderOut(nil)
       self.panel = nil
       self.working = false
       restore()
+      restoreQuiver()
       completion(result)
     }
     Task {
@@ -162,12 +167,13 @@ struct CaptureComposition {
   }
 
   private enum CaptureError: LocalizedError {
-    case permission, display, window
+    case permission, display, window, busy
     var errorDescription: String? {
       switch self {
       case .permission: "Allow Screen Recording for Skippy in System Settings, then retry."
       case .display: "The selected display is unavailable."
       case .window: "No other app windows are available."
+      case .busy: "Finish the current capture first."
       }
     }
   }

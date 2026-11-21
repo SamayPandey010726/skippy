@@ -323,12 +323,164 @@ func verifyContent(_ name: String) {
   }
 }
 
+func windowFrame(_ title: String) -> CGRect? {
+  let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
+  return windows.first { $0[kCGWindowOwnerPID as String] as? Int == pid && $0[kCGWindowName as String] as? String == title }
+    .flatMap { $0[kCGWindowBounds as String] as? NSDictionary }
+    .flatMap { CGRect(dictionaryRepresentation: $0 as CFDictionary) }
+}
+
+func chooseMenu(_ title: String, item: String) -> Bool {
+  guard let button = descendants().first(where: { labels($0).contains(title) && ["AXMenuButton", "AXPopUpButton", "AXButton"]
+    .contains(attribute($0, kAXRoleAttribute) as? String ?? "") }),
+    let position = center(of: button) else { return false }
+  mouse(.mouseMoved, position)
+  mouse(.leftMouseDown, position)
+  mouse(.leftMouseUp, position)
+  for _ in 0..<25 {
+    if let entry = control(kAXMenuItemRole, item) {
+      return AXUIElementPerformAction(entry, kAXPressAction as CFString) == .success
+    }
+    Thread.sleep(forTimeInterval: 0.08)
+  }
+  return false
+}
+
+func useArrow(_ code: Int, _ name: String) {
+  key(code, flags: [.maskControl, .maskAlternate, .maskCommand])
+  check("global shortcut opens " + name) { windowFrame("Skippy · " + name) != nil }
+}
+
+func captureWorkspaceFilms(using fixture: URL) throws {
+  let board = NSPasteboard.general
+  if !panels().isEmpty {
+    NSRunningApplication(processIdentifier: pid_t(pid))?.activate(options: [.activateIgnoringOtherApps])
+    key(kVK_Escape)
+  }
+  key(kVK_ANSI_S, flags: [.maskCommand, .maskShift])
+  check("Command-Shift-S expands Scout from the desktop") { (windowFrame("Skippy quiver")?.width ?? 0) >= 125 }
+  key(kVK_Escape)
+  check("Escape collapses Scout") { (windowFrame("Skippy quiver")?.width ?? 0) < 45 }
+
+  guard let pin = windowFrame("Skippy pin · Calculator") else {
+    throw CocoaError(.fileNoSuchFile)
+  }
+  mouse(.mouseMoved, CGPoint(x: pin.midX, y: pin.midY))
+  check("hovering the Calculator pin opens a preview") { windowFrame("Skippy · Calculator") != nil }
+  try startFilm("Calculator hover, click and keyboard")
+  mouse(.mouseMoved, CGPoint(x: 15, y: 180))
+  check("passive calculator preview closes when the pointer leaves") { windowFrame("Skippy · Calculator") == nil }
+  let point = CGPoint(x: pin.midX, y: pin.midY)
+  mouse(.mouseMoved, point)
+  check("hovering the pin reopens the preview") { windowFrame("Skippy · Calculator") != nil }
+  beat(1)
+  mouse(.leftMouseDown, point); mouse(.leftMouseUp, point)
+  check("calculator focuses its expression on click") {
+    guard let focused = attribute(application, kAXFocusedUIElementAttribute),
+      CFGetTypeID(focused) == AXUIElementGetTypeID() else { return false }
+    return labels(focused as! AXUIElement).contains("Expression") || labels(focused as! AXUIElement).contains("e.g. (24 + 8) / 2")
+  }
+  enter("sqrt(81)+2^3")
+  check("copy result from scientific expression") { press("Copy") }
+  check("scientific expression produces 17") { board.string(forType: .string) == "17" }
+  mouse(.mouseMoved, CGPoint(x: 15, y: 180))
+  beat(3)
+  check("the clicked calculator remains open") { windowFrame("Skippy · Calculator") != nil }
+  try finishFilm()
+
+  key(kVK_ANSI_S, flags: .maskCommand)
+  check("open standalone Skippy Settings") { windowFrame("Skippy Settings") != nil }
+  try startFilm("Workspace Settings")
+  check("open Placement settings") { press("Placement") }
+  check("display all placements") { contains("Floating") && contains("Notch") && contains("Dock") && contains("Menu bar") }
+  check("open Pins settings") { press("Pins") }
+  check("show pinned Calculator") { contains("Calculator") }
+  check("open Shortcuts settings") { press("Shortcuts") }
+  check("show editable launcher hotkey") { contains("Open Skippy shortcut") }
+  try finishFilm()
+  key(kVK_ANSI_W, flags: .maskCommand)
+  check("Settings closes") { windowFrame("Skippy Settings") == nil }
+
+  useArrow(kVK_ANSI_V, "Convert files")
+  try startFilm("Convert and compress in Parcels")
+  board.clearContents()
+  _ = board.writeObjects([fixture as NSURL])
+  check("paste text fixture into the converter") { press("Paste files") }
+  check("converter shows the filename") { contains(fixture.lastPathComponent) }
+  check("convert text to PDF") { press("Convert") }
+  check("PDF lands in File Shelf") { contains("Ready in the File Shelf. Originals kept.") }
+  check("copy the converted file") { press("Copy result") }
+  let pdfs = board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+  guard let pdf = pdfs.first, try Data(contentsOf: pdf).starts(with: Data("%PDF".utf8)) else {
+    throw CocoaError(.fileReadCorruptFile)
+  }
+  useArrow(kVK_ANSI_Z, "Compress files")
+  check("paste the converted PDF") { press("Paste files") }
+  check("compress the PDF to ZIP") { press("Compress") }
+  check("ZIP lands in File Shelf") { contains("Ready in the File Shelf. Originals kept.") }
+  check("copy the ZIP file URL") { press("Copy result") }
+  useArrow(kVK_ANSI_X, "Extract archive")
+  check("paste the generated ZIP") { press("Paste files") }
+  check("extract the ZIP") { press("Extract") }
+  check("extracted folder lands in File Shelf") { contains("Ready in the File Shelf. Originals kept.") }
+  check("copy the extracted folder") { press("Copy result") }
+  let folders = board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+  guard let folder = folders.first, try Data(contentsOf: folder.appendingPathComponent(pdf.lastPathComponent)) == Data(contentsOf: pdf) else {
+    throw CocoaError(.fileReadCorruptFile)
+  }
+  try finishFilm()
+
+  useArrow(kVK_ANSI_B, "Draw on screen")
+  try startFilm("Draw and capture four regions")
+  check("open real markup canvas") { press("Start drawing") }
+  check("show markup controls") { control(kAXButtonRole, "Done") != nil }
+  let bounds = CGDisplayBounds(CGMainDisplayID())
+  let middle = CGPoint(x: bounds.midX, y: bounds.midY)
+  let anchors = [CGPoint(x: middle.x - 210, y: middle.y - 125), CGPoint(x: middle.x + 20, y: middle.y - 125),
+    CGPoint(x: middle.x - 210, y: middle.y + 20), CGPoint(x: middle.x + 20, y: middle.y + 20)]
+  for corner in anchors {
+    stroke(from: CGPoint(x: corner.x + 15, y: corner.y + 25), to: CGPoint(x: corner.x + 100, y: corner.y + 68))
+  }
+  check("choose Multiple capture from the markup toolbar", attempts: 1) { chooseMenu("Capture", item: "Multiple") }
+  check("capture shows the interactive region selector") { windowFrame("Skippy · Select regions") != nil }
+  for corner in anchors {
+    stroke(from: corner, to: CGPoint(x: corner.x + 180, y: corner.y + 108))
+  }
+  check("four numbered regions are selected") { contains("Done (4)") }
+  check("commit the region selection") { press("Done (4)") }
+  check("return to the drawing overlay") { windowFrame("Skippy · Markup canvas") != nil }
+  check("close markup without deleting the captures") { press("Done") }
+  useArrow(kVK_ANSI_4, "Screenshots")
+  check("four annotated screenshots are listed") { contains("4 regions") }
+  check("copy the composite PNG") { press("Copy joined") }
+  guard let png = board.data(forType: .png), let image = NSBitmapImageRep(data: png), image.pixelsHigh >= 432 else {
+    throw CocoaError(.fileReadCorruptFile)
+  }
+  var markFound = false
+  for y in stride(from: 0, to: image.pixelsHigh, by: 2) {
+    for x in stride(from: 0, to: image.pixelsWide, by: 2) {
+      if let colour = image.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+        colour.redComponent > 0.76, colour.greenComponent < 0.22, colour.blueComponent < 0.22 {
+        markFound = true
+        break
+      }
+    }
+    if markFound { break }
+  }
+  check("the composed pixels contain the drawn red stroke", attempts: 1) { markFound }
+  try finishFilm()
+}
+
 let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
 try FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true)
 let fixture = downloads.appendingPathComponent("Skippy QA.txt")
 try Data("Skippy test fixture".utf8).write(to: fixture, options: .withoutOverwriting)
 defer { try? FileManager.default.removeItem(at: fixture) }
 check("Accessibility can exercise UI controls") { AXIsProcessTrusted() }
+if ProcessInfo.processInfo.environment["SKIPPY_FILM_BATCH"] == "workspace" {
+  try captureWorkspaceFilms(using: fixture)
+  exit(0)
+}
 let runningApp = NSRunningApplication(processIdentifier: pid_t(pid))
 if !panels().isEmpty {
   _ = runningApp?.activate(options: [.activateIgnoringOtherApps])

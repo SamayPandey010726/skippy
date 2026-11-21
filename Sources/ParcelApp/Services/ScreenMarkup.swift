@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
   static let shared = ScreenMarkupController()
   private var panel: NSPanel?
   private var resumePanel: NSPanel?
+  private var colourPanelLevel: NSWindow.Level?
 
   func open() {
     guard panel == nil, let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) ?? NSScreen.main else { return }
@@ -22,10 +23,17 @@ import UniformTypeIdentifiers
       interact: { [weak self] in self?.interact(on: screen) },
       capture: { [weak self] mode, artwork in self?.capture(mode, artwork: artwork, screen: screen) }))
     panel = window
+    colourPanelLevel = NSColorPanel.shared.level
+    NSColorPanel.shared.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 2)
     window.makeKeyAndOrderFront(nil)
   }
 
   func close() {
+    if let colourPanelLevel {
+      NSColorPanel.shared.orderOut(nil)
+      NSColorPanel.shared.level = colourPanelLevel
+      self.colourPanelLevel = nil
+    }
     resumePanel?.orderOut(nil); resumePanel = nil
     panel?.orderOut(nil); panel = nil
   }
@@ -46,6 +54,7 @@ import UniformTypeIdentifiers
   }
 
   private func capture(_ mode: WorkspaceCaptureMode, artwork: CGImage?, screen: NSScreen) {
+    NSColorPanel.shared.orderOut(nil)
     panel?.orderOut(nil)
     ScreenCaptureWorkspace.shared.capture(mode, ink: artwork, on: screen) { [weak self] result in
       self?.panel?.makeKeyAndOrderFront(nil)

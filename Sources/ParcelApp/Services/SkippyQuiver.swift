@@ -157,6 +157,12 @@ enum QuiverEmblem: String, CaseIterable {
     }
   }
 
+  func suspendForCapture() -> () -> Void {
+    let hidden = settingsPresented
+    setSettingsPresented(true)
+    return { [weak self] in self?.setSettingsPresented(hidden) }
+  }
+
   func setSettingsPresented(_ shown: Bool) {
     settingsPresented = shown
     guard installed else { return }
@@ -397,7 +403,7 @@ enum QuiverEmblem: String, CaseIterable {
     mark.setAccessibilityLabel("Skippy, browse arrows")
     mark.tap = { [weak self] in
       guard let self else { return }
-      if self.unfolded { self.openArrowFinder() }
+      if self.unfolded || self.surface != .floating { self.openArrowFinder() }
       else { self.setUnfolded(true) }
     }
     mark.courierMenu = { [weak self] _ in self?.menu() ?? NSMenu() }
@@ -405,9 +411,9 @@ enum QuiverEmblem: String, CaseIterable {
     mark.dragHover = { [weak self] inside in self?.hover(inside) }
     mark.registerForDraggedTypes([.fileURL, .png, .tiff, .URL, .string] + NSFilePromiseReceiver.readableDraggedTypes.map { .init($0) })
     if surface != .dock {
-      mark.windowMovement = WindowMoveActions(begin: {}, drag: { [weak self, weak mark] event in
+      mark.windowMovement = WindowMoveActions(begin: {}, drag: { [weak self, weak mark] _ in
         guard let self, let mark else { return }
-        self.dragLauncher(from: mark, event: event)
+        self.dragLauncher(from: mark)
       }, end: {})
     }
     strip.addSubview(mark)
@@ -416,7 +422,7 @@ enum QuiverEmblem: String, CaseIterable {
     if unfolded { trackArrow() }
   }
 
-  private func dragLauncher(from view: QuiverMark, event: NSEvent) {
+  private func dragLauncher(from view: QuiverMark) {
     guard let window = view.window else { return }
     let start = window.convertToScreen(view.convert(view.bounds, to: nil))
     let pointer = NSEvent.mouseLocation

@@ -147,6 +147,10 @@ struct ShelfFileActionView: View {
         HStack {
           Text(operation.rawValue).font(.title2.bold())
           Spacer()
+          Button("Paste files") {
+            let files = ParcelFileService.fileURLs(from: .general)
+            if files.isEmpty { message = "Copy files in Finder before pasting." } else { updateFiles(files) }
+          }.disabled(running)
           Button("Choose files…", action: choose).disabled(running)
         }
         Text(urls.isEmpty ? "Choose or drop files" : urls.map(\.lastPathComponent).joined(separator: ", "))
@@ -295,6 +299,7 @@ struct ShelfFileActionView: View {
           options: [.withoutDeletingBackupItem])
         message = "Original replaced. Backup: \(backup)"
       } else {
+        guard sourceIdentity == SourceIdentity(source) else { throw ParcelError.sourceChanged(source.lastPathComponent) }
         try fm.trashItem(at: source, resultingItemURL: nil)
         message = "Original moved to Trash."
       }

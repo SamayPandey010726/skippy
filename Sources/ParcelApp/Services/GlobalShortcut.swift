@@ -209,7 +209,7 @@ enum WorkspaceShortcut: Hashable, Identifiable {
 
   private func perform(_ id: UInt32) {
     // Registered combinations must reach the Settings recorder when it is editing a binding.
-    if let recorder = NSApp.keyWindow?.firstResponder as? ShortcutRecorderButton, recorder.isRecording { return }
+    if let recorder = NSApp?.keyWindow?.firstResponder as? ShortcutRecorderButton, recorder.isRecording { return }
     if id == 1 { action?() }
     else if let target = WorkspaceShortcut.all.first(where: { $0.eventID == id }) { workspaceAction?(target) }
   }

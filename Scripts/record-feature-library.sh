@@ -22,7 +22,11 @@ defaults write "$bundle_id" skippy.surface -string Floating
 defaults write "$bundle_id" skippy.x -float 0.52
 defaults write "$bundle_id" skippy.y -float 0.78
 defaults write "$bundle_id" parcel.idleTimeout -float 0
-defaults write "$bundle_id" parcel-skin -string kraft
+defaults write "$bundle_id" parcel-skin -string night
+if [[ "${SKIPPY_FILM_BATCH:-all}" == workspace ]]; then
+  pin_data="$(python3 -c 'import json; print(json.dumps([{"id": "calculator", "position": 2, "alwaysVisible": True}, {"id": "music", "position": 0, "alwaysVisible": False}]).encode().hex())')"
+  defaults write "$bundle_id" skippy.quickPins -data "$pin_data"
+fi
 cd "$run_dir"
 "$app_path/Contents/MacOS/Skippy" >build/Skippy.log 2>&1 &
 app_pid=$!
