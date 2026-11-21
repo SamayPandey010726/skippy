@@ -184,7 +184,7 @@ struct ShelfFileActionView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 11) {
         HStack {
-          Text(operation.rawValue).font(.title2.bold())
+          Image(systemName: "doc.badge.plus").foregroundStyle(Ink.green).accessibilityHidden(true)
           Spacer()
           Button("Paste files") {
             let files = ParcelFileService.fileURLs(from: .general)
@@ -228,26 +228,30 @@ struct ShelfFileActionView: View {
         if running { ProgressView(store.progressLabel, value: store.progress) }
         if let message { Text(message).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
         if !result.isEmpty {
-          HStack {
-            Button("Copy result") {
-              NSPasteboard.general.clearContents()
-              NSPasteboard.general.writeObjects(result.map { $0 as NSURL })
-            }
-            Button("Show in File Shelf") {
-              if let presentResults { presentResults(result) }
-              else { ShelfFileActions.shared.showResults(result, beside: NSApp.keyWindow) }
-            }
-            Menu("Export") {
-              Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting(result) }
-              Button("Save Copy…", action: saveCopies)
-            }
-            if sourceIdentity != nil && operation == .convert {
-              Menu("Original") {
-                if urls.first?.pathExtension.lowercased() == result.first?.pathExtension.lowercased() && result.count == 1 {
-                  Button("Replace Original…", role: .destructive) { confirmReplace = true }
-                }
-                Button("Move Original to Trash…", role: .destructive) { confirmDiscard = true }
+          VStack(alignment: .leading, spacing: 6) {
+            HStack {
+              Button("Copy result") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.writeObjects(result.map { $0 as NSURL })
               }.fixedSize()
+              Button("Show in File Shelf") {
+                if let presentResults { presentResults(result) }
+                else { ShelfFileActions.shared.showResults(result, beside: NSApp.keyWindow) }
+              }.fixedSize()
+            }
+            HStack {
+              Menu("Export") {
+                Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting(result) }
+                Button("Save Copy…", action: saveCopies)
+              }.fixedSize()
+              if sourceIdentity != nil && operation == .convert {
+                Menu("Original") {
+                  if urls.first?.pathExtension.lowercased() == result.first?.pathExtension.lowercased() && result.count == 1 {
+                    Button("Replace Original…", role: .destructive) { confirmReplace = true }
+                  }
+                  Button("Move Original to Trash…", role: .destructive) { confirmDiscard = true }
+                }.fixedSize()
+              }
             }
           }
         }
@@ -256,6 +260,7 @@ struct ShelfFileActionView: View {
           if running { Button("Cancel") { store.cancel() } }
           else {
             Button(operation.rawValue, action: start).keyboardShortcut(.defaultAction)
+              .buttonStyle(.borderedProminent).tint(Ink.green)
               .disabled(urls.isEmpty || store.busy || (operation == .convert && conversion == nil) ||
                 (operation == .compress && !format.isUsable) ||
                 (operation == .extract && !urls.allSatisfy { $0.pathExtension.lowercased() == "zip" }))

@@ -395,7 +395,7 @@ func captureFixtureWindows(at anchors: [CGPoint], display: CGRect) -> [NSWindow]
     ("Capture pipeline", "Select   →   Compose\n\n           ↓\n\n        Export PNG")
   ]
   guard let screen = NSScreen.main else { return [] }
-  return zip(anchors, documents).map { anchor, document in
+  let windows = zip(anchors, documents).map { anchor, document in
     let frame = CGRect(x: screen.frame.minX + anchor.x - display.minX,
       y: screen.frame.maxY - (anchor.y - display.minY) - 88, width: 177, height: 86)
     let window = NSWindow(contentRect: frame, styleMask: [.titled], backing: .buffered, defer: false)
@@ -408,11 +408,13 @@ func captureFixtureWindows(at anchors: [CGPoint], display: CGRect) -> [NSWindow]
     label.frame = CGRect(x: 6, y: 0, width: 165, height: 75)
     window.contentView?.addSubview(label)
     window.ignoresMouseEvents = true
-    window.level = .floating
+    window.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 2)
     window.orderFrontRegardless()
     window.displayIfNeeded()
     return window
   }
+  RunLoop.main.run(until: Date().addingTimeInterval(0.25))
+  return windows
 }
 
 func captureWorkspaceFilms(using fixture: URL) throws {
