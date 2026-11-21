@@ -49,15 +49,16 @@ final class FeatureFilm {
   let directory: URL
   let start: Date
   let region: CGRect
-  init(_ title: String, about panel: CGRect) throws {
+  init(_ title: String, about panel: CGRect, desktop: Bool = false) throws {
     directory = URL(fileURLWithPath: "build/feature-captures", isDirectory: true)
       .appendingPathComponent(title, isDirectory: true)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let screen = CGDisplayBounds(CGMainDisplayID())
-    let width = min(max(880, (panel.height + 32) * 16 / 9), screen.width, screen.height * 16 / 9)
+    let width = min(desktop ? screen.width : max(880, (panel.height + 32) * 16 / 9),
+      screen.width, screen.height * 16 / 9)
     let height = width * 9 / 16
-    region = CGRect(x: min(max(0, panel.midX - width / 2), screen.width - width),
-                    y: min(max(0, panel.midY - height / 2 - 24), screen.height - height),
+    region = CGRect(x: desktop ? (screen.width - width) / 2 : min(max(0, panel.midX - width / 2), screen.width - width),
+                    y: desktop ? 0 : min(max(0, panel.midY - height / 2 - 24), screen.height - height),
                     width: width, height: height)
     recorder.executableURL = URL(fileURLWithPath: "build/display-recorder")
     recorder.arguments = [directory.path] + [region.minX, region.minY, region.width, region.height].map { String(Double($0)) } + ["HD"]
@@ -78,11 +79,11 @@ final class FeatureFilm {
   }
 }
 var film: FeatureFilm?
-func startFilm(_ title: String) throws {
+func startFilm(_ title: String, desktop: Bool = false) throws {
   guard filming else { return }
   guard let b = panels().first?[kCGWindowBounds as String] as? NSDictionary,
         let pane = CGRect(dictionaryRepresentation: b as CFDictionary) else { throw CocoaError(.fileNoSuchFile) }
-  film = try FeatureFilm(title, about: pane)
+  film = try FeatureFilm(title, about: pane, desktop: desktop)
   beat(0.6)
 }
 func finishFilm() throws { try film?.finish(); film = nil }
@@ -352,7 +353,43 @@ func useArrow(_ code: Int, _ name: String) {
   check("global shortcut opens " + name) { windowFrame("Skippy · " + name) != nil }
 }
 
+final class FilmBackdrop: NSView {
+  override func draw(_ dirtyRect: NSRect) {
+    NSGradient(colors: [NSColor(calibratedRed: 0.27, green: 0.44, blue: 0.60, alpha: 1),
+      NSColor(calibratedRed: 0.53, green: 0.69, blue: 0.82, alpha: 1),
+      NSColor(calibratedRed: 0.74, green: 0.84, blue: 0.92, alpha: 1)])?.draw(in: bounds, angle: 80)
+    let ridge = NSBezierPath()
+    ridge.move(to: .zero)
+    ridge.line(to: CGPoint(x: 0, y: bounds.height * 0.19))
+    ridge.curve(to: CGPoint(x: bounds.maxX, y: bounds.height * 0.48),
+      controlPoint1: CGPoint(x: bounds.width * 0.45, y: bounds.height * 0.59),
+      controlPoint2: CGPoint(x: bounds.width * 0.61, y: bounds.height * 0.13))
+    ridge.line(to: CGPoint(x: bounds.maxX, y: 0)); ridge.close()
+    NSColor(calibratedRed: 0.16, green: 0.32, blue: 0.48, alpha: 0.19).setFill()
+    ridge.fill()
+  }
+}
+
+func prepareRecordingDesktop() -> NSWindow? {
+  guard let screen = NSScreen.main else { return nil }
+  let app = NSApplication.shared
+  app.setActivationPolicy(.accessory)
+  app.finishLaunching()
+  let window = NSWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
+  window.title = "Skippy recording backdrop"
+  window.contentView = FilmBackdrop()
+  window.ignoresMouseEvents = true
+  window.level = .floating
+  window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+  window.orderFrontRegardless()
+  window.displayIfNeeded()
+  RunLoop.main.run(until: Date().addingTimeInterval(0.16))
+  return window
+}
+
 func captureWorkspaceFilms(using fixture: URL) throws {
+  let backdrop = prepareRecordingDesktop()
+  defer { backdrop?.orderOut(nil) }
   let board = NSPasteboard.general
   if !panels().isEmpty {
     NSRunningApplication(processIdentifier: pid_t(pid))?.activate(options: [.activateIgnoringOtherApps])
@@ -373,7 +410,7 @@ func captureWorkspaceFilms(using fixture: URL) throws {
     guard let card = windowFrame("Skippy · Music") else { return false }
     return card.width < 300 && card.height < 160 && (card.minX > music.maxX || card.maxX < music.minX)
   }
-  try startFilm("Music Quick Pin")
+  try startFilm("Music Quick Pin", desktop: true)
   let destination = CGPoint(x: scout.midX + 61, y: scout.midY + 61)
   stroke(from: CGPoint(x: music.midX, y: music.midY), to: destination)
   check("Music pin settles into its new slot") {
@@ -433,7 +470,7 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   check("Settings closes") { windowFrame("Skippy Settings") == nil }
 
   useArrow(kVK_ANSI_V, "Convert files")
-  try startFilm("Convert and compress in Parcels")
+  try startFilm("Convert and compress in Parcels", desktop: true)
   board.clearContents()
   _ = board.writeObjects([fixture as NSURL])
   check("paste text fixture into the converter") { press("Paste files") }
@@ -441,7 +478,9 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   check("convert text to PDF") { press("Convert") }
   check("PDF lands in File Shelf") { contains("Ready in the File Shelf. Originals kept.") }
   check("show the completed conversion beside the form") { press("Show in File Shelf") }
-  check("the destination is a separate File Shelf") { windowFrame("Parcels File Shelf") != nil && contains("Ready") }
+  check("the destination is a separate File Shelf") {
+    windowFrame("Parcels File Shelf") != nil && descendants().flatMap(labels).contains { $0.contains("Skippy QA.pdf") }
+  }
   if let resultShelf = windowFrame("Parcels File Shelf") {
     let close = CGPoint(x: resultShelf.minX + 13, y: resultShelf.minY + 14)
     mouse(.leftMouseDown, close); mouse(.leftMouseUp, close)
@@ -468,7 +507,7 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   try finishFilm()
 
   useArrow(kVK_ANSI_B, "Draw on screen")
-  try startFilm("Draw and capture four regions")
+  try startFilm("Draw and capture four regions", desktop: true)
   check("open real markup canvas") { press("Start drawing") }
   check("show markup controls") { control(kAXButtonRole, "Done") != nil }
   let bounds = CGDisplayBounds(CGMainDisplayID())
@@ -509,6 +548,21 @@ func captureWorkspaceFilms(using fixture: URL) throws {
     if markFound { break }
   }
   check("the composed pixels contain the drawn red stroke", attempts: 1) { markFound }
+  try finishFilm()
+
+  try startFilm("Scout attaches to the right edge", desktop: true)
+  mouse(.mouseMoved, CGPoint(x: 15, y: 180))
+  check("floating Scout retracts before dragging") { (windowFrame("Skippy quiver")?.width ?? 200) < 45 }
+  guard let badge = windowFrame("Skippy quiver") else { throw CocoaError(.fileNoSuchFile) }
+  let edge = CGPoint(x: bounds.maxX - 4, y: bounds.midY)
+  stroke(from: CGPoint(x: badge.midX, y: badge.midY), to: edge)
+  check("Scout attaches to the right edge") {
+    guard let strip = windowFrame("Skippy quiver") else { return false }
+    return abs(strip.maxX - bounds.maxX) < 12
+  }
+  mouse(.mouseMoved, CGPoint(x: bounds.maxX - 14, y: bounds.midY))
+  check("the edge launcher opens its vertical strip") { (windowFrame("Skippy quiver")?.height ?? 0) > 90 }
+  beat(1.5)
   try finishFilm()
 }
 
