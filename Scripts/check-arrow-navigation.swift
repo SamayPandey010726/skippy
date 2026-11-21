@@ -531,8 +531,11 @@ for name in selected {
   try startFilm(name == "QR tools" ? "QR generator" : name)
   key(kVK_ANSI_K, flags: .maskCommand)
   check("finder is ready for keyboard input") { control(kAXTextFieldRole, "Find an arrow") != nil }
-  beat(1.3)
+  // WindowServer accepts input after the native search field takes first responder.
+  // Give the panel's 230 ms transition time to settle even in the fast smoke run.
+  Thread.sleep(forTimeInterval: filming ? 1.3 : 0.30)
   key(kVK_ANSI_A, flags: .maskCommand)
+  Thread.sleep(forTimeInterval: 0.08)
   typeText(name.lowercased())
   check("typing changes the finder query") {
     guard let search = control(kAXTextFieldRole, "Find an arrow") else { return false }
