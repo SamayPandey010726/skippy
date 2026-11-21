@@ -6,10 +6,11 @@ import subprocess
 import sys
 
 TITLES = [
-    "Floating wheel", "Keyboard and themes", "Settings", "File Shelf", "Clipboard",
+    "Floating wheel", "Keyboard and launcher", "Settings", "File Shelf", "Clipboard",
     "Extract text", "Pick colour", "Timer", "Notes", "QR generator", "QR scanner",
     "Search", "Apps", "Music", "Downloads", "Stay awake", "Recent actions", "Mac",
     "Calendar", "Calculator", "Screenshots", "Draw on screen",
+    "Convert files", "Compress files", "Extract archive",
 ]
 
 

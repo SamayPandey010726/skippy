@@ -511,14 +511,14 @@ let arrows = ["File Shelf", "Clipboard", "Extract text", "Pick colour", "Timer",
 let batch = ProcessInfo.processInfo.environment["SKIPPY_FILM_BATCH"] ?? "all"
 let selected: [String]
 switch batch {
-case "files": selected = Array(arrows[0..<6])
+case "files": selected = Array(arrows[0..<6]) + ["Convert files", "Compress files", "Extract archive"]
 case "utilities": selected = Array(arrows[6..<10])
 case "system": selected = Array(arrows[10..<16])
 case "capture": selected = Array(arrows[16...])
 case "preferences": selected = []
 case "searchhandoff": selected = ["Search"]
 case "downloadhandoff": selected = ["Downloads"]
-default: selected = arrows
+default: selected = arrows + ["Convert files", "Compress files", "Extract archive"]
 }
 for name in selected {
   // A system sampler or capture tool may still be restoring the prior panel.
