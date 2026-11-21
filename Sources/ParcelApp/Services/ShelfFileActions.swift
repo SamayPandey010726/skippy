@@ -126,11 +126,12 @@ enum ShelfArchivePipeline {
     panel.isReleasedWhenClosed = false
     panel.level = .floating
     panel.hidesOnDeactivate = false
+    let skin = SkinStore.shared.skin
     panel.contentView = NSHostingView(rootView: ShelfFileActionView(store: ParcelRuntime.store,
-      operation: operation, urls: urls, presentResults: { [weak self, weak panel] urls in
+      operation: operation, skin: skin, urls: urls, presentResults: { [weak self, weak panel] urls in
         self?.showResults(urls, beside: panel)
       }))
-    panel.appearance = NSAppearance(named: .aqua)
+    panel.appearance = NSAppearance(named: skin == .night ? .darkAqua : .aqua)
     panel.center()
     if !urls.isEmpty, let bounds = panel.screen?.visibleFrame {
       panel.setFrameOrigin(NSPoint(x: max(bounds.minX + 12, bounds.midX - 353), y: panel.frame.minY))
@@ -145,6 +146,8 @@ enum ShelfArchivePipeline {
 struct ShelfFileActionView: View {
   @ObservedObject var store: ParcelStore
   let operation: ShelfFileOperation
+  let skin: ParcelSkin
+  private var palette: SkinPalette { skin.palette }
   @State private var urls: [URL]
   @State private var conversion: QuickConvertAction?
   @State private var format = PackFormat.zip
@@ -157,10 +160,11 @@ struct ShelfFileActionView: View {
   @State private var confirmReplace = false
   private let presentResults: (([URL]) -> Void)?
 
-  init(store: ParcelStore, operation: ShelfFileOperation, urls: [URL] = [],
+  init(store: ParcelStore, operation: ShelfFileOperation, skin: ParcelSkin = .slate, urls: [URL] = [],
        presentResults: (([URL]) -> Void)? = nil) {
     self.store = store
     self.operation = operation
+    self.skin = skin
     self.presentResults = presentResults
     _urls = State(initialValue: urls)
     _conversion = State(initialValue: QuickConvertAction.available(for: urls).first)
@@ -184,7 +188,7 @@ struct ShelfFileActionView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 11) {
         HStack {
-          Image(systemName: "doc.badge.plus").foregroundStyle(Ink.green).accessibilityHidden(true)
+          Image(systemName: "doc.badge.plus").foregroundStyle(palette.accent).accessibilityHidden(true)
           Spacer()
           Button("Paste files") {
             let files = ParcelFileService.fileURLs(from: .general)
@@ -259,8 +263,10 @@ struct ShelfFileActionView: View {
           Spacer()
           if running { Button("Cancel") { store.cancel() } }
           else {
-            Button(operation.rawValue, action: start).keyboardShortcut(.defaultAction)
-              .buttonStyle(.borderedProminent).tint(Ink.green)
+            Button(action: start) {
+              Text(operation.rawValue).foregroundStyle(skin == .night ? palette.paper : .white)
+            }
+              .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent).tint(palette.accent)
               .disabled(urls.isEmpty || store.busy || (operation == .convert && conversion == nil) ||
                 (operation == .compress && !format.isUsable) ||
                 (operation == .extract && !urls.allSatisfy { $0.pathExtension.lowercased() == "zip" }))
@@ -268,9 +274,10 @@ struct ShelfFileActionView: View {
         }
       }.padding(15)
     }
-    .preferredColorScheme(.light)
-    .background(Ink.paper)
-    .tint(Ink.green)
+    .foregroundStyle(palette.text)
+    .background(palette.paper)
+    .tint(palette.accent)
+    .preferredColorScheme(skin == .night ? .dark : .light)
     .confirmationDialog("Move the original to Trash?", isPresented: $confirmDiscard) {
       Button("Move to Trash", role: .destructive) { changeOriginal(replace: false) }
     } message: { Text("The completed conversion stays in the File Shelf.") }

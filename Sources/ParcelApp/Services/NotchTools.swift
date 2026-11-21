@@ -1024,9 +1024,9 @@ struct NotchToolsView: View {
     case .calculator: WorkspaceCalculatorView(shelf: shelf)
     case .screenshot: screenshotView
     case .draw: drawView
-    case .convert: ShelfFileActionView(store: store, operation: .convert)
-    case .compress: ShelfFileActionView(store: store, operation: .compress)
-    case .extractArchive: ShelfFileActionView(store: store, operation: .extract)
+    case .convert: ShelfFileActionView(store: store, operation: .convert, skin: skin)
+    case .compress: ShelfFileActionView(store: store, operation: .compress, skin: skin)
+    case .extractArchive: ShelfFileActionView(store: store, operation: .extract, skin: skin)
     }
   }
 
