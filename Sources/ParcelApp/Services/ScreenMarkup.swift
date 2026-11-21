@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 @MainActor final class ScreenMarkupController: ObservableObject {
   static let shared = ScreenMarkupController()
   private var panel: NSPanel?
+  private var composer: NSPanel?
   private var resumePanel: NSPanel?
   private var colourPanelLevel: NSWindow.Level?
 
@@ -34,6 +35,7 @@ import UniformTypeIdentifiers
       NSColorPanel.shared.level = colourPanelLevel
       self.colourPanelLevel = nil
     }
+    composer?.orderOut(nil); composer = nil
     resumePanel?.orderOut(nil); resumePanel = nil
     panel?.orderOut(nil); panel = nil
   }
@@ -55,11 +57,33 @@ import UniformTypeIdentifiers
 
   private func capture(_ mode: WorkspaceCaptureMode, artwork: CGImage?, screen: NSScreen) {
     NSColorPanel.shared.orderOut(nil)
+    composer?.orderOut(nil)
     panel?.orderOut(nil)
     ScreenCaptureWorkspace.shared.capture(mode, ink: artwork, on: screen) { [weak self] result in
-      self?.panel?.makeKeyAndOrderFront(nil)
-      NotchToolStore.shared.acceptCaptures(result)
+      guard let self else { return }
+      self.panel?.makeKeyAndOrderFront(nil)
+      let tools = NotchToolStore.shared
+      tools.acceptCaptures(result)
+      if case .success(let captures) = result, !captures.isEmpty {
+        if mode == .multiple { tools.captureColumns = 2 }
+        self.showComposer(on: screen)
+      }
     }
+  }
+
+  private func showComposer(on screen: NSScreen) {
+    let bounds = screen.visibleFrame
+    let width = min(365.0, bounds.width), height = min(412.0, bounds.height)
+    let frame = CGRect(x: bounds.maxX - width - 14, y: bounds.midY - height / 2, width: width, height: height)
+    let inspector = composer ?? ShelfPanel(contentRect: frame, styleMask: [.titled, .closable, .nonactivatingPanel],
+      backing: .buffered, defer: false)
+    inspector.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
+    inspector.isReleasedWhenClosed = false
+    inspector.title = "Compose image"
+    inspector.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+    inspector.contentView = NSHostingView(rootView: CaptureComposer(tools: .shared))
+    composer = inspector
+    inspector.orderFrontRegardless()
   }
 }
 
@@ -148,6 +172,13 @@ private struct ScreenMarkupView: View {
     future.removeAll()
   }
 
+  private var inkSwatches: [(String, Color)] {
+    [("Coral", Color(red: 1, green: 0.28, blue: 0.24)),
+     ("Mint", Color(red: 0.23, green: 0.83, blue: 0.61)),
+     ("Yellow", Color(red: 0.98, green: 0.86, blue: 0.23)),
+     ("Violet", Color(red: 0.67, green: 0.44, blue: 0.94))]
+  }
+
   var body: some View {
     ZStack(alignment: .top) {
       Color.black.opacity(0.001).contentShape(Rectangle())
@@ -172,8 +203,21 @@ private struct ScreenMarkupView: View {
             .help(option.rawValue.capitalized)
         }
         Divider().frame(height: 20)
-        ColorPicker("Colour", selection: $color, supportsOpacity: false).labelsHidden().frame(width: 28)
-        Slider(value: $width, in: 1...40).frame(width: 66).accessibilityLabel("Stroke width")
+        ForEach(Array(inkSwatches.enumerated()), id: \.offset) { _, swatch in
+          Button { color = swatch.1 } label: {
+            Circle().fill(swatch.1).frame(width: 17, height: 17)
+              .overlay(Circle().strokeBorder(.black.opacity(0.14)))
+          }.buttonStyle(.plain).accessibilityLabel(swatch.0)
+        }
+        ColorPicker("Custom colour", selection: $color, supportsOpacity: false).labelsHidden().frame(width: 23)
+        Divider().frame(height: 20)
+        ForEach([3.0, 7.0, 14.0], id: \.self) { preset in
+          Button { width = preset } label: {
+            Capsule().fill(Ink.text).frame(width: 17, height: min(6, preset * 0.55))
+              .frame(width: 23, height: 24)
+              .background(width == preset ? Ink.green.opacity(0.16) : .clear, in: RoundedRectangle(cornerRadius: 6))
+          }.buttonStyle(.plain).accessibilityLabel("Stroke width \(Int(preset))")
+        }
         Button("Undo") {
           if let snapshot = history.popLast() { future.append(strokes); strokes = snapshot }
         }.keyboardShortcut("z").disabled(history.isEmpty)
@@ -190,7 +234,8 @@ private struct ScreenMarkupView: View {
         Button("Save PNG…", action: exportPNG).disabled(strokes.isEmpty)
         Button("Done", action: close).keyboardShortcut(.escape, modifiers: [])
       }
-      .padding(8).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+      .padding(8).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+      .shadow(color: .black.opacity(0.16), radius: 12, y: 4)
       .padding(.top, 40)
     }
     .background(GeometryReader { geo in

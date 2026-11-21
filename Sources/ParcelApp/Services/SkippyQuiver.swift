@@ -495,21 +495,47 @@ enum QuiverEmblem: String, CaseIterable {
     attachmentHint?.orderOut(nil); attachmentHint = nil
     guard target != .floating else { return }
     let visible = screen.visibleFrame
-    let size = CGSize(width: 125, height: 30)
-    let origin = CGPoint(x: min(max(visible.minX + 7, pointer.x - 62), visible.maxX - 132),
-      y: min(max(visible.minY + 8, pointer.y - 42), visible.maxY - 40))
-    let panel = NSPanel(contentRect: CGRect(origin: origin, size: size),
+    let side = target == .left || target == .right
+    let verticalEdge = side ? (target == .left ? visible.minX + 6 : visible.maxX - 40) : nil
+    let size = CGSize(width: side ? 34 : 142, height: side ? 142 : 34)
+    let x = verticalEdge ?? min(max(visible.minX + 6, (target == .notch ? visible.midX : pointer.x) - size.width / 2),
+      visible.maxX - size.width - 6)
+    let y: CGFloat
+    if side {
+      y = min(max(visible.minY + 6, pointer.y - size.height / 2), visible.maxY - size.height - 6)
+    } else if target == .bottom || target == .dock {
+      y = visible.minY + 5
+    } else {
+      y = visible.maxY - size.height - 5
+    }
+    let panel = NSPanel(contentRect: CGRect(x: x, y: y, width: size.width, height: size.height),
       styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
     panel.level = .popUpMenu; panel.isOpaque = false; panel.backgroundColor = .clear
     panel.ignoresMouseEvents = true; panel.isReleasedWhenClosed = false
     let bar = NSVisualEffectView(frame: CGRect(origin: .zero, size: size))
-    bar.material = .hudWindow; bar.state = .active; bar.wantsLayer = true
-    bar.layer?.cornerRadius = 10; bar.layer?.masksToBounds = true
-    let label = NSTextField(labelWithString: target.rawValue)
-    label.frame = CGRect(x: 0, y: 6, width: size.width, height: 18)
-    label.alignment = .center; label.font = .systemFont(ofSize: 12, weight: .medium)
-    bar.addSubview(label); panel.contentView = bar
-    attachmentHint = panel; panel.orderFrontRegardless()
+    bar.material = .popover; bar.state = .active; bar.wantsLayer = true
+    bar.layer?.cornerRadius = 16; bar.layer?.masksToBounds = true
+    bar.layer?.borderColor = NSColor.systemTeal.withAlphaComponent(0.7).cgColor
+    bar.layer?.borderWidth = 1.1
+    let symbols = ["shippingbox", "rectangle.dashed", "music.note", "ellipsis"]
+    for (index, name) in symbols.enumerated() {
+      let icon = NSImageView(image: NSImage(systemSymbolName: name, accessibilityDescription: nil) ?? NSImage())
+      let position = CGFloat(index) * 33 + 12
+      icon.frame = CGRect(x: side ? 9 : position, y: side ? position : 9, width: 16, height: 16)
+      bar.addSubview(icon)
+    }
+    panel.title = "Attach Skippy · " + target.rawValue
+    panel.contentView = bar
+    attachmentHint = panel
+    let animate = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    panel.alphaValue = animate ? 0 : 0.92
+    panel.orderFrontRegardless()
+    if animate {
+      NSAnimationContext.runAnimationGroup { context in
+        context.duration = 0.13
+        panel.animator().alphaValue = 0.92
+      }
+    }
   }
 
   private func animateSystemHandoff(from origin: CGRect) {
@@ -535,16 +561,31 @@ enum QuiverEmblem: String, CaseIterable {
   }
 
   private func rebuildSatellites() {
-    for panel in satellites.values { panel.orderOut(nil) }
-    satellites.removeAll()
-    guard surface == .floating else { return }
-    for pin in quickPins.pins.prefix(3) {
+    let pins = surface == .floating ? Array(quickPins.pins.prefix(3)) : []
+    let presentable = pins.filter { pin in pin.module != nil || tools.pinnedApps.contains { $0.id == pin.id } }
+    let keys = Set(presentable.map(\.id))
+    for id in Array(satellites.keys) where !keys.contains(id) {
+      satellites.removeValue(forKey: id)?.orderOut(nil)
+    }
+    for pin in presentable {
       let app = tools.pinnedApps.first { $0.id == pin.id }
       guard let title = pin.module?.title ?? app?.name else { continue }
       let offset = pin.position.offset
       let x = min(max(screenBounds.minX + 14, center.x + offset.x), screenBounds.maxX - 14)
       let y = min(max(screenBounds.minY + 14, center.y + offset.y), screenBounds.maxY - 14)
       let frame = CGRect(x: x - 14, y: y - 14, width: 28, height: 28)
+      if let existing = satellites[pin.id] {
+        if existing.frame != frame {
+          if existing.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            NSAnimationContext.runAnimationGroup { context in
+              context.duration = 0.19
+              context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+              existing.animator().setFrame(frame, display: true)
+            }
+          } else { existing.setFrame(frame, display: false) }
+        }
+        continue
+      }
       let panel = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
       panel.level = .statusBar; panel.hidesOnDeactivate = false; panel.isReleasedWhenClosed = false
       panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
@@ -570,8 +611,11 @@ enum QuiverEmblem: String, CaseIterable {
         if let module = pin.module { self.show(module, from: button) }
         else if let app { self.tools.launch(app) }
       }
-      button.hover = { [weak self, weak panel] inside in
+      button.hover = { [weak self, weak panel, weak button] inside in
         guard let self else { return }
+        button?.layer?.borderWidth = inside ? 1.5 : 0.7
+        button?.layer?.borderColor = inside ? NSColor.systemTeal.cgColor
+          : NSColor(calibratedRed: 0.55, green: 0.66, blue: 0.74, alpha: 0.6).cgColor
         self.hover(inside)
         self.pinPreviewWork?.cancel()
         guard inside, self.defaults.object(forKey: "skippy.hoverArrowPreviews") as? Bool ?? true,
@@ -704,6 +748,7 @@ enum QuiverEmblem: String, CaseIterable {
     strip.frame = CGRect(origin: .zero, size: geometry.frame.size)
     strip.layer?.cornerRadius = surface == .menu ? 5 : min(strip.frame.width, strip.frame.height) / 2
     mark?.frame = geometry.mark
+    if surface == .floating { mark?.layer?.shadowOpacity = 0.38 }
     for (i, icon) in icons.enumerated() {
       icon.frame = geometry.buttons[i]
       icon.alphaValue = progress

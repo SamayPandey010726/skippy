@@ -374,6 +374,18 @@ func captureWorkspaceFilms(using fixture: URL) throws {
     return card.width < 300 && card.height < 160 && (card.minX > music.maxX || card.maxX < music.minX)
   }
   try startFilm("Music Quick Pin")
+  let destination = CGPoint(x: scout.midX + 61, y: scout.midY + 61)
+  stroke(from: CGPoint(x: music.midX, y: music.midY), to: destination)
+  check("Music pin settles into its new slot") {
+    guard let moved = windowFrame("Skippy pin · Music") else { return false }
+    return abs(moved.midX - destination.x) < 12 && abs(moved.midY - destination.y) < 12
+  }
+  check("hovering at the new position opens Music") {
+    if let moved = windowFrame("Skippy pin · Music") {
+      mouse(.mouseMoved, CGPoint(x: moved.midX, y: moved.midY))
+    }
+    return windowFrame("Skippy · Music") != nil
+  }
   check("keep Music open from the card") { press("Keep panel open") }
   mouse(.mouseMoved, CGPoint(x: 15, y: 180))
   beat(2)
@@ -474,11 +486,15 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   check("four numbered regions are selected") { contains("Done (4)") }
   check("commit the region selection") { press("Done (4)") }
   check("return to the drawing overlay") { windowFrame("Skippy · Markup canvas") != nil }
+  check("the grid composer appears beside the annotated desktop") {
+    windowFrame("Compose image") != nil && contains("4 selections") && contains("Combined image preview")
+  }
+  beat(1.3)
   check("close markup without deleting the captures") { press("Done") }
   useArrow(kVK_ANSI_4, "Screenshots")
   check("four annotated screenshots are listed") { contains("4 regions") }
   check("copy the composite PNG") { press("Copy joined") }
-  guard let png = board.data(forType: .png), let image = NSBitmapImageRep(data: png), image.pixelsHigh >= 432 else {
+  guard let png = board.data(forType: .png), let image = NSBitmapImageRep(data: png), image.pixelsHigh >= 216 && image.pixelsWide >= 360 else {
     throw CocoaError(.fileReadCorruptFile)
   }
   var markFound = false

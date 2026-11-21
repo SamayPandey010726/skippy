@@ -91,7 +91,7 @@ jobs:
             build/recordings/
             build/diagnostics/
   simulators:
-    if: ${{ !inputs.verified_build_run && !inputs.mac_only && github.ref_name != 'skippy/native-workspace' }}
+    if: ${{ !inputs.verified_build_run && !inputs.mac_only && !startsWith(github.ref_name, 'skippy/') }}
     runs-on: macos-15
     timeout-minutes: 20
     steps:

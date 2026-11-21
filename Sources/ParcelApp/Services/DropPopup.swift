@@ -1763,7 +1763,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
     panel.backgroundColor = .clear
     panel.isOpaque = false
-    panel.hasShadow = false
+    panel.hasShadow = quiverAnchor != nil
     let host = CourierHostingView(rootView: AnyView(DropPopupView(shelf: self).environmentObject(store)))
     host.pointerChanged = { [weak self] in self?.trackPointer() }
     host.keyHandler = { [weak self] event in self?.handleCourierKey(event) == true }

@@ -199,9 +199,13 @@ private struct CaptureRegionsView: View {
               layer.clip(to: Path(rect))
               layer.draw(Image(decorative: image, scale: 1), in: CGRect(origin: .zero, size: size))
             }
-            context.stroke(Path(rect), with: .color(.white), lineWidth: 1.5)
+            let selection = Path(roundedRect: rect, cornerRadius: 5)
+            context.stroke(selection, with: .color(Ink.green), lineWidth: 3)
+            context.stroke(selection, with: .color(.white), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+            let badge = CGRect(x: rect.minX - 4, y: rect.minY - 8, width: 22, height: 18)
+            context.fill(Path(roundedRect: badge, cornerRadius: 5), with: .color(Ink.green))
             context.draw(Text("\(index + 1)").font(.caption.bold()).foregroundStyle(.white),
-              at: CGPoint(x: rect.minX + 6, y: rect.minY + 3), anchor: .topLeading)
+              at: CGPoint(x: badge.midX, y: badge.midY))
           }
         }.contentShape(Rectangle())
           .gesture(DragGesture(minimumDistance: 3).onChanged { value in

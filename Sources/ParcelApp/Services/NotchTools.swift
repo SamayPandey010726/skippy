@@ -1651,11 +1651,14 @@ struct NotchToolsView: View {
         Button("Save PNG…", action: tools.saveCombinedCaptures).disabled(tools.captures.isEmpty)
         Button("Clear", action: tools.clearCaptures).disabled(tools.captures.isEmpty)
       }
+      if !tools.captures.isEmpty {
+        CapturePreview(images: tools.captures, columns: tools.captureColumns).frame(height: 115)
+      }
       ScrollView(.horizontal) {
         HStack(spacing: 8) {
           ForEach(Array(tools.captures.enumerated()), id: \.offset) { index, capture in
             VStack(spacing: 4) {
-              Image(nsImage: capture).resizable().scaledToFit().frame(width: 100, height: 70)
+              Image(nsImage: capture).resizable().scaledToFit().frame(width: 75, height: 38)
               HStack {
                 Button { tools.moveCapture(index, by: -1) } label: { Image(systemName: "arrow.left") }
                   .accessibilityLabel("Move region \(index + 1) earlier").disabled(index == 0)
