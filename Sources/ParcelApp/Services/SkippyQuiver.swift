@@ -76,6 +76,10 @@ enum QuiverEmblem: String, CaseIterable {
     shelf.quiverFloating = { [weak self] in self?.surface == .floating }
     shelf.quiverSideRail = { [weak self] in self?.surface == .left || self?.surface == .right }
     shelf.quiverAnchor = { [weak self] in self?.anchor }
+    shelf.quiverObstacles = { [weak self] in
+      guard let self else { return [] }
+      return self.satellites.values.filter(\.isVisible).map(\.frame) + [self.anchor].compactMap { $0 }
+    }
     shelf.arrowGeometryChanged = { [weak self] in self?.showSatellites() }
     shelf.quiverPanelPointer = { [weak self] inside in
       guard let self else { return }
@@ -383,7 +387,9 @@ enum QuiverEmblem: String, CaseIterable {
         center = CGPoint(x: min(max(tile.midX, visible.minX + cell / 2), visible.maxX - cell / 2),
           y: min(max(tile.midY, visible.minY + height / 2), visible.maxY - height / 2))
       }
-    case .notch: center = CGPoint(x: screen.frame.midX, y: screen.frame.maxY - screen.safeAreaInsets.top - height / 2)
+    case .notch:
+      let top = min(visible.maxY, screen.frame.maxY - screen.safeAreaInsets.top)
+      center = CGPoint(x: screen.frame.midX, y: top - height / 2)
     default: break
     }
     growsRight = surface != .menu && center.x <= visible.midX
@@ -612,8 +618,15 @@ enum QuiverEmblem: String, CaseIterable {
     })
   }
 
+  private var floatingPins: [QuickPin] {
+    guard surface == .floating else { return [] }
+    let pins = Array(quickPins.pins.prefix(3))
+    guard !pins.isEmpty else { return [] }
+    return pins + [QuickPin(id: NotchModule.dashboard.id, position: .lowerRight, alwaysVisible: false)]
+  }
+
   private func rebuildSatellites() {
-    let pins = surface == .floating ? Array(quickPins.pins.prefix(3)) : []
+    let pins = floatingPins
     let presentable = pins.filter { pin in pin.module != nil || tools.pinnedApps.contains { $0.id == pin.id } }
     let keys = Set(presentable.map(\.id))
     for id in Array(satellites.keys) where !keys.contains(id) {
@@ -622,7 +635,8 @@ enum QuiverEmblem: String, CaseIterable {
     var occupied: [CGPoint] = []
     for pin in presentable {
       let app = tools.pinnedApps.first { $0.id == pin.id }
-      guard let title = pin.module?.title ?? app?.name else { continue }
+      let more = pin.module == .dashboard
+      guard let title = more ? "More arrows" : (pin.module?.title ?? app?.name) else { continue }
       let displayID = display.map(DropPopupController.displayID(for:))
       let offset = displayID.flatMap { pin.displayOffsets?[$0] } ?? pin.position.offset
       let point = pinCenter(CGPoint(x: center.x + offset.x, y: center.y + offset.y), avoiding: occupied)
@@ -642,7 +656,7 @@ enum QuiverEmblem: String, CaseIterable {
       let button = QuickPinButton(frame: CGRect(origin: .zero, size: frame.size))
       button.identifier = NSUserInterfaceItemIdentifier(pin.id)
       button.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
-      button.image = pin.module.flatMap { NSImage(systemSymbolName: $0.symbol, accessibilityDescription: nil) }
+      button.image = pin.module.flatMap { NSImage(systemSymbolName: more ? "ellipsis" : $0.symbol, accessibilityDescription: nil) }
         ?? app.map { tools.icon(for: $0) }
       button.imageScaling = .scaleProportionallyDown
       button.imagePosition = .imageOnly; button.isBordered = false
@@ -650,13 +664,14 @@ enum QuiverEmblem: String, CaseIterable {
       button.layer?.cornerRadius = pinDiameter / 2
       applyPinAppearance(button, active: false)
       button.toolTip = title
-      button.setAccessibilityLabel(title + " quick pin")
-      button.setAccessibilityHelp("Click to open. Drag around Skippy to reposition.")
+      button.setAccessibilityLabel(more ? title : title + " quick pin")
+      button.setAccessibilityHelp(more ? "Open the Drawer" : "Click to open. Drag around Skippy to reposition.")
       button.target = button; button.action = #selector(QuickPinButton.activatePin)
       button.open = { [weak self, weak button] in
         guard let self else { return }
         self.pinPreviewWork?.cancel()
-        if let module = pin.module { self.show(module, from: button) }
+        if more { self.openArrowFinder(from: button) }
+        else if let module = pin.module { self.show(module, from: button) }
         else if let app { self.tools.launch(app) }
       }
       button.hover = { [weak self, weak panel] inside in
@@ -666,7 +681,7 @@ enum QuiverEmblem: String, CaseIterable {
         self.updateConnectors()
         self.hover(inside)
         self.pinPreviewWork?.cancel()
-        guard inside, self.defaults.object(forKey: "skippy.hoverArrowPreviews") as? Bool ?? true,
+        guard inside, !more, self.defaults.object(forKey: "skippy.hoverArrowPreviews") as? Bool ?? true,
           let module = pin.module else { return }
         let work = DispatchWorkItem { [weak self, weak panel] in
           guard let self, let panel, panel.frame.contains(NSEvent.mouseLocation) else { return }
@@ -675,12 +690,12 @@ enum QuiverEmblem: String, CaseIterable {
         self.pinPreviewWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.13, execute: work)
       }
-      button.movePin = { [weak self, weak panel] pointer, finished in
+      button.movePin = more ? nil : { [weak self, weak panel] pointer, finished in
         guard let self, let panel else { return pointer }
         self.pinPreviewWork?.cancel()
         self.foldWork?.cancel(); self.foldWork = nil
         let occupied = self.satellites.compactMap { id, other in
-          id == pin.id ? nil : CGPoint(x: other.frame.midX, y: other.frame.midY)
+          id == pin.id || id == NotchModule.dashboard.id ? nil : other.frame.centerPoint
         }
         let point = self.pinCenter(pointer, avoiding: occupied)
         let radius = self.pinDiameter / 2
@@ -700,11 +715,14 @@ enum QuiverEmblem: String, CaseIterable {
   }
 
   private func showSatellites() {
-    for pin in quickPins.pins.prefix(3) {
+    let pins = floatingPins
+    let hasPersistentPin = pins.contains(where: quickPins.isAlwaysVisible)
+    for pin in pins {
       guard let panel = satellites[pin.id] else { continue }
-      if !settingsPresented && !dragging && (unfolded || quickPins.isAlwaysVisible(pin) || shelf.arrowSourcePin == pin.id) {
+      let persistent = quickPins.isAlwaysVisible(pin) || pin.module == .dashboard && hasPersistentPin
+      if !settingsPresented && !dragging && (unfolded || persistent || shelf.arrowSourcePin == pin.id) {
         if !panel.isVisible {
-          let animate = !quickPins.isAlwaysVisible(pin) && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+          let animate = !persistent && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
           panel.alphaValue = animate ? 0 : 1
           panel.orderFrontRegardless()
           if animate {
@@ -764,6 +782,12 @@ enum QuiverEmblem: String, CaseIterable {
       let active = id == (shelf.arrowSourcePin ?? activePin)
       applyPinAppearance(panel.contentView as? QuickPinButton, active: active)
       segments.append(.init(from: scout.centerPoint, to: panel.frame.centerPoint, active: active))
+    }
+    if surface == .floating, let window = strip.window {
+      for icon in icons where !icon.isHidden && icon.alphaValue > 0.23 {
+        let rect = window.convertToScreen(icon.convert(icon.bounds, to: nil))
+        segments.append(.init(from: scout.centerPoint, to: rect.centerPoint, active: (icon as? ArrowButton)?.pointing == true))
+      }
     }
     if let source = shelf.arrowSource, let card = shelf.presentationFrame {
       let from = (shelf.arrowSourcePin.flatMap { satellites[$0]?.frame } ?? source).centerPoint
@@ -853,11 +877,13 @@ enum QuiverEmblem: String, CaseIterable {
     strip.setAccessibilityHelp(nil)
   }
 
-  func openArrowFinder() {
+  func openArrowFinder(from button: QuickPinButton? = nil) {
     endKeyboardBrowsing()
     previewWork?.cancel()
-    shelf.openArrow(.dashboard, at: anchor.map(toolAnchor), source: anchor)
-    shelf.chooseArrow()
+    let source = button.flatMap { view in view.window?.convertToScreen(view.convert(view.bounds, to: nil)) } ?? anchor
+    let pin = button?.identifier?.rawValue
+    shelf.openArrow(.dashboard, at: pin == nil ? source.map(toolAnchor) : source, source: source, pin: pin)
+    shelf.chooseArrow(fromLauncher: true)
   }
 
   private var pointerPrimaries = false

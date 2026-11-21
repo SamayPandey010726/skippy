@@ -122,6 +122,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   private let hoverDelay: TimeInterval
   private let folderHoverDelay: TimeInterval
   @Published private(set) var choosingArrow = false
+  private var choosingFromLauncher = false
   @Published var arrowQuery = ""
   @Published var arrowIndex = 0
   @Published private(set) var arrowFocusRequest = 0
@@ -134,7 +135,13 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   private(set) var arrowSourcePin: String?
   @Published private(set) var calculatorScientific = false
   @Published private(set) var calculatorFocusRequest = 0
-  private(set) var calculatorExpandsRight = false
+  var calculatorExpandsRight: Bool {
+    guard let source = arrowSource else { return false }
+    let frame = arrangement.frame
+    if frame.minX >= source.maxX { return true }
+    if frame.maxX <= source.minX { return false }
+    return source.midX < frame.midX
+  }
   @Published private var quickLaunchCommands = false
   private var quiverPointerInside = false
   var presentationFrame: CGRect? { panel?.isVisible == true ? panel?.frame : nil }
@@ -280,19 +287,8 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       let preferRight = anchor.midX >= scoutCenter
       let frame: CGRect
       if companion {
-        if toolsVisible && activeModule == .calculator && !choosingArrow {
-          let basic = QuiverSurface.companionPanel(at: anchor, within: bounds,
-            size: CGSize(width: 268 * interfaceScale, height: size.height), preferRight: preferRight)
-          let fitsLeft = basic.minX - (size.width - basic.width) >= bounds.minX
-          let fitsRight = basic.minX + size.width <= bounds.maxX
-          let preferredRight = basic.minX >= anchor.maxX
-          let growRight = preferredRight ? (fitsRight || !fitsLeft) : (!fitsLeft && fitsRight)
-          let x = growRight ? basic.minX : basic.maxX - size.width
-          frame = CGRect(x: min(max(x, bounds.minX), bounds.maxX - min(size.width, bounds.width)), y: basic.minY,
-            width: min(size.width, bounds.width), height: basic.height)
-        } else {
-          frame = QuiverSurface.companionPanel(at: anchor, within: bounds, size: size, preferRight: preferRight)
-        }
+        frame = QuiverSurface.companionPanel(at: anchor, within: bounds, size: size, preferRight: preferRight,
+          avoiding: quiverObstacles())
       } else {
         frame = QuiverSurface.panel(at: anchor, within: bounds, size: size, sideRail: quiverSideRail())
       }
@@ -641,6 +637,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   }
   var quiverFloating: () -> Bool = { false }
   var quiverSideRail: () -> Bool = { false }
+  var quiverObstacles: () -> [CGRect] = { [] }
 
   func openArrow(_ module: NotchModule, at anchor: CGRect?, source: CGRect? = nil, pin: String? = nil) {
     if visible && expanded && activeModule == module && toolsVisible && !isArrowPreview && !choosingArrow
@@ -697,10 +694,6 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     guard let panel else { return }
     let before = panel.frame
     calculatorScientific.toggle()
-    if calculatorScientific {
-      let after = arrangement.frame
-      calculatorExpandsRight = abs(after.minX - before.minX) <= abs(after.maxX - before.maxX)
-    }
     animateArrowResize(from: before)
   }
 
@@ -736,7 +729,8 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     if isArrowPreview { dismiss() }
   }
 
-  func chooseArrow() {
+  func chooseArrow(fromLauncher: Bool = false) {
+    choosingFromLauncher = fromLauncher
     isArrowPreview = false
     if !toolsVisible { showModule(.dashboard) }
     choosingArrow = true
@@ -745,7 +739,12 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     fitContents()
     arrowGeometryChanged?()
   }
-  func cancelChoosingArrow() { choosingArrow = false; fitContents(); focusForKeyboard() }
+  func cancelChoosingArrow() {
+    if choosingFromLauncher { dismiss(); return }
+    choosingArrow = false
+    fitContents()
+    focusForKeyboard()
+  }
   func focusForKeyboard() {
     NSApp.activate(ignoringOtherApps: true)
     panel?.makeKey()

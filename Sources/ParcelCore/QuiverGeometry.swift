@@ -20,15 +20,35 @@ public enum QuiverSurface: String, CaseIterable, Identifiable {
     return .floating
   }
 
-  public static func companionPanel(at anchor: CGRect, within bounds: CGRect, size: CGSize, preferRight: Bool = true) -> CGRect {
+  public static func companionPanel(at anchor: CGRect, within bounds: CGRect, size: CGSize,
+                                    preferRight: Bool = true, avoiding obstacles: [CGRect] = []) -> CGRect {
     let w = min(size.width, bounds.width), h = min(size.height, bounds.height)
     let right = anchor.maxX + 13
     let left = anchor.minX - w - 13
     let rightFits = right + w <= bounds.maxX
     let leftFits = left >= bounds.minX
-    let x = rightFits && (preferRight || !leftFits) ? right : left
-    return CGRect(x: min(max(x, bounds.minX), bounds.maxX - w),
-      y: min(max(anchor.midY - h * 0.5, bounds.minY), bounds.maxY - h), width: w, height: h)
+    let useRight = rightFits && (preferRight || !leftFits)
+    let y = min(max(anchor.midY - h * 0.5, bounds.minY), bounds.maxY - h)
+    let x = useRight ? right : left
+    let preferred = CGRect(x: min(max(x, bounds.minX), bounds.maxX - w), y: y, width: w, height: h)
+    guard !obstacles.isEmpty else { return preferred }
+
+    let protected = obstacles + [anchor]
+    func fits(_ frame: CGRect) -> Bool {
+      bounds.contains(frame) && !protected.contains { $0.intersects(frame) }
+    }
+    if fits(preferred) { return preferred }
+    let other = CGRect(x: useRight ? left : right, y: y, width: w, height: h)
+    if fits(other) { return other }
+
+    let midX = min(max(anchor.midX - w / 2, bounds.minX), bounds.maxX - w)
+    let candidates = protected.flatMap { object in
+      [CGRect(x: midX, y: object.minY - h - 13, width: w, height: h),
+       CGRect(x: midX, y: object.maxY + 13, width: w, height: h)]
+    }.filter(fits)
+    return candidates.min {
+      abs($0.midY - anchor.midY) < abs($1.midY - anchor.midY)
+    } ?? preferred
   }
 
   public static func panel(at anchor: CGRect, within bounds: CGRect, size: CGSize, sideRail: Bool = false) -> CGRect {

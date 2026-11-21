@@ -360,9 +360,9 @@ func useArrow(_ code: Int, _ name: String) {
 
 final class FilmBackdrop: NSView {
   override func draw(_ dirtyRect: NSRect) {
-    NSGradient(colors: [NSColor(calibratedRed: 0.27, green: 0.44, blue: 0.60, alpha: 1),
-      NSColor(calibratedRed: 0.53, green: 0.69, blue: 0.82, alpha: 1),
-      NSColor(calibratedRed: 0.74, green: 0.84, blue: 0.92, alpha: 1)])?.draw(in: bounds, angle: 80)
+    NSGradient(colors: [NSColor(calibratedRed: 0.24, green: 0.36, blue: 0.49, alpha: 1),
+      NSColor(calibratedRed: 0.32, green: 0.49, blue: 0.63, alpha: 1),
+      NSColor(calibratedRed: 0.43, green: 0.58, blue: 0.72, alpha: 1)])?.draw(in: bounds, angle: 80)
     let ridge = NSBezierPath()
     ridge.move(to: .zero)
     ridge.line(to: CGPoint(x: 0, y: bounds.height * 0.19))
@@ -384,7 +384,8 @@ func prepareRecordingDesktop() -> NSWindow? {
   window.title = "Skippy recording backdrop"
   window.contentView = FilmBackdrop()
   window.ignoresMouseEvents = true
-  window.level = .floating
+  window.level = NSWindow.Level(rawValue: NSWindow.Level.normal.rawValue - 1)
+  window.hidesOnDeactivate = false
   window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
   window.orderFrontRegardless()
   window.displayIfNeeded()
@@ -512,8 +513,17 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   check("display all placements") { contains("Floating") && contains("Notch") && contains("Dock") && contains("Menu bar") }
   check("open Pins settings") { press("Pins") }
   check("show pinned Calculator") { contains("Calculator") }
-  check("connector visibility is configurable") {
-    control(kAXCheckBoxRole, "Show connector lines") != nil || control("AXSwitch", "Show connector lines") != nil
+  let connectorToggle = { control(kAXCheckBoxRole, "Show connector lines") ?? control("AXSwitch", "Show connector lines") }
+  check("connector visibility is configurable") { connectorToggle() != nil }
+  if continuous, let switchControl = connectorToggle() {
+    check("connector lines default to on") { (attribute(switchControl, kAXValueAttribute) as? NSNumber)?.boolValue == true }
+    _ = AXUIElementPerformAction(switchControl, kAXPressAction as CFString)
+    check("disable connector lines") { (connectorToggle().flatMap { attribute($0, kAXValueAttribute) } as? NSNumber)?.boolValue == false }
+    beat(0.35)
+    if let switchControl = connectorToggle() {
+      _ = AXUIElementPerformAction(switchControl, kAXPressAction as CFString)
+    }
+    check("restore connector lines") { (connectorToggle().flatMap { attribute($0, kAXValueAttribute) } as? NSNumber)?.boolValue == true }
   }
   check("open Shortcuts settings") { press("Shortcuts") }
   check("show editable launcher hotkey") { contains("Open Skippy shortcut") }
@@ -731,7 +741,12 @@ private func exerciseConnectedPlacements(bounds: CGRect, expectedMusicOffset: CG
   let extras = attribute(application, kAXExtrasMenuBarAttribute)
   let status = extras.flatMap { attribute($0 as! AXUIElement, kAXChildrenAttribute) as? [AXUIElement] }?.first
   guard let status, let statusPoint = center(of: status) else { throw CocoaError(.fileNoSuchFile) }
-  stroke(from: statusPoint, to: CGPoint(x: bounds.midX, y: bounds.maxY - 4))
+  var statusSize = CGSize(width: 31, height: 24)
+  if let value = attribute(status, kAXSizeAttribute), CFGetTypeID(value) == AXValueGetTypeID() {
+    _ = AXValueGetValue(value as! AXValue, .cgSize, &statusSize)
+  }
+  let statusScout = CGPoint(x: statusPoint.x + max(0, statusSize.width - 31) / 2, y: statusPoint.y)
+  stroke(from: statusScout, to: CGPoint(x: bounds.midX, y: bounds.maxY - 4))
   check("Scout switches to the real Dock tile", attempts: 80) {
     NSRunningApplication(processIdentifier: pid_t(pid))?.activationPolicy == .regular
   }

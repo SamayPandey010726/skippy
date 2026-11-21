@@ -874,7 +874,7 @@ struct NotchToolsView: View {
           if shelf.choosingArrow {
             Text("↑ ↓  Select     ↩  Open     Esc  Back").font(.system(size: 11)).foregroundStyle(.secondary)
           } else {
-            Button(action: shelf.chooseArrow) {
+            Button { shelf.chooseArrow() } label: {
               Label("Find an arrow", systemImage: "magnifyingglass")
               Text(shortcuts.binding(for: .chooseArrow).displayName).monospaced()
             }
@@ -1952,6 +1952,19 @@ private struct ArrowFinder: View {
     var title: String {
       switch self { case .tool(let module): module.title; case .app(let app): app.name }
     }
+
+    var searchTerms: String {
+      switch self {
+      case .tool(.parcel): return "Parcels File Shelf"
+      case .tool(.timer): return "Temporal Timer"
+      case .tool(.launcher): return "Quick Launch Apps"
+      case .tool(.color): return "Pick colour Colour Picker Color Picker"
+      case .tool(.qr): return "QR tools QR code"
+      case .tool(.screenshot): return "Screenshots Screen Capture"
+      case .tool(.draw): return "Draw on screen Markup"
+      default: return title
+      }
+    }
   }
 
   @ObservedObject private var skin = SkinStore.shared
@@ -1963,11 +1976,7 @@ private struct ArrowFinder: View {
     let catalogue = NotchModule.allCases.filter { $0 != .dashboard }.map(Entry.tool) + tools.pinnedApps.map(Entry.app)
     let query = shelf.arrowQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     if !query.isEmpty {
-      return catalogue.filter {
-        $0.title.localizedCaseInsensitiveContains(query)
-          || ($0.id == NotchModule.timer.id && "Timer".localizedCaseInsensitiveContains(query))
-          || ($0.id == NotchModule.launcher.id && "Apps".localizedCaseInsensitiveContains(query))
-      }
+      return catalogue.filter { $0.searchTerms.localizedCaseInsensitiveContains(query) }
     }
     let primaries: [NotchModule] = [.parcel, .color, .calculator, .timer, .screenshot, .draw, .launcher, .music,
       .clipboard, .qr, .convert, .compress, .notes, .calendar, .search, .system]

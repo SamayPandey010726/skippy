@@ -27,7 +27,7 @@ defaults write "$bundle_id" parcel.idleTimeout -float 0
 defaults write "$bundle_id" hasSeenWelcome -bool YES
 defaults write "$bundle_id" parcel-skin -string night
 if [[ "${SKIPPY_FILM_BATCH:-all}" == workspace || "${SKIPPY_FILM_BATCH:-all}" == connected || "${SKIPPY_FILM_BATCH:-all}" == settings-review ]]; then
-  pin_data="$(python3 -c 'import json; print(json.dumps([{"id": "calculator", "position": 2, "alwaysVisible": True}, {"id": "music", "position": 0, "alwaysVisible": False}]).encode().hex())')"
+  pin_data="$(python3 -c 'import json; print(json.dumps([{"id": "calculator", "position": 0, "alwaysVisible": True}, {"id": "music", "position": 2, "alwaysVisible": False}]).encode().hex())')"
   defaults write "$bundle_id" skippy.quickPins -data "$pin_data"
 fi
 cd "$run_dir"

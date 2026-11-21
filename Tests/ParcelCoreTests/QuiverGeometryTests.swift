@@ -63,4 +63,16 @@ final class QuiverGeometryTests: XCTestCase {
     XCTAssertTrue(screen.contains(right))
   }
 
+  func testCompanionChecksScoutAndOtherPinsBeforeFlipping() {
+    let bounds = CGRect(x: 0, y: 0, width: 1024, height: 720)
+    let scout = CGRect(x: 584, y: 525, width: 60, height: 60)
+    let pin = CGRect(x: 656, y: 588, width: 42, height: 42)
+    let secondPin = CGRect(x: 656, y: 468, width: 42, height: 42)
+    let size = CGSize(width: 409, height: 346)
+    let panel = QuiverSurface.companionPanel(at: pin, within: bounds, size: size, avoiding: [scout, secondPin])
+    XCTAssertTrue(bounds.contains(panel))
+    for rect in [scout, pin, secondPin] {
+      XCTAssertFalse(panel.intersects(rect), "An expanded tool card must leave Scout and its pins available")
+    }
+  }
 }
