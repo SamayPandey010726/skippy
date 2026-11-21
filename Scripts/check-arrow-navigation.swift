@@ -387,6 +387,34 @@ func prepareRecordingDesktop() -> NSWindow? {
   return window
 }
 
+func captureFixtureWindows(at anchors: [CGPoint], display: CGRect) -> [NSWindow] {
+  let documents = [
+    ("Budget", "Category          Q1          Q2\nProduct          24,000     27,000\nMarketing         8,500      7,500\nTotal            32,500     34,500"),
+    ("Launch artwork", "SKIPPY\nNATIVE TOOLS\nReady for review"),
+    ("Project notes", "Priorities\n• Test the launcher motion\n• Capture four regions"),
+    ("Capture pipeline", "Select   →   Compose\n\n           ↓\n\n        Export PNG")
+  ]
+  guard let screen = NSScreen.main else { return [] }
+  return zip(anchors, documents).map { anchor, document in
+    let frame = CGRect(x: screen.frame.minX + anchor.x - display.minX,
+      y: screen.frame.maxY - (anchor.y - display.minY) - 88, width: 177, height: 86)
+    let window = NSWindow(contentRect: frame, styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.title = document.0
+    window.backgroundColor = NSColor(calibratedRed: 0.96, green: 0.97, blue: 0.99, alpha: 1)
+    let label = NSTextField(wrappingLabelWithString: document.1)
+    label.font = .monospacedSystemFont(ofSize: 9, weight: .medium)
+    label.textColor = NSColor(calibratedRed: 0.14, green: 0.23, blue: 0.34, alpha: 1)
+    label.frame = CGRect(x: 6, y: 0, width: 165, height: 75)
+    window.contentView?.addSubview(label)
+    window.ignoresMouseEvents = true
+    window.level = .floating
+    window.orderFrontRegardless()
+    window.displayIfNeeded()
+    return window
+  }
+}
+
 func captureWorkspaceFilms(using fixture: URL) throws {
   let backdrop = prepareRecordingDesktop()
   defer { backdrop?.orderOut(nil) }
@@ -522,6 +550,8 @@ func captureWorkspaceFilms(using fixture: URL) throws {
   let middle = CGPoint(x: bounds.midX, y: bounds.midY)
   let anchors = [CGPoint(x: middle.x - 210, y: middle.y - 125), CGPoint(x: middle.x + 20, y: middle.y - 125),
     CGPoint(x: middle.x - 210, y: middle.y + 20), CGPoint(x: middle.x + 20, y: middle.y + 20)]
+  let examples = captureFixtureWindows(at: anchors, display: bounds)
+  defer { examples.forEach { $0.orderOut(nil) } }
   for corner in anchors {
     stroke(from: CGPoint(x: corner.x + 15, y: corner.y + 25), to: CGPoint(x: corner.x + 100, y: corner.y + 68))
   }

@@ -14,10 +14,9 @@ struct CapturePreview: View {
   var body: some View {
     GeometryReader { geometry in
       if let thumbnail {
-        Image(decorative: thumbnail, scale: 1)
+        Image(thumbnail, scale: 1, label: Text("Combined image preview"))
           .resizable().scaledToFit()
           .frame(width: geometry.size.width, height: geometry.size.height)
-          .accessibilityLabel("Combined image preview")
       }
     }
     .background(Ink.cream, in: RoundedRectangle(cornerRadius: 9))
