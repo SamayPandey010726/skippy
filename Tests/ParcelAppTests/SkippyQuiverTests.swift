@@ -83,14 +83,13 @@ final class SkippyQuiverTests: XCTestCase {
     shelf.dismiss()
     XCTAssertFalse(shelf.isVisible)
     let window = quiver.strip.window
-    var titles = Set<String>()
-    for _ in 0..<quiver.pageCount {
-      titles.formUnion(quiver.strip.subviews.compactMap { ($0 as? NSButton)?.accessibilityLabel() })
-      quiver.nextPage()
-      XCTAssertTrue(quiver.strip.window === window)
-    }
-    XCTAssertEqual(quiver.page, 0)
-    XCTAssertTrue(widgets.widgets.allSatisfy { titles.contains($0.kind.module.title) })
+    let titles = quiver.strip.subviews.compactMap { ($0 as? NSButton)?.accessibilityLabel() }
+    XCTAssertEqual(titles.count, 4)
+    XCTAssertEqual(titles.last, "More arrows")
+    quiver.openArrowFinder()
+    XCTAssertTrue(quiver.strip.window === window)
+    XCTAssertTrue(shelf.choosingArrow)
+    shelf.dismiss()
     quiver.hover(false)
     try await Task.sleep(for: .seconds(2))
     XCTAssertFalse(quiver.unfolded)

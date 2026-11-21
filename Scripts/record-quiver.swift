@@ -118,19 +118,18 @@ guard NSWorkspace.shared.frontmostApplication?.processIdentifier == baselineFocu
   throw RecordingError.focusChanged
 }
 print("PASS hovering preserved foreground application")
-let notes = CGPoint(x: strip.midX + sin(4 * Double.pi / 5) * 51, y: strip.midY - cos(4 * Double.pi / 5) * 51)
+let notes = CGPoint(x: strip.midX, y: strip.midY + 51)
 try glide(shelf, notes)
 pause(0.55)
 pointer(notes, .leftMouseDown); pointer(notes, .leftMouseUp); pause(0.65)
 try glide(notes, center)
 pointer(center, .leftMouseDown); pointer(center, .leftMouseUp); pause(1.2)
 guard windows().contains(where: { abs($0.width-strip.width) <= 1 && abs($0.height-strip.height) <= 1 }),
-      !windows().contains(where: { $0.width >= 300 && $0.height >= 160 }) else {
+      windows().contains(where: { $0.width >= 300 && $0.height >= 160 }) else {
   throw RecordingError.panelFailed
 }
-print("PASS More shares the wheel and dismisses the previous tool")
-pointer(center, .leftMouseDown); pointer(center, .leftMouseUp); pause(0.8)
-escape()
+print("PASS Scout opens the searchable arrow list next to the stable wheel")
+escape(); pause(0.35); escape()
 try glide(center, away); pause(2.45)
 guard windows().contains(where: { $0.width == mark.width && $0.height == mark.height }) else { throw RecordingError.foldFailed }
 pause(max(0, 17.2 - Date().timeIntervalSince(captureStart)))

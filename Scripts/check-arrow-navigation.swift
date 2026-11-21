@@ -349,7 +349,7 @@ check("Down and Return select the second matching tool") {
 }
 key(kVK_ANSI_K, flags: .maskCommand)
 check("finder reopens over calculator") { control(kAXTextFieldRole, "Find an arrow") != nil }
-typeText("zzzz"); check("finder explains an empty result") { contains("No matching arrows") }
+key(kVK_ANSI_A, flags: .maskCommand); typeText("zzzz"); check("finder explains an empty result") { contains("No matching arrows") }
 key(kVK_Escape)
 check("Escape cancels search and preserves the current tool") {
   panels().contains { $0[kCGWindowName as String] as? String == "Skippy · Calculator" } && !contains("No matching arrows")
@@ -383,6 +383,7 @@ for name in selected {
     return labels(value as! AXUIElement).contains("Find an arrow")
   }
   beat(1.3)
+  key(kVK_ANSI_A, flags: .maskCommand)
   typeText(name.lowercased())
   beat(0.9)
   key(kVK_Return)
@@ -407,9 +408,8 @@ if filming && (batch == "all" || batch == "preferences") {
     key(kVK_ANSI_P, flags: [.maskControl, .maskAlternate, .maskCommand])
     check("summon launcher for keyboard browsing") { !panels().isEmpty }
   }
-  try startFilm("Keyboard and themes")
+  try startFilm("Keyboard and launcher")
   beat(1)
-  key(kVK_ANSI_T, flags: [.maskAlternate, .maskShift])
   beat(2)
   key(kVK_ANSI_I, flags: [.maskAlternate, .maskShift])
   beat(1)
@@ -417,7 +417,6 @@ if filming && (batch == "all" || batch == "preferences") {
   beat(1.2)
   key(kVK_RightArrow); beat(0.8); key(kVK_RightArrow); beat(0.8); key(kVK_Return)
   check("select Notes from the wheel by keyboard") { panels().contains { $0[kCGWindowName as String] as? String == "Skippy · Notes" } }
-  key(kVK_ANSI_T, flags: [.maskAlternate, .maskShift])
   try finishFilm()
   key(kVK_ANSI_S, flags: .maskCommand)
   check("Settings is the standalone window") { panels().contains { $0[kCGWindowName as String] as? String == "Skippy Settings" } }
@@ -429,7 +428,7 @@ if filming && (batch == "all" || batch == "preferences") {
   beat(1.5)
   check("open shortcut settings") { press("Shortcuts") }
   beat(3)
-  check("return to Everyday settings") { press("Everyday") }
+  check("return to General settings") { press("General") }
   try finishFilm()
   key(kVK_ANSI_W, flags: .maskCommand)
   check("closing Settings returns to the mark") { panels().isEmpty }

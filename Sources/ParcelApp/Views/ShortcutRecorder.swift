@@ -3,10 +3,13 @@ import SwiftUI
 
 struct ShortcutRecorder: NSViewRepresentable {
   let shortcut: GlobalShortcut
+  var title = "Global Skippy shortcut"
   let onRecord: (GlobalShortcut) -> Bool
 
   func makeNSView(context: Context) -> ShortcutRecorderButton {
-    ShortcutRecorderButton(shortcut: shortcut, onRecord: onRecord)
+    let button = ShortcutRecorderButton(shortcut: shortcut, onRecord: onRecord)
+    button.setAccessibilityLabel(title)
+    return button
   }
 
   func updateNSView(_ button: ShortcutRecorderButton, context: Context) {
@@ -46,6 +49,8 @@ final class CourierShortcutRecorderButton: NSButton {
   override var acceptsFirstResponder: Bool { true }
   @objc private func beginRecording() { isRecording = true; show("Press keys…"); window?.makeFirstResponder(self) }
   override func keyDown(with event: NSEvent) {
+    guard isRecording else { super.keyDown(with: event); return }
+    if event.keyCode == 53 { isRecording = false; show(binding.displayName); return }
     let candidate = CourierKeyBinding(event: event)
     guard onRecord(command, candidate) else { NSSound.beep(); show("Already used"); return }
     binding = candidate; isRecording = false; show(candidate.displayName)
@@ -100,14 +105,16 @@ final class ShortcutRecorderButton: NSButton {
   }
 
   override func keyDown(with event: NSEvent) {
+    guard isRecording else { super.keyDown(with: event); return }
     if event.keyCode == 53 {
       finishRecording()
       return
     }
-    guard let candidate = GlobalShortcut(event: event), onRecord(candidate) else {
-      NSSound.beep()
-      show("Try 2+ modifiers")
-      return
+    guard let candidate = GlobalShortcut(event: event) else {
+      NSSound.beep(); show("Try 2+ modifiers"); return
+    }
+    guard onRecord(candidate) else {
+      NSSound.beep(); show("Already used"); return
     }
     shortcut = candidate
     finishRecording()

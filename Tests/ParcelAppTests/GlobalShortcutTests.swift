@@ -53,6 +53,9 @@ final class GlobalShortcutTests: XCTestCase {
       nil, OSType(kEventClassKeyboard), UInt32(kEventHotKeyPressed), GetCurrentEventTime(),
       EventAttributes(kEventAttributeNone), &event), noErr)
     let createdEvent = try XCTUnwrap(event)
+    var identifier = EventHotKeyID(signature: 0x5052_434C, id: 1)
+    XCTAssertEqual(SetEventParameter(createdEvent, EventParamName(kEventParamDirectObject),
+      EventParamType(typeEventHotKeyID), ByteCount(MemoryLayout<EventHotKeyID>.size), &identifier), noErr)
     XCTAssertEqual(SendEventToEventTarget(createdEvent, GetApplicationEventTarget()), noErr)
     await fulfillment(of: [invoked], timeout: 1)
   }

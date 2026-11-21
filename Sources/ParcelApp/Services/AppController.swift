@@ -42,6 +42,12 @@ import SwiftUI
     SpotlightIndexer.shared.install(store: store)
     ClipboardHistoryStore.shared.start()
     GlobalShortcutManager.shared.install { AppController.shared.handleGlobalShortcut() }
+    GlobalShortcutManager.shared.installWorkspace { target in
+      switch target {
+      case .launcher: SkippyQuiver.shared.beginKeyboardBrowsing()
+      case .arrow(let module): DropPopupController.shared.openArrow(module, at: SkippyQuiver.shared.anchor)
+      }
+    }
     store.checkCacheOnStartup()
   }
   func showActivation() {
@@ -108,8 +114,8 @@ import SwiftUI
   private func presentSettings(initialTab: Int?) {
     guard let store else { return }
     if preferencesWindow == nil {
-      let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 550, height: 540),
-        styleMask: [.titled, .closable], backing: .buffered, defer: false)
+      let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 688, height: 548),
+        styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
       window.title = "Skippy Settings"; window.isReleasedWhenClosed = false
       window.isRestorable = false
       window.delegate = self
@@ -220,7 +226,8 @@ enum SelectionCapture {
       return false
     }
     if Self.shouldSummonShelf(secondsSinceLaunch: ProcessInfo.processInfo.systemUptime - launchTime) {
-      DropPopupController.shared.summon()
+      if SkippyQuiver.shared.surface == .dock { SkippyQuiver.shared.openArrowFinder() }
+      else { DropPopupController.shared.summon() }
     }
     return false
   }

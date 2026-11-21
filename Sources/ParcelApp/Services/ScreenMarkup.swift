@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 @MainActor final class ScreenMarkupController: ObservableObject {
   static let shared = ScreenMarkupController()
   private var panel: NSPanel?
+  private var resumePanel: NSPanel?
 
   func open() {
     guard panel == nil, let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) ?? NSScreen.main else { return }
@@ -15,12 +16,42 @@ import UniformTypeIdentifiers
     window.level = .screenSaver
     window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     window.isReleasedWhenClosed = false
-    window.contentView = NSHostingView(rootView: ScreenMarkupView(close: { [weak self] in self?.close() }))
+    window.title = "Skippy · Markup canvas"
+    window.contentView = NSHostingView(rootView: ScreenMarkupView(
+      close: { [weak self] in self?.close() },
+      interact: { [weak self] in self?.interact(on: screen) },
+      capture: { [weak self] mode, artwork in self?.capture(mode, artwork: artwork, screen: screen) }))
     panel = window
     window.makeKeyAndOrderFront(nil)
   }
 
-  func close() { panel?.orderOut(nil); panel = nil }
+  func close() {
+    resumePanel?.orderOut(nil); resumePanel = nil
+    panel?.orderOut(nil); panel = nil
+  }
+
+  private func interact(on screen: NSScreen) {
+    guard let panel else { return }
+    panel.ignoresMouseEvents = true
+    let bar = ShelfPanel(contentRect: CGRect(x: screen.visibleFrame.maxX - 164, y: screen.visibleFrame.maxY - 44,
+      width: 152, height: 38), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+    bar.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
+    bar.isReleasedWhenClosed = false; bar.isOpaque = false; bar.backgroundColor = .clear
+    bar.contentView = NSHostingView(rootView: Button("Resume drawing") { [weak self] in
+      self?.resumePanel?.orderOut(nil); self?.resumePanel = nil
+      self?.panel?.ignoresMouseEvents = false
+      self?.panel?.makeKeyAndOrderFront(nil)
+    }.padding(7).background(.regularMaterial, in: Capsule()))
+    resumePanel = bar; bar.orderFrontRegardless()
+  }
+
+  private func capture(_ mode: WorkspaceCaptureMode, artwork: CGImage?, screen: NSScreen) {
+    panel?.orderOut(nil)
+    ScreenCaptureWorkspace.shared.capture(mode, ink: artwork, on: screen) { [weak self] result in
+      self?.panel?.makeKeyAndOrderFront(nil)
+      NotchToolStore.shared.acceptCaptures(result)
+    }
+  }
 }
 
 private enum MarkupTool: String, CaseIterable, Identifiable {
@@ -39,14 +70,20 @@ private struct MarkupStroke: Identifiable {
   var tool: MarkupTool
   var points: [CGPoint]
   var color: Color
+  var width: CGFloat
 }
 
 private struct ScreenMarkupView: View {
   var close: () -> Void
+  var interact: () -> Void
+  var capture: (WorkspaceCaptureMode, CGImage?) -> Void
   @State private var tool: MarkupTool = .pen
   @State private var color: Color = .red
+  @State private var width: CGFloat = 4
   @State private var strokes: [MarkupStroke] = []
   @State private var current: MarkupStroke?
+  @State private var history: [[MarkupStroke]] = []
+  @State private var future: [[MarkupStroke]] = []
 
   @State private var canvasSize = CGSize.zero
   @State private var exportError: String?
@@ -70,7 +107,7 @@ private struct ScreenMarkupView: View {
           }
           context.blendMode = stroke.tool == .eraser ? .destinationOut : .normal
           context.stroke(path, with: .color(stroke.color.opacity(stroke.tool == .highlighter ? 0.35 : 1)),
-            style: StrokeStyle(lineWidth: stroke.tool == .eraser ? 24 : (stroke.tool == .highlighter ? 14 : 3), lineCap: .round, lineJoin: .round))
+            style: StrokeStyle(lineWidth: stroke.width, lineCap: .round, lineJoin: .round))
         }
       }
   }
@@ -81,10 +118,8 @@ private struct ScreenMarkupView: View {
     panel.nameFieldStringValue = "Skippy markup.png"
     panel.allowedContentTypes = [.png]
     guard panel.runModal() == .OK, let url = panel.url else { return }
-    let renderer = ImageRenderer(content: artwork.frame(width: canvasSize.width, height: canvasSize.height))
-    renderer.scale = displayScale
     do {
-      guard let image = renderer.cgImage,
+      guard let image = renderArtwork(),
         let data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else {
         throw CocoaError(.fileWriteUnknown)
       }
@@ -92,28 +127,57 @@ private struct ScreenMarkupView: View {
     } catch { exportError = error.localizedDescription }
   }
 
+  @MainActor private func renderArtwork() -> CGImage? {
+    let renderer = ImageRenderer(content: artwork.frame(width: canvasSize.width, height: canvasSize.height))
+    renderer.scale = displayScale
+    return renderer.cgImage
+  }
+
+  private func checkpoint() {
+    history.append(strokes)
+    if history.count > 40 { history.removeFirst() }
+    future.removeAll()
+  }
+
   var body: some View {
     ZStack(alignment: .top) {
       Color.black.opacity(0.001).contentShape(Rectangle())
         .gesture(DragGesture(minimumDistance: 0).onChanged { value in
-          if current == nil { current = MarkupStroke(tool: tool, points: [value.startLocation], color: color) }
+          if current == nil { current = MarkupStroke(tool: tool, points: [value.startLocation], color: color, width: width) }
           current?.points.append(value.location)
         }.onEnded { _ in
-          if let current { strokes.append(current) }
+          if let current { checkpoint(); strokes.append(current) }
           current = nil
         })
       artwork.allowsHitTesting(false)
 
       HStack(spacing: 8) {
         ForEach(MarkupTool.allCases) { option in
-          Button { tool = option } label: { Image(systemName: option.symbol).frame(width: 24, height: 24) }
+          Button {
+            if tool != option {
+              tool = option
+              width = option == .eraser ? 24 : (option == .highlighter ? 14 : 4)
+            }
+          } label: { Image(systemName: option.symbol).frame(width: 24, height: 24) }
             .buttonStyle(.plain).background(tool == option ? Color.accentColor.opacity(0.35) : .clear, in: RoundedRectangle(cornerRadius: 6))
             .help(option.rawValue.capitalized)
         }
         Divider().frame(height: 20)
         ColorPicker("Colour", selection: $color, supportsOpacity: false).labelsHidden().frame(width: 28)
-        Button("Undo") { if !strokes.isEmpty { strokes.removeLast() } }.disabled(strokes.isEmpty)
-        Button("Clear") { strokes.removeAll() }.disabled(strokes.isEmpty)
+        Slider(value: $width, in: 1...40).frame(width: 66).accessibilityLabel("Stroke width")
+        Button("Undo") {
+          if let snapshot = history.popLast() { future.append(strokes); strokes = snapshot }
+        }.keyboardShortcut("z").disabled(history.isEmpty)
+        Button("Redo") {
+          if let snapshot = future.popLast() { history.append(strokes); strokes = snapshot }
+        }.keyboardShortcut("z", modifiers: [.command, .shift]).disabled(future.isEmpty)
+        Button("Clear") { checkpoint(); strokes.removeAll() }.disabled(strokes.isEmpty)
+        Button("Interact", action: interact).help("Keep the ink visible while working in the apps underneath")
+        Menu("Capture") {
+          ForEach(WorkspaceCaptureMode.allCases) { mode in
+            Button(mode.rawValue) { capture(mode, renderArtwork()) }
+          }
+        }.fixedSize()
         Button("Save PNG…", action: exportPNG).disabled(strokes.isEmpty)
         Button("Done", action: close).keyboardShortcut(.escape, modifiers: [])
       }

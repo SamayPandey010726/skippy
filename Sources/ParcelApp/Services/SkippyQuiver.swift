@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import Combine
+import QuartzCore
 
 import ParcelCore
 
@@ -18,8 +19,6 @@ enum QuiverEmblem: String, CaseIterable {
   @Published var emblem: QuiverEmblem {
     didSet { defaults.set(emblem.rawValue, forKey: "skippy.emblem"); mark?.emblem = emblem; mark?.needsDisplay = true }
   }
-  private(set) var page = 0
-  private(set) var pageCount = 1
   private(set) var unfolded = false
   private(set) var strip = QuiverStrip()
   private var status: NSStatusItem?
@@ -31,12 +30,16 @@ enum QuiverEmblem: String, CaseIterable {
   private var settingsPresented = false
   private var installed = false
   private var dragging = false
+  private var attachmentOrigin: CGRect?
   private var progress: CGFloat = 0
   private var motion: Timer?
   private var pointerMonitor: Any?
   private var keyboardMonitor: Any?
   private var focusedIndex = 0
   private var previewWork: DispatchWorkItem?
+  private var pinPreviewWork: DispatchWorkItem?
+  private var satellites: [String: NSPanel] = [:]
+  private lazy var quickPins = defaults === UserDefaults.standard ? QuickPinStore.shared : QuickPinStore(defaults: defaults)
   private weak var previewTarget: NSButton?
   private var arrowModules: [NSButton: NotchModule] = [:]
   private var icons: [NSButton] = []
@@ -72,6 +75,8 @@ enum QuiverEmblem: String, CaseIterable {
     strip.pointer = { [weak self] in self?.hover($0) }
     strip.pointerMoved = { [weak self] in self?.trackArrow() }
     attach()
+    quickPins.$pins.combineLatest(quickPins.$alwaysVisible).dropFirst()
+      .receive(on: RunLoop.main).sink { [weak self] _ in self?.layout() }.store(in: &subscriptions)
     SkinStore.shared.$skin.dropFirst().receive(on: RunLoop.main).sink { [weak self] _ in self?.layout() }.store(in: &subscriptions)
     widgets.$widgets.combineLatest(tools.$pinnedApps).receive(on: RunLoop.main).sink { [weak self] _ in self?.layout() }.store(in: &subscriptions)
     NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)
@@ -96,14 +101,17 @@ enum QuiverEmblem: String, CaseIterable {
   }
 
   private func attach() {
+    let origin = attachmentOrigin
+    attachmentOrigin = nil
     endKeyboardBrowsing()
     foldWork?.cancel(); previewWork?.cancel(); motion?.invalidate()
     if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor); self.pointerMonitor = nil }
-    unfolded = false; progress = 0; page = 0
+    unfolded = false; progress = 0
     shelf.dismiss()
     strip.removeFromSuperview()
     if let status { NSStatusBar.system.removeStatusItem(status); self.status = nil }
     floating?.orderOut(nil); floating = nil
+    for satellite in satellites.values { satellite.orderOut(nil) }
     dockHover?.stop(); dockHover = nil; dockTile = nil
     if surface == .dock {
       NSApp.setActivationPolicy(.regular)
@@ -129,11 +137,15 @@ enum QuiverEmblem: String, CaseIterable {
     layout()
     if surface != .dock, !settingsPresented, let panel = floating {
       let animate = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-      panel.alphaValue = animate ? 0 : 1
+      let destination = panel.frame
+      panel.alphaValue = animate && origin == nil ? 0 : 1
+      if animate, let origin { panel.setFrame(origin, display: true) }
       panel.orderFrontRegardless()
       if animate {
         NSAnimationContext.runAnimationGroup { context in
-          context.duration = 0.14
+          context.duration = origin == nil ? 0.14 : 0.24
+          context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+          panel.animator().setFrame(destination, display: true)
           panel.animator().alphaValue = 1
         }
       }
@@ -148,8 +160,10 @@ enum QuiverEmblem: String, CaseIterable {
       previewWork?.cancel(); foldWork?.cancel()
       setUnfolded(false)
       floating?.orderOut(nil)
+      for satellite in satellites.values { satellite.orderOut(nil) }
     } else if surface != .dock {
       floating?.orderFrontRegardless()
+      showSatellites()
     }
   }
 
@@ -157,7 +171,7 @@ enum QuiverEmblem: String, CaseIterable {
     guard !settingsPresented, !dragging, keyboardMonitor == nil else { return }
     foldWork?.cancel()
     if inside {
-      if !unfolded { setUnfolded(true) }
+      if !unfolded, defaults.object(forKey: "skippy.hoverLauncher") as? Bool ?? true { setUnfolded(true) }
     } else {
       (previewTarget as? ArrowButton)?.pointing = false
       previewTarget = nil; previewWork?.cancel()
@@ -178,6 +192,7 @@ enum QuiverEmblem: String, CaseIterable {
   private func setUnfolded(_ open: Bool) {
     guard open != unfolded else { return }
     unfolded = open
+    showSatellites()
     if open {
       // A status item can receive pointer motion through the menu-bar hosting process.
       pointerMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
@@ -190,7 +205,7 @@ enum QuiverEmblem: String, CaseIterable {
     let target: CGFloat = open ? 1 : 0
     let start = progress
     let began = ProcessInfo.processInfo.systemUptime
-    let duration = max(0.06, Double(abs(target - start)) * (open ? 0.22 : 0.17))
+    let duration = max(0.06, Double(abs(target - start)) * (open ? 0.28 : 0.20))
     func finish() {
       progress = target; render(); motion?.invalidate(); motion = nil
       if !open && surface == .dock { floating?.orderOut(nil) }
@@ -204,7 +219,7 @@ enum QuiverEmblem: String, CaseIterable {
           self.progress = target; self.render(); self.trackArrow(); timer.invalidate(); self.motion = nil
           if !open && self.surface == .dock { self.floating?.orderOut(nil) }
         } else {
-          let eased = t * t * (3 - 2 * t)
+          let eased = open ? 1 - pow(1 - t, 3) : t * t * (3 - 2 * t)
           self.progress = start + (target - start) * CGFloat(eased)
           self.render()
         }
@@ -216,7 +231,9 @@ enum QuiverEmblem: String, CaseIterable {
 
   private var stripContainsPointer: Bool {
     guard let window = strip.window, window.isVisible else { return false }
-    return strip.bounds.contains(strip.convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil))
+    let pointer = NSEvent.mouseLocation
+    return satellites.values.contains { $0.isVisible && $0.frame.contains(pointer) }
+      || strip.bounds.contains(strip.convert(window.convertPoint(fromScreen: pointer), from: nil))
   }
 
   private func trackArrow() {
@@ -228,7 +245,8 @@ enum QuiverEmblem: String, CaseIterable {
     (previewTarget as? ArrowButton)?.pointing = false
     (button as? ArrowButton)?.pointing = true
     previewTarget = button
-    guard let button, let module = arrowModules[button] else { return }
+    guard defaults.object(forKey: "skippy.hoverArrowPreviews") as? Bool ?? true,
+      let button, let module = arrowModules[button] else { return }
     let work = DispatchWorkItem { [weak self, weak button] in
       guard let self, let button, let window = button.window, self.unfolded else { return }
       let rect = window.convertToScreen(button.convert(button.bounds, to: nil))
@@ -255,6 +273,7 @@ enum QuiverEmblem: String, CaseIterable {
   func menu() -> NSMenu {
     let menu = NSMenu()
     menu.addItem(CourierMenuAction("Open Skippy") { self.show(.dashboard) })
+    menu.addItem(CourierMenuAction("Find an arrow…") { self.openArrowFinder() })
     let arrows = NSMenu()
     for widget in widgets.widgets {
       arrows.addItem(CourierMenuAction(widget.kind.module.title) { self.show(widget.kind.module) })
@@ -319,10 +338,19 @@ enum QuiverEmblem: String, CaseIterable {
     icons.removeAll(); arrowModules.removeAll(); previewTarget = nil
     enum Entry { case tool(NotchWidget), app(PinnedNotchApp) }
     let pins = widgets.pinned.map(Entry.tool) + tools.pinnedApps.map(Entry.app)
-    let other = Array(pins.dropFirst(6)) + widgets.widgets.filter { !$0.pinned }.map(Entry.tool)
-    pageCount = 1 + (other.count + 5) / 6
-    page = min(page, pageCount - 1)
-    let entries = page == 0 ? Array(pins.prefix(6)) : Array(other.dropFirst((page-1)*6).prefix(6))
+    let direct = quickPins.pins.prefix(3)
+    let foregroundPins: [Entry] = direct.compactMap { pin in
+      if let widget = widgets.widgets.first(where: { $0.kind.rawValue == pin.id }) { return .tool(widget) }
+      return tools.pinnedApps.first(where: { $0.id == pin.id }).map(Entry.app)
+    }
+    let directIDs = Set(direct.map(\.id))
+    let remainingPins = pins.filter { entry in
+      switch entry {
+      case .tool(let widget): !directIDs.contains(widget.kind.rawValue)
+      case .app(let app): !directIDs.contains(app.id)
+      }
+    }
+    let entries = (surface == .floating ? remainingPins : foregroundPins + remainingPins).prefix(3)
     for entry in entries {
       switch entry {
       case .tool(let widget):
@@ -338,12 +366,8 @@ enum QuiverEmblem: String, CaseIterable {
         })
       }
     }
-    if pageCount > 1 {
-      let last = page == pageCount - 1
-      icons.append(strip.addIcon(last ? "Back to pins" : "More arrows",
-        image: NSImage(systemSymbolName: last ? "arrow.uturn.backward" : "ellipsis", accessibilityDescription: nil),
-        frame: .zero, inMenu: surface == .menu) { [weak self] _ in self?.nextPage() })
-    }
+    icons.append(strip.addIcon("More arrows", image: NSImage(systemSymbolName: "ellipsis", accessibilityDescription: nil),
+      frame: .zero, inMenu: surface == .menu) { [weak self] _ in self?.openArrowFinder() })
     let dark = SkinStore.shared.skin == .night
     let ink = dark ? NSColor(white: 0.94, alpha: 1) : NSColor(calibratedRed: 0.15, green: 0.23, blue: 0.21, alpha: 1)
     for icon in icons {
@@ -355,7 +379,7 @@ enum QuiverEmblem: String, CaseIterable {
       }
     }
     strip.layer?.backgroundColor = surface == .menu ? NSColor.clear.cgColor :
-      (dark ? NSColor(calibratedRed: 0.095, green: 0.12, blue: 0.135, alpha: 0.97) : NSColor(calibratedRed: 0.97, green: 0.975, blue: 0.945, alpha: 0.98)).cgColor
+      (dark ? NSColor(calibratedRed: 0.13, green: 0.17, blue: 0.22, alpha: 0.97) : NSColor(calibratedRed: 0.97, green: 0.975, blue: 0.945, alpha: 0.98)).cgColor
     strip.layer?.borderWidth = surface == .menu ? 0 : 0.8
     strip.layer?.borderColor = ink.withAlphaComponent(0.18).cgColor
     let mark = QuiverMark(frame: .zero)
@@ -363,11 +387,11 @@ enum QuiverEmblem: String, CaseIterable {
     mark.emblem = emblem
     mark.ink = ink
     mark.inMenu = surface == .menu
-    mark.setAccessibilityLabel(page == 0 ? "Skippy, browse arrows" : "Back to pinned arrows")
+    mark.setAccessibilityLabel("Skippy, browse arrows")
     mark.tap = { [weak self] in
       guard let self else { return }
-      if self.page != 0 { self.page = 0; self.layout() }
-      else { self.nextPage() }
+      if self.unfolded { self.openArrowFinder() }
+      else { self.setUnfolded(true) }
     }
     mark.courierMenu = { [weak self] _ in self?.menu() ?? NSMenu() }
     mark.beginDrop = { [weak self] in self?.shelf.beginPrimaryDrop() }
@@ -377,29 +401,113 @@ enum QuiverEmblem: String, CaseIterable {
       mark.windowMovement = WindowMoveActions(begin: {}, drag: { [weak self] event in
         guard let self else { return }
         self.dragging = true; self.foldWork?.cancel()
+        for satellite in self.satellites.values { satellite.orderOut(nil) }
         floating.performDrag(with: event)
         self.dragging = false
         let p = NSEvent.mouseLocation
+        let markFrame = floating.convertToScreen(mark.convert(mark.bounds, to: nil))
+        let vCenter = CGPoint(x: markFrame.midX, y: markFrame.midY)
         guard let dest = NSScreen.screens.first(where: { $0.frame.contains(p) }) else { return }
         let v = dest.visibleFrame
         self.defaults.set(DropPopupController.displayID(for: dest), forKey: "skippy.display")
-        self.defaults.set(min(1, max(0, (p.x - v.minX) / v.width)), forKey: "skippy.x")
-        self.defaults.set(min(1, max(0, (p.y - v.minY) / v.height)), forKey: "skippy.y")
+        self.defaults.set(min(1, max(0, (vCenter.x - v.minX) / v.width)), forKey: "skippy.x")
+        self.defaults.set(min(1, max(0, (vCenter.y - v.minY) / v.height)), forKey: "skippy.y")
+        self.attachmentOrigin = markFrame
         self.surface = QuiverSurface.snapped(at: p, screen: dest.frame, visible: v)
       }, end: {})
     }
     strip.addSubview(mark)
     render()
+    rebuildSatellites()
     if unfolded { trackArrow() }
   }
 
+  private func rebuildSatellites() {
+    for panel in satellites.values { panel.orderOut(nil) }
+    satellites.removeAll()
+    guard surface == .floating else { return }
+    for pin in quickPins.pins.prefix(3) {
+      let app = tools.pinnedApps.first { $0.id == pin.id }
+      guard let title = pin.module?.title ?? app?.name else { continue }
+      let offset = pin.position.offset
+      let x = min(max(screenBounds.minX + 14, center.x + offset.x), screenBounds.maxX - 14)
+      let y = min(max(screenBounds.minY + 14, center.y + offset.y), screenBounds.maxY - 14)
+      let frame = CGRect(x: x - 14, y: y - 14, width: 28, height: 28)
+      let panel = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+      panel.level = .statusBar; panel.hidesOnDeactivate = false; panel.isReleasedWhenClosed = false
+      panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+      panel.backgroundColor = .clear; panel.isOpaque = false; panel.hasShadow = true
+      panel.title = "Skippy pin · " + title
+      let button = QuickPinButton(frame: CGRect(origin: .zero, size: frame.size))
+      button.image = pin.module.flatMap { NSImage(systemSymbolName: $0.symbol, accessibilityDescription: nil) }
+        ?? app.map { tools.icon(for: $0) }
+      button.imageScaling = .scaleProportionallyDown
+      button.imagePosition = .imageOnly; button.isBordered = false
+      button.contentTintColor = .white; button.wantsLayer = true
+      button.layer?.cornerRadius = 14
+      button.layer?.backgroundColor = NSColor(calibratedRed: 0.17, green: 0.23, blue: 0.30, alpha: 1).cgColor
+      button.toolTip = title
+      button.setAccessibilityLabel(title + " quick pin")
+      button.setAccessibilityHelp("Click to open. Drag around Skippy to reposition.")
+      button.target = button; button.action = #selector(QuickPinButton.activatePin)
+      button.open = { [weak self, weak button] in
+        guard let self else { return }
+        self.pinPreviewWork?.cancel()
+        if let module = pin.module { self.show(module, from: button) }
+        else if let app { self.tools.launch(app) }
+      }
+      button.hover = { [weak self, weak panel] inside in
+        guard let self else { return }
+        self.hover(inside)
+        self.pinPreviewWork?.cancel()
+        guard inside, self.defaults.object(forKey: "skippy.hoverArrowPreviews") as? Bool ?? true,
+          let module = pin.module else { return }
+        let work = DispatchWorkItem { [weak self, weak panel] in
+          guard let self, let panel, panel.frame.contains(NSEvent.mouseLocation) else { return }
+          self.shelf.previewArrow(module, at: panel.frame)
+        }
+        self.pinPreviewWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.20, execute: work)
+      }
+      button.movePin = { [weak self] pointer in
+        guard let self else { return }
+        func distance(_ slot: QuickPinPosition) -> CGFloat {
+          hypot(self.center.x + slot.offset.x - pointer.x, self.center.y + slot.offset.y - pointer.y)
+        }
+        if let slot = QuickPinPosition.allCases.min(by: { distance($0) < distance($1) }) {
+          self.quickPins.position(pin.id, at: slot)
+        }
+      }
+      panel.contentView = button
+      satellites[pin.id] = panel
+    }
+    showSatellites()
+  }
+
+  private func showSatellites() {
+    for pin in quickPins.pins.prefix(3) {
+      guard let panel = satellites[pin.id] else { continue }
+      if !settingsPresented && (unfolded || quickPins.isAlwaysVisible(pin)) {
+        if !panel.isVisible { panel.orderFrontRegardless() }
+      } else if panel.isVisible { panel.orderOut(nil) }
+    }
+  }
+
   func beginKeyboardBrowsing() {
+    guard installed else { return }
+    if settingsPresented {
+      if let window = NSApp.windows.first(where: { $0.title == "Skippy Settings" && $0.isVisible }) {
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+      }
+      return
+    }
+    if surface == .menu { openArrowFinder(); return }
     foldWork?.cancel()
     previewWork?.cancel()
     endKeyboardBrowsing()
     if surface == .dock, dockTile == nil { dockTile = anchor }
     shelf.dismiss()
-    page = 0
     layout()
     setUnfolded(true)
     floating?.makeKeyAndOrderFront(nil)
@@ -428,12 +536,8 @@ enum QuiverEmblem: String, CaseIterable {
       endKeyboardBrowsing(); setUnfolded(false)
     case kVK_Return, kVK_Space:
       let button = icons[min(focusedIndex, icons.count - 1)]
-      if pageCount > 1 && button === icons.last {
-        nextPage(); focusIcon(0)
-      } else {
-        endKeyboardBrowsing()
-        (button as? ArrowButton)?.openArrow()
-      }
+      endKeyboardBrowsing()
+      (button as? ArrowButton)?.openArrow()
     default: return false
     }
     return true
@@ -444,11 +548,11 @@ enum QuiverEmblem: String, CaseIterable {
     strip.setAccessibilityHelp(nil)
   }
 
-  func nextPage() {
-    shelf.dismiss()
-    if !unfolded { setUnfolded(true) }
-    page = (page + 1) % pageCount
-    layout()
+  func openArrowFinder() {
+    endKeyboardBrowsing()
+    previewWork?.cancel()
+    shelf.openArrow(.dashboard, at: anchor.map(toolAnchor), toggle: false)
+    shelf.chooseArrow()
   }
 
   private func render() {
@@ -463,9 +567,8 @@ enum QuiverEmblem: String, CaseIterable {
       icon.frame = geometry.buttons[i]
       icon.alphaValue = progress
       icon.isHidden = progress == 0
-      icon.isEnabled = progress > 0.9
+      icon.isEnabled = unfolded && progress > 0.68
     }
-    if progress == 0 && !unfolded && page != 0 { page = 0; layout() }
   }
 }
 

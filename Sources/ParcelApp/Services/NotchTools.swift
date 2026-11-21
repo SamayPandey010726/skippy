@@ -107,6 +107,7 @@ struct NotchMacro: Codable, Identifiable {
   @Published private(set) var calendarEvents: [EKEvent] = []
   @Published private(set) var calendarMessage = "Connect Calendar to see upcoming events."
   @Published private(set) var captures: [NSImage] = []
+  @Published var captureColumns = 1
   @Published private(set) var macros: [NotchMacro] {
     didSet { if let data = try? JSONEncoder().encode(macros) { defaults.set(data, forKey: "parcels.macros.v1") } }
   }
@@ -283,24 +284,53 @@ struct NotchMacro: Codable, Identifiable {
 
   func clearCaptures() { captures.removeAll() }
 
+  func captureWorkspace(_ mode: WorkspaceCaptureMode) {
+    ScreenCaptureWorkspace.shared.capture(mode) { [weak self] result in self?.acceptCaptures(result) }
+  }
+
+  func acceptCaptures(_ result: Result<[CGImage], Error>) {
+    switch result {
+    case .success(let images):
+      guard !images.isEmpty else { return }
+      captures.append(contentsOf: images.map { NSImage(cgImage: $0, size: .zero) })
+      status = images.count == 1 ? "Screenshot added" : "\(images.count) screenshots added"
+    case .failure(let error): status = error.localizedDescription
+    }
+  }
+
+  func moveCapture(_ index: Int, by step: Int) {
+    guard captures.indices.contains(index), captures.indices.contains(index + step) else { return }
+    captures.swapAt(index, index + step)
+  }
+
+  func removeCapture(_ index: Int) {
+    if captures.indices.contains(index) { captures.remove(at: index) }
+  }
+
+  private func combinedCapturePNG() -> Data? {
+    let images = captures.compactMap { $0.cgImage(forProposedRect: nil, context: nil, hints: nil) }
+    guard images.count == captures.count, !images.isEmpty,
+      let combined = CaptureComposition.combine(images, columns: captureColumns) else {
+      status = "No combined image. Reduce the number or size of the selections."
+      return nil
+    }
+    return NSBitmapImageRep(cgImage: combined).representation(using: .png, properties: [:])
+  }
+
   func copyCombinedCaptures() {
-    guard !captures.isEmpty else { status = "Capture a region first"; return }
-    let width = captures.map(\.size.width).max() ?? 0
-    let height = captures.reduce(CGFloat.zero) { $0 + $1.size.height }
-    guard width > 0, height > 0, width * height <= 100_000_000 else {
-      status = "Combined image is too large"; return
-    }
-    let combined = NSImage(size: NSSize(width: width, height: height))
-    combined.lockFocus()
-    var y = height
-    for image in captures {
-      y -= image.size.height
-      image.draw(in: NSRect(x: 0, y: y, width: image.size.width, height: image.size.height))
-    }
-    combined.unlockFocus()
+    guard let png = combinedCapturePNG() else { return }
     NSPasteboard.general.clearContents()
-    if NSPasteboard.general.writeObjects([combined]) { status = "Combined image copied" }
-    else { status = "Could not copy the combined image" }
+    status = NSPasteboard.general.setData(png, forType: .png) ? "Combined image copied" : "Could not copy the image"
+  }
+
+  func saveCombinedCaptures() {
+    guard let png = combinedCapturePNG() else { return }
+    let panel = NSSavePanel()
+    panel.allowedContentTypes = [.png]
+    panel.nameFieldStringValue = "Skippy capture.png"
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    do { try png.write(to: url, options: .atomic); status = "Combined image saved" }
+    catch { status = error.localizedDescription }
   }
 
   private func captureScreenArea(_ completion: @escaping (URL) -> Void) {
@@ -696,6 +726,8 @@ struct NotchToolsView: View {
   @State private var qrInput = ""
   @State private var webQuery = ""
   @State private var calculation = ""
+  @State private var scientific = false
+  @FocusState private var calculationFocused: Bool
   @State private var showingMacros = false
   @State private var macroName = ""
   @State private var macroCommand = ""
@@ -712,7 +744,7 @@ struct NotchToolsView: View {
         else if shelf.activeModule == .dashboard { widgetDashboard }
         else { moduleBody }
       }
-        .id(shelf.activeModule)
+        .id(shelf.choosingArrow ? "finder" : shelf.activeModule.rawValue)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .transition(.opacity.combined(with: .offset(y: 4)))
       HStack {
@@ -734,7 +766,8 @@ struct NotchToolsView: View {
       }
     }
     .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 7)
-    .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: shelf.activeModule)
+    .animation(reduceMotion ? nil : .smooth(duration: 0.23), value: shelf.activeModule)
+    .animation(reduceMotion ? nil : .smooth(duration: 0.23), value: shelf.choosingArrow)
     .onReceive(tools.$status.dropFirst()) { status in
       feedback = status
       feedbackRevision += 1
@@ -787,6 +820,10 @@ struct NotchToolsView: View {
           withAnimation(Motion.layoutRelayout) { widgets.editing.toggle() }
         }
       } else {
+        NotchIconButton(symbol: shelf.keepArrowOpen ? "pin.fill" : "pin", tint: skin.palette.accent,
+          selected: shelf.keepArrowOpen, help: shelf.keepArrowOpen ? "Unpin panel" : "Keep panel open") {
+          shelf.toggleArrowRetention()
+        }
         NotchIconButton(symbol: "square.grid.2x2", tint: skin.palette.accent,
           help: "Back to widgets", action: { shelf.showModule(.dashboard) })
       }
@@ -1572,52 +1609,102 @@ struct NotchToolsView: View {
   }
 
   private var calculatorView: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text("Calculate").font(.system(size: 17, weight: .semibold, design: .rounded))
-      TextField("e.g. (24 + 8) / 2", text: $calculation)
-        .textFieldStyle(.roundedBorder).font(.system(size: 16, design: .monospaced))
-      if let answer = calculatorResult {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 8) {
         HStack {
-          Text(answer).font(.system(size: 25, weight: .semibold, design: .rounded)).textSelection(.enabled)
+          TextField("e.g. (24 + 8) / 2", text: $calculation)
+            .textFieldStyle(.roundedBorder).font(.system(size: 16, design: .monospaced))
+            .focused($calculationFocused)
+            .onSubmit { evaluateCalculation() }
+            .accessibilityLabel("Expression")
+          Button(scientific ? "Basic" : "Scientific") { scientific.toggle() }
+        }
+        HStack {
+          Text(calculatorResult ?? "—")
+            .font(.system(size: 22, weight: .semibold, design: .monospaced)).textSelection(.enabled)
+            .accessibilityLabel("Result " + (calculatorResult ?? "unavailable"))
           Spacer()
           NotchActionButton(title: "Copy", symbol: "doc.on.doc", tint: skin.palette.accent) {
+            guard let answer = calculatorResult else { return }
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(answer, forType: .string)
-          }
+          }.disabled(calculatorResult == nil)
         }
-      } else {
-        Text("Use +, −, ×, ÷, parentheses and percentages.")
-          .font(.system(size: 10)).foregroundStyle(.secondary)
+        let keys = ["AC", "(", ")", "÷", "7", "8", "9", "×", "4", "5", "6", "−",
+                    "1", "2", "3", "+", "0", ".", "%", "="]
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 5), count: 4), spacing: 4) {
+          if scientific {
+            ForEach(["sin(", "cos(", "tan(", "sqrt(", "log(", "ln(", "π", "^"], id: \.self) { key in
+              calculationButton(key)
+            }
+          }
+          ForEach(keys, id: \.self) { key in calculationButton(key) }
+        }
+      }.padding(7)
+    }
+    .onAppear { if !shelf.isArrowPreview { calculationFocused = true } }
+    .onChange(of: shelf.isArrowPreview) { _, preview in if !preview { calculationFocused = true } }
+    .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: scientific)
+  }
+
+  private func evaluateCalculation() {
+    var parser = NotchCalculator(calculation)
+    if let answer = parser.evaluate() { calculation = String(answer) }
+  }
+
+  private func calculationButton(_ key: String) -> some View {
+    Button {
+      switch key {
+      case "AC": calculation = ""
+      case "=": evaluateCalculation()
+      default: calculation += key
       }
-      Spacer()
-    }.padding(12).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    } label: {
+      Text(key).font(.system(.callout, design: .monospaced)).frame(maxWidth: .infinity).frame(height: 23)
+    }.buttonStyle(.bordered)
   }
 
   private var screenshotView: some View {
     VStack(alignment: .leading, spacing: 8) {
       HStack {
-        Text(tools.captures.count == 1 ? "1 region" : "\(tools.captures.count) regions").font(.system(size: 12, weight: .semibold))
+        Text(tools.captures.count == 1 ? "1 region" : "\(tools.captures.count) regions").font(.headline)
         Spacer()
-        NotchActionButton(title: "Add region", symbol: "plus", tint: skin.palette.accent, action: tools.captureAnother)
-        NotchActionButton(title: "Copy joined", symbol: "doc.on.doc", tint: skin.palette.accent, action: tools.copyCombinedCaptures)
-          .disabled(tools.captures.isEmpty)
-        Button("Clear") { tools.clearCaptures() }.disabled(tools.captures.isEmpty)
+        Menu("Capture") {
+          ForEach(WorkspaceCaptureMode.allCases) { mode in
+            Button(mode.rawValue) { tools.captureWorkspace(mode) }
+          }
+        }.fixedSize()
+        Button("Add region", action: tools.captureAnother)
       }
       HStack {
-        Text("Regions join from top to bottom in capture order.")
-          .font(.system(size: 9)).foregroundStyle(.secondary)
+        Picker("Layout", selection: $tools.captureColumns) {
+          Text("Stack").tag(1)
+          Text("Grid").tag(2)
+        }.pickerStyle(.segmented).labelsHidden().frame(width: 117)
         Spacer()
-        Button("Search with Lens") { tools.captureForLens() }.buttonStyle(.borderless)
-          .help("Copies the selected area, then opens Google Lens for you to paste it")
+        Button("Copy joined", action: tools.copyCombinedCaptures).disabled(tools.captures.isEmpty)
+        Button("Save PNG…", action: tools.saveCombinedCaptures).disabled(tools.captures.isEmpty)
+        Button("Clear", action: tools.clearCaptures).disabled(tools.captures.isEmpty)
       }
       ScrollView(.horizontal) {
         HStack(spacing: 8) {
-          ForEach(Array(tools.captures.enumerated()), id: \.offset) { _, capture in
-            Image(nsImage: capture).resizable().scaledToFit().frame(width: 100, height: 100)
-              .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+          ForEach(Array(tools.captures.enumerated()), id: \.offset) { index, capture in
+            VStack(spacing: 4) {
+              Image(nsImage: capture).resizable().scaledToFit().frame(width: 100, height: 70)
+              HStack {
+                Button { tools.moveCapture(index, by: -1) } label: { Image(systemName: "arrow.left") }
+                  .accessibilityLabel("Move region \(index + 1) earlier").disabled(index == 0)
+                Button { tools.removeCapture(index) } label: { Image(systemName: "xmark") }
+                  .accessibilityLabel("Remove region \(index + 1)")
+                Button { tools.moveCapture(index, by: 1) } label: { Image(systemName: "arrow.right") }
+                  .accessibilityLabel("Move region \(index + 1) later").disabled(index == tools.captures.count - 1)
+              }.buttonStyle(.borderless)
+            }.padding(5).background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
           }
         }
       }
+      Button("Search with Lens", action: tools.captureForLens).buttonStyle(.borderless)
+        .help("Copies the selected area, then opens Google Lens for you to paste it")
     }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
   }
 
@@ -1709,17 +1796,34 @@ private extension NSColor {
 /// Type a tool name, move through matching tools with the arrow keys, and press Return.
 private struct ArrowFinder: View {
   @ObservedObject var shelf: DropPopupController
-  @State private var query = ""
-  @State private var index = 0
-  private var matches: [NotchModule] {
-    NotchModule.allCases.filter { $0 != .dashboard && (query.isEmpty || $0.title.localizedCaseInsensitiveContains(query)) }
+  @ObservedObject private var tools = NotchToolStore.shared
+  @ObservedObject private var quickPins = QuickPinStore.shared
+  @ObservedObject private var shortcuts = GlobalShortcutManager.shared
+
+  private enum Entry: Identifiable {
+    case tool(NotchModule), app(PinnedNotchApp)
+    var id: String {
+      switch self { case .tool(let module): module.id; case .app(let app): app.id }
+    }
+    var title: String {
+      switch self { case .tool(let module): module.title; case .app(let app): app.name }
+    }
   }
+
+  private var matches: [Entry] {
+    let entries = NotchModule.allCases.filter { $0 != .dashboard }.map(Entry.tool) + tools.pinnedApps.map(Entry.app)
+    let pinned = quickPins.pins.compactMap { pin in entries.first { $0.id == pin.id } }
+    let query = shelf.arrowQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !query.isEmpty { return entries.filter { $0.title.localizedCaseInsensitiveContains(query) } }
+    return pinned + entries.filter { !quickPins.contains($0.id) }
+  }
+
   var body: some View {
     VStack(spacing: 8) {
-      ArrowSearchField(query: $query, move: { step in
-        index = min(max(0, index + step), max(0, matches.count - 1))
+      ArrowSearchField(query: $shelf.arrowQuery, move: { step in
+        shelf.arrowIndex = min(max(0, shelf.arrowIndex + step), max(0, matches.count - 1))
       }, submit: {
-        if matches.indices.contains(index) { select(matches[index]) }
+        if matches.indices.contains(shelf.arrowIndex) { select(matches[shelf.arrowIndex]) }
       }, cancel: shelf.cancelChoosingArrow)
       .frame(height: 28)
       if matches.isEmpty {
@@ -1728,31 +1832,53 @@ private struct ArrowFinder: View {
       } else {
         ScrollViewReader { scroll in
           ScrollView {
-            VStack(spacing: 2) {
-              ForEach(Array(matches.enumerated()), id: \.element.id) { position, module in
-                Button { select(module) } label: {
-                  HStack {
-                    Image(systemName: module.symbol).frame(width: 22)
-                    Text(module.title)
-                    Spacer()
-                    if index == position { Image(systemName: "return").foregroundStyle(.secondary) }
-                  }
-                  .padding(.horizontal, 8).frame(height: 27).contentShape(Rectangle())
-                  .background(index == position ? Color.primary.opacity(0.1) : .clear,
-                              in: RoundedRectangle(cornerRadius: 6))
-                }.buttonStyle(.plain).id(module.id)
+            LazyVStack(spacing: 3) {
+              ForEach(Array(matches.enumerated()), id: \.element.id) { position, entry in
+                HStack(spacing: 5) {
+                  Button { select(entry) } label: {
+                    HStack {
+                      switch entry {
+                      case .tool(let module):
+                        Image(systemName: module.symbol).frame(width: 22)
+                      case .app(let app):
+                        Image(nsImage: tools.icon(for: app)).resizable().scaledToFit().frame(width: 22, height: 17)
+                      }
+                      Text(entry.title)
+                      Spacer()
+                      if case .tool(let module) = entry {
+                        Text(shortcuts.binding(for: .arrow(module)).displayName).font(.caption.monospaced())
+                          .foregroundStyle(.secondary)
+                      }
+                    }.padding(.leading, 8).frame(height: 30).contentShape(Rectangle())
+                  }.buttonStyle(.plain)
+                  let pinned = quickPins.contains(entry.id)
+                  Button { quickPins.toggle(entry.id) } label: {
+                    Image(systemName: pinned ? "pin.fill" : "pin").frame(width: 28, height: 28)
+                  }.buttonStyle(.borderless)
+                    .help(pinned ? "Remove Quick Pin" : "Add Quick Pin")
+                    .accessibilityLabel((pinned ? "Unpin " : "Pin ") + entry.title)
+                }.background(shelf.arrowIndex == position ? Color.primary.opacity(0.1) : .clear,
+                  in: RoundedRectangle(cornerRadius: 6)).id(entry.id)
               }
             }
           }
-          .onChange(of: index) { _, i in if matches.indices.contains(i) { scroll.scrollTo(matches[i].id) } }
+          .onChange(of: shelf.arrowIndex, initial: true) { _, i in
+            if matches.indices.contains(i) { scroll.scrollTo(matches[i].id) }
+          }
         }
       }
     }
-    .onChange(of: query) { _, _ in index = 0 }
+    .onChange(of: shelf.arrowQuery) { _, _ in shelf.arrowIndex = 0 }
+    .onChange(of: matches.map(\.id)) { _, ids in
+      if !ids.indices.contains(shelf.arrowIndex) { shelf.arrowIndex = 0 }
+    }
   }
-  private func select(_ module: NotchModule) {
-    shelf.showModule(module)
-    shelf.focusForKeyboard()
+
+  private func select(_ entry: Entry) {
+    switch entry {
+    case .tool(let module): shelf.openArrow(module, at: SkippyQuiver.shared.anchor)
+    case .app(let app): shelf.dismiss(); tools.launch(app)
+    }
   }
 }
 

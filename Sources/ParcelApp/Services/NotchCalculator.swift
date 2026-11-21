@@ -44,13 +44,44 @@ struct NotchCalculator {
   private mutating func factor() -> Double? {
     if consume("-") || consume("−") { return factor().map { -$0 } }
     if consume("+") { return factor() }
+    guard var value = atom() else { return nil }
+    if consume("%") { value /= 100 }
+    if consume("^") {
+      guard let exponent = factor() else { return nil }
+      value = pow(value, exponent)
+    }
+    return value
+  }
+
+  private mutating func atom() -> Double? {
+    if consume("π") { return .pi }
     if consume("(") {
       guard let value = sum(), consume(")") else { return nil }
       return value
     }
     let start = index
+    while index < input.count, input[index].isLetter { index += 1 }
+    if index > start {
+      let function = String(input[start..<index]).lowercased()
+      guard consume("("), let value = sum(), consume(")") else { return nil }
+      switch function {
+      case "sin": return sin(value)
+      case "cos": return cos(value)
+      case "tan": return tan(value)
+      case "sqrt": return sqrt(value)
+      case "log": return log10(value)
+      case "ln": return log(value)
+      default: return nil
+      }
+    }
     while index < input.count, input[index].isNumber || input[index] == "." { index += 1 }
-    guard index > start, let value = Double(String(input[start..<index])) else { return nil }
-    return consume("%") ? value / 100 : value
+    guard index > start else { return nil }
+    if consume("e") || consume("E") {
+      if !consume("+") { _ = consume("-") }
+      let exponentStart = index
+      while index < input.count, input[index].isNumber { index += 1 }
+      guard exponentStart < index else { return nil }
+    }
+    return Double(String(input[start..<index]))
   }
 }

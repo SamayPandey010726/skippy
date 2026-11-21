@@ -122,6 +122,9 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   private let hoverDelay: TimeInterval
   private let folderHoverDelay: TimeInterval
   @Published private(set) var choosingArrow = false
+  @Published var arrowQuery = ""
+  @Published var arrowIndex = 0
+  @Published var keepArrowOpen = false
   @Published private(set) var isArrowPreview = false
   var quiverAnchor: (() -> CGRect?)?
   var quiverPanelPointer: ((Bool) -> Void)?
@@ -504,6 +507,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     recordActivity()
     closeFilePreview()
     if !visible { summon() }
+    if activeModule != module { keepArrowOpen = false }
     activeModule = module
     panel?.title = "Skippy · " + module.title
     choosingArrow = false
@@ -582,9 +586,10 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     if let host { panel?.makeFirstResponder(host) }
     Toaster.shared.tip("notch-pages", "Scroll for the next page, / to search, and Tab to move through widgets.")
   }
-  func openArrow(_ module: NotchModule, at anchor: CGRect?) {
-    if visible && expanded && activeModule == module && toolsVisible && !isArrowPreview {
-      dismiss(); return
+  func openArrow(_ module: NotchModule, at anchor: CGRect?, toggle: Bool = true) {
+    if toggle && visible && expanded && activeModule == module && toolsVisible && !isArrowPreview && !choosingArrow {
+      focusForKeyboard()
+      return
     }
     presentArrow(module, at: anchor, preview: false)
     focusForKeyboard()
@@ -598,6 +603,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   private func presentArrow(_ module: NotchModule, at anchor: CGRect?, preview: Bool) {
     guard !moving, !receiving, store?.busy != true else { return }
     let wasVisible = visible
+    if preview { isArrowPreview = true }
     menuAnchor = anchor ?? quiverAnchor?()
     parkedInMenuBar = true
     if !wasVisible { show(expand: true) }
@@ -612,6 +618,12 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     }
   }
 
+  func toggleArrowRetention() {
+    keepArrowOpen.toggle()
+    if keepArrowOpen { isArrowPreview = false }
+    else { recordActivity() }
+  }
+
   func dismissArrowPreview() {
     if isArrowPreview { dismiss() }
   }
@@ -619,8 +631,8 @@ private final class CourierHostingView: NSHostingView<AnyView> {
   func chooseArrow() {
     isArrowPreview = false
     if !toolsVisible { showModule(.dashboard) }
-    focusForKeyboard()
     choosingArrow = true
+    focusForKeyboard()
   }
   func cancelChoosingArrow() { choosingArrow = false; focusForKeyboard() }
   func focusForKeyboard() {
@@ -1026,8 +1038,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       SkippyQuiver.shared.beginKeyboardBrowsing()
       return true
     case .cycleTheme:
-      SkinStore.shared.skin = SkinStore.shared.skin == .night ? .kraft : .night
-      return true
+      return false
     case .cycleEmblem:
       let icons = QuiverEmblem.allCases
       let index = icons.firstIndex(of: SkippyQuiver.shared.emblem) ?? 0
@@ -1480,7 +1491,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
     guard !moving, !receiving, store?.busy != true, store?.phase != .receiving,
       !DragMonitor.shared.isSending else { return }
     closeFilePreview()
-    isArrowPreview = false; choosingArrow = false
+    isArrowPreview = false; choosingArrow = false; keepArrowOpen = false
     if quiverPointerInside { quiverPointerInside = false; quiverPanelPointer?(false) }
     awaitingSummonedPointerEntry = false
     hideClipboard()
@@ -1555,7 +1566,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       guard let self else { return }
       self.idleWork = nil
       guard self.visible, self.idleTimeout > 0 else { return }
-      let usingAuxiliaryPanel = self.clipboardPinnedOpen || self.searchPinnedOpen || self.optionsPinnedOpen
+      let usingAuxiliaryPanel = self.keepArrowOpen || (self.activeModule == .calculator && self.toolsVisible && !self.isArrowPreview) || self.clipboardPinnedOpen || self.searchPinnedOpen || self.optionsPinnedOpen
       if self.receiving || self.store?.busy == true || self.confirmingAction || self.selectingOnScreen || self.moving || !self.trackedMenus.isEmpty || DragMonitor.shared.isSending || self.filePreview.isInsidePreview || usingAuxiliaryPanel {
         self.recordActivity(); return
       }
@@ -1663,7 +1674,7 @@ private final class CourierHostingView: NSHostingView<AnyView> {
       store?.busy != true, !receiving else { return }
     // Tool modules are explicitly opened, not hover previews. Keep them pinned until
     // Close/Escape or the configured idle policy retracts the notch.
-    if toolsVisible && quiverAnchor == nil { return }
+    if toolsVisible && (quiverAnchor == nil || keepArrowOpen || (activeModule == .calculator && !isArrowPreview)) { return }
     let insideCourier = panel?.frame.contains(point) == true
     let insidePreview = sidePreview.panel?.frame.contains(point) == true
     let insideClipboard = clipboard.panel?.frame.contains(point) == true

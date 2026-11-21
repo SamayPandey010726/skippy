@@ -53,11 +53,11 @@ enum ParcelSkin: String, Codable, CaseIterable, Identifiable {
         line: Color(red: 0.87, green: 0.86, blue: 0.79))
     case .night:
       return SkinPalette(
-        paper: Color(red: 0.10, green: 0.11, blue: 0.14),
+        paper: Color(red: 0.11, green: 0.145, blue: 0.19),
         cream: Color(red: 0.15, green: 0.16, blue: 0.20),
         canvas: Color(red: 0.18, green: 0.19, blue: 0.24),
-        accent: Color(red: 0.65, green: 0.80, blue: 0.72),
-        accentSoft: Color(red: 0.50, green: 0.65, blue: 0.58),
+        accent: Color(red: 0.63, green: 0.82, blue: 0.88),
+        accentSoft: Color(red: 0.50, green: 0.68, blue: 0.77),
         text: Color(red: 0.93, green: 0.94, blue: 0.92),
         secondary: Color(red: 0.72, green: 0.75, blue: 0.70),
         line: Color(red: 0.28, green: 0.29, blue: 0.34))
@@ -96,7 +96,6 @@ final class SkinStore: ObservableObject {
     }
   }
   private init() {
-    let raw = UserDefaults.standard.string(forKey: "parcel-skin")
-    skin = ParcelSkin(rawValue: raw ?? "") ?? .night
+    skin = .night
   }
 }

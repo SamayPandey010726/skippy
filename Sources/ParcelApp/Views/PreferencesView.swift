@@ -9,6 +9,20 @@ struct PreferencesView: View {
   @ObservedObject private var tools = NotchToolStore.shared
   @ObservedObject private var quiver = SkippyQuiver.shared
   @State private var tab = 0
+  @State private var sectionQuery = ""
+  @ObservedObject private var quickPins = QuickPinStore.shared
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  private let sections: [(id: Int, title: String, icon: String, keywords: String)] = [
+    (0, "General", "gearshape", "appearance icon launch scaling motion hover"),
+    (6, "Placement", "macwindow", "edge dock notch floating menu bar"),
+    (7, "Pins", "pin", "quick pins arrows widgets apps"),
+    (1, "Shortcuts", "keyboard", "keyboard global commands"),
+    (8, "Files", "folder", "parcels shelf zip rar conversion archive downloads"),
+    (9, "Privacy", "lock.shield", "clipboard finder permissions screen recording accessibility"),
+    (2, "Advanced", "slider.horizontal.3", "automation presets spotlight"),
+    (3, "Licence", "checkmark.seal", "activation"),
+    (4, "About", "info.circle", "version tutorial")
+  ]
   @State private var captureAccessMessage: String?
   @State private var licenceText = ""
   @State private var message: String?
@@ -45,55 +59,72 @@ struct PreferencesView: View {
     }
   }
   var body: some View {
-    VStack(alignment: .leading, spacing: 22) {
-      HStack {
-        BrandMark()
+    HStack(spacing: 0) {
+      VStack(alignment: .leading, spacing: 10) {
+        Text("Skippy").font(.system(size: 18, weight: .semibold))
+          .padding(.horizontal, 6)
+        TextField("Search Settings", text: $sectionQuery)
+          .textFieldStyle(.roundedBorder)
+          .accessibilityLabel("Search Settings")
+        let query = sectionQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matches = sections.filter { query.isEmpty || ($0.title + " " + $0.keywords).localizedCaseInsensitiveContains(query) }
+        ForEach(matches, id: \.id) { section in
+          Button {
+            tab = section.id
+            sectionQuery = ""
+          } label: {
+            Label(section.title, systemImage: section.icon)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .padding(.horizontal, 8).padding(.vertical, 7)
+              .background(tab == section.id ? Ink.paleGreen : .clear, in: RoundedRectangle(cornerRadius: 7))
+          }.buttonStyle(.plain).accessibilityAddTraits(tab == section.id ? .isSelected : [])
+        }
+        if matches.isEmpty { Text("No matching sections").font(.caption).foregroundStyle(.secondary) }
         Spacer()
-        Text("PREFERENCES").font(.system(size: 9, weight: .semibold)).tracking(1.6).foregroundStyle(
-          Ink.secondary)
+      }.padding(13).frame(width: 172).background(Ink.cream)
+      Divider()
+      VStack(alignment: .leading, spacing: 0) {
+        Text(sections.first(where: { $0.id == tab })?.title ?? "Welcome")
+          .font(.title2.weight(.semibold)).padding(19)
+          .accessibilityAddTraits(.isHeader)
+        Divider()
+        ScrollView {
+          Group {
+            switch tab {
+            case 0: general
+            case 1: keyboardShortcuts
+            case 2: automation
+            case 3: licence
+            case 5: WelcomeView().frame(maxWidth: .infinity)
+            case 6: placement
+            case 7: pinSettings
+            case 8: files
+            case 9: privacy
+            default: about
+            }
+          }.frame(maxWidth: .infinity, alignment: .leading).padding(19)
+        }
+        .id(tab)
+        .transition(.opacity.combined(with: .offset(x: 5)))
+        if let message { Text(message).font(.caption).foregroundStyle(Ink.secondary).padding(12) }
       }
-      HStack(spacing: 6) {
-        settingsTab("Everyday", value: 0)
-        settingsTab("Shortcuts", value: 1)
-        settingsTab("Automation", value: 2)
-        settingsTab("Licence", value: 3)
-        settingsTab("About", value: 4)
-      }.padding(4).background(Ink.cream, in: RoundedRectangle(cornerRadius: 10))
-      ScrollView {
-        Group {
-          if tab == 0 { general }
-          else if tab == 1 { keyboardShortcuts }
-          else if tab == 2 { automation }
-          else if tab == 3 { licence }
-          else if tab == 5 { WelcomeView().frame(maxWidth: .infinity) }
-          else { about }
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(.trailing, 8)
-      }
-      Spacer(minLength: 0)
-      if let message { Text(message).font(.system(size: 11)).foregroundStyle(Ink.secondary) }
-    }.padding(30).background(Ink.paper).foregroundStyle(Ink.text)
-      .preferredColorScheme(skins.skin == .night ? .dark : .light)
-  }
-  private func settingsTab(_ title: String, value: Int) -> some View {
-    Button {
-      withAnimation(Motion.layoutRelayout) { tab = value }
-    } label: {
-      Text(title).font(.system(size: 11, weight: tab == value ? .semibold : .regular))
-        .foregroundStyle(tab == value ? Color.white : Ink.text)
-        .frame(maxWidth: .infinity).padding(.vertical, 7)
-        .background(tab == value ? Ink.green : Color.clear, in: RoundedRectangle(cornerRadius: 7))
-    }.buttonStyle(.plain).accessibilityAddTraits(tab == value ? .isSelected : [])
+    }
+    .frame(minWidth: 640, minHeight: 470)
+    .background(Ink.paper).foregroundStyle(Ink.text)
+    .tint(Ink.green)
+    .preferredColorScheme(.dark)
+    .animation(reduceMotion ? nil : .smooth(duration: 0.23), value: tab)
   }
   private var keyboardShortcuts: some View {
     VStack(alignment: .leading, spacing: 16) {
-      Text("Everything, without the mouse.").font(.custom(Ink.serif, size: 24)).foregroundStyle(Ink.green)
-      Text("Open Skippy, then use these commands anywhere in the notch. Copy sends the focused file or packed ZIP; Paste adds files, images, links or text to your single parcel.")
+      Text("System-wide").font(.headline)
+      Text("These shortcuts work while another app is active. Select a shortcut to change it and press Escape to cancel.")
         .font(.system(size: 11)).foregroundStyle(Ink.secondary).lineSpacing(3)
       VStack(alignment: .leading, spacing: 10) {
         HStack {
           VStack(alignment: .leading, spacing: 3) {
-            Text("Open Skippy anywhere").font(.system(size: 13, weight: .semibold))
-            Text("With selection access, this also imports highlighted files or text.")
+            Text("Send selection to Skippy").font(.system(size: 13, weight: .semibold))
+            Text("Imports highlighted files or text when access is enabled.")
               .font(.system(size: 10)).foregroundStyle(Ink.secondary)
           }
           Spacer()
@@ -103,12 +134,32 @@ struct PreferencesView: View {
         Text(shortcuts.message).font(.system(size: 10)).foregroundStyle(Ink.moss)
       }.padding(14).background(Ink.canvas.opacity(0.72), in: RoundedRectangle(cornerRadius: 14))
       VStack(alignment: .leading, spacing: 8) {
+        ForEach(WorkspaceShortcut.all) { target in
+          HStack {
+            VStack(alignment: .leading, spacing: 2) {
+              Text(target.title)
+              if shortcuts.unavailable.contains(target) {
+                Text("Unavailable. Choose another key combination.").font(.caption).foregroundStyle(.secondary)
+              }
+            }
+            Spacer()
+            ShortcutRecorder(shortcut: shortcuts.binding(for: target), title: target.title + " shortcut") {
+              shortcuts.update(target, $0)
+            }.frame(width: 114, height: 25)
+            Button("Reset") { _ = shortcuts.update(target, target.defaultValue) }
+              .accessibilityLabel("Reset " + target.title + " shortcut")
+              .disabled(shortcuts.binding(for: target) == target.defaultValue && !shortcuts.unavailable.contains(target))
+          }
+          Divider()
+        }
+      }
+      VStack(alignment: .leading, spacing: 8) {
         HStack {
-          Text("Skippy notch commands").font(.system(size: 13, weight: .semibold))
+          Text("While Skippy has focus").font(.system(size: 13, weight: .semibold))
           Spacer()
           Button("Reset all") { courierShortcuts.resetAll() }.font(.system(size: 10))
         }
-        ForEach(CourierCommand.allCases) { command in
+        ForEach(CourierCommand.allCases.filter { $0 != .cycleTheme }) { command in
           HStack {
             Text(command.title).font(.system(size: 11))
             Spacer()
@@ -215,73 +266,136 @@ struct PreferencesView: View {
       }
     }.padding(10).background(Ink.canvas, in: RoundedRectangle(cornerRadius: 10))
   }
-  private var general: some View {
-    VStack(alignment: .leading, spacing: 19) {
-      Text("Just the way you like it.").font(.custom(Ink.serif, size: 24)).foregroundStyle(
-        Ink.green)
-      VStack(alignment: .leading, spacing: 12) {
-        Label("Appearance", systemImage: "paintpalette").font(.system(size: 13, weight: .semibold))
-        HStack {
-          Text("Universal interface size")
-          Spacer()
-          Text("\(Int(courier.interfaceScale * 100))%").monospacedDigit()
-          Button("Reset") { courier.interfaceScale = 1 }.font(.system(size: 10))
-        }
-        Slider(value: Binding(get: { Double(courier.interfaceScale) }, set: { courier.interfaceScale = CGFloat($0) }),
-          in: 0.75...1.5, step: 0.05).accessibilityLabel("Universal interface size")
-        SkinPickerRow()
-        Picker("Launcher icon", selection: $quiver.emblem) {
-          ForEach(QuiverEmblem.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-        }.pickerStyle(.segmented)
+  @AppStorage("skippy.hoverLauncher") private var hoverLauncher = true
+  @AppStorage("skippy.hoverArrowPreviews") private var hoverArrowPreviews = true
 
-        Toggle("Keep local clipboard history", isOn: $clipboardHistory.captureEnabled)
-        Picker("Attach quiver to", selection: $quiver.surface) {
-          ForEach(QuiverSurface.allCases) { Text($0.rawValue).tag($0) }
+  private var general: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      LabeledContent("Appearance", value: "Blue-grey")
+      Picker("Launcher icon", selection: $quiver.emblem) {
+        ForEach(QuiverEmblem.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+      }.pickerStyle(.segmented)
+      Toggle("Open the launcher on hover", isOn: $hoverLauncher)
+      Toggle("Preview tools on hover", isOn: $hoverArrowPreviews)
+      LabeledContent("Interface size", value: "\(Int(courier.interfaceScale * 100))%")
+      Slider(value: Binding(get: { Double(courier.interfaceScale) }, set: { courier.interfaceScale = CGFloat($0) }),
+        in: 0.75...1.5, step: 0.05).accessibilityLabel("Interface size")
+      Toggle("Open Skippy at login", isOn: Binding(get: { store.preferences.launchAtLogin }, set: { value in
+        do {
+          if value { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+          store.preferences.launchAtLogin = value
+          store.savePreferences()
+        } catch { message = error.localizedDescription }
+      }))
+      Text("Animations follow the macOS Reduce Motion setting.").font(.caption).foregroundStyle(.secondary)
+    }
+  }
+
+  private var placement: some View {
+    VStack(alignment: .leading, spacing: 13) {
+      Picker("Attach Skippy to", selection: $quiver.surface) {
+        ForEach(QuiverSurface.allCases) { Text($0.rawValue).tag($0) }
+      }
+      LazyVGrid(columns: [GridItem(.adaptive(minimum: 95))], spacing: 8) {
+        ForEach(QuiverSurface.allCases) { surface in
+          Button { quiver.surface = surface } label: {
+            VStack(spacing: 8) {
+              Image(systemName: placementIcon(surface)).font(.title2)
+              Text(surface.rawValue).font(.caption)
+            }.frame(maxWidth: .infinity).padding(9)
+              .background(quiver.surface == surface ? Ink.paleGreen : Ink.canvas, in: RoundedRectangle(cornerRadius: 9))
+          }.buttonStyle(.plain).accessibilityAddTraits(quiver.surface == surface ? .isSelected : [])
         }
-        if quiver.surface == .dock && !AXIsProcessTrusted() {
-          Button("Allow Dock hover in Accessibility…") {
-            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-            _ = AXIsProcessTrustedWithOptions(options)
-          }
+      }
+      Text("Drag Scout toward an edge to attach it. More opens the same searchable drawer from every placement.")
+        .font(.caption).foregroundStyle(.secondary)
+      if quiver.surface == .dock && !AXIsProcessTrusted() {
+        Button("Allow Dock hover in Accessibility…") {
+          let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+          _ = AXIsProcessTrustedWithOptions(options)
         }
-        Text("Hover for pins. Choose More to browse the next group in place. Click an arrow to keep its panel open. Drag the floating mark to a screen edge to attach it. In the Dock, click to open or secondary-click for arrows.")
-          .font(.caption).foregroundStyle(.secondary)
-        Picker("Collapse after", selection: Binding(get: { courier.idleTimeout }, set: { courier.idleTimeout = $0 })) {
-          Text("5 sec").tag(TimeInterval(5)); Text("10 sec").tag(TimeInterval(10))
-          Text("30 sec").tag(TimeInterval(30)); Text("1 min").tag(TimeInterval(60)); Text("Never").tag(TimeInterval(0))
+      }
+    }
+  }
+
+  private func placementIcon(_ surface: QuiverSurface) -> String {
+    switch surface {
+    case .floating: "cursorarrow.square"
+    case .left: "sidebar.left"
+    case .right: "sidebar.right"
+    case .top: "rectangle.topthird.inset.filled"
+    case .bottom: "rectangle.bottomthird.inset.filled"
+    case .notch: "web.camera"
+    case .menu: "menubar.rectangle"
+    case .dock: "dock.rectangle"
+    }
+  }
+
+  private var pinSettings: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Text("Quick Pins").font(.headline)
+      Toggle("Always show Quick Pins by default", isOn: $quickPins.alwaysVisible)
+      Text("The first three appear around Scout or in the attached strip. More lists all pins. Use arrows below to change their order.")
+        .font(.caption).foregroundStyle(.secondary)
+      Menu("Add Quick Pin") {
+        ForEach(NotchModule.allCases.filter { $0 != .dashboard && !quickPins.contains($0.id) }) { module in
+          Button(module.title) { quickPins.toggle(module.id) }
         }
-      }.padding(14).background(Ink.canvas.opacity(0.72), in: RoundedRectangle(cornerRadius: 14))
-      VStack(alignment: .leading, spacing: 9) {
-        HStack {
-          Label("Quiver arrows", systemImage: "square.grid.2x2").font(.system(size: 13, weight: .semibold))
-          Spacer()
-          Button("Reset layout", action: notchWidgets.reset).font(.system(size: 10))
+        ForEach(tools.pinnedApps.filter { !quickPins.contains($0.id) }) { app in
+          Button(app.name) { quickPins.toggle(app.id) }
         }
-        Button("Pin a Mac application…", action: tools.choosePinnedApp)
-        ForEach(tools.pinnedApps) { app in
+      }
+      ForEach(quickPins.pins) { pin in
+        let title = pin.module?.title ?? tools.pinnedApps.first(where: { $0.id == pin.id })?.name ?? pin.id
+        VStack(alignment: .leading, spacing: 8) {
           HStack {
-            Text(app.name)
+            Text(title).font(.headline)
             Spacer()
-            Button("Unpin") { tools.unpinApp(app) }.accessibilityLabel("Unpin " + app.name)
+            Button { quickPins.move(pin.id, by: -1) } label: { Image(systemName: "arrow.up") }
+              .accessibilityLabel("Move " + title + " up").disabled(pin == quickPins.pins.first)
+            Button { quickPins.move(pin.id, by: 1) } label: { Image(systemName: "arrow.down") }
+              .accessibilityLabel("Move " + title + " down").disabled(pin == quickPins.pins.last)
+            Button("Unpin") { quickPins.toggle(pin.id) }.accessibilityLabel("Unpin " + title)
           }
-        }
-        Text("Drag widgets to rearrange them. Every feature supports Small, Tall, Wide, Large and Full-page sizes. Scrolling snaps one complete page at a time.")
-          .font(.system(size: 10)).foregroundStyle(Ink.secondary)
-        ForEach(notchWidgets.widgets) { widget in
-          HStack(spacing: 8) {
-            Image(systemName: widget.kind.module.symbol).foregroundStyle(Ink.green).frame(width: 18)
-            Text(widget.kind.module.title).font(.system(size: 11)).frame(width: 86, alignment: .leading)
-            Picker("Size", selection: Binding(
-              get: { widget.size }, set: { notchWidgets.resize(widget.kind, to: $0) })) {
-              ForEach(NotchWidgetSize.allCases) { Text($0.label).tag($0) }
-            }.labelsHidden().frame(width: 145)
-            Spacer()
-            Toggle("Pinned", isOn: Binding(
-              get: { widget.pinned }, set: { _ in notchWidgets.togglePinned(widget.kind) }))
-              .toggleStyle(.checkbox).font(.system(size: 10))
+          Picker("Floating position", selection: Binding(get: { pin.position }, set: { quickPins.position(pin.id, at: $0) })) {
+            ForEach(QuickPinPosition.allCases) { slot in Text(slot.title).tag(slot) }
           }
+          Picker("Visibility", selection: Binding(get: { pin.alwaysVisible }, set: { quickPins.setVisibility(pin.id, always: $0) })) {
+            Text("Use default").tag(nil as Bool?)
+            Text("On hover").tag(false as Bool?)
+            Text("Always visible").tag(true as Bool?)
+          }
+        }.padding(10).background(Ink.canvas, in: RoundedRectangle(cornerRadius: 9))
+      }
+      Divider()
+      Text("Launcher and widgets").font(.headline)
+      Button("Add Mac application…", action: tools.choosePinnedApp)
+      ForEach(tools.pinnedApps) { app in
+        HStack {
+          Text(app.name)
+          Spacer()
+          Button("Remove") {
+            if quickPins.contains(app.id) { quickPins.toggle(app.id) }
+            tools.unpinApp(app)
+          }.accessibilityLabel("Remove " + app.name)
         }
-      }.padding(14).background(Ink.canvas.opacity(0.72), in: RoundedRectangle(cornerRadius: 14))
+      }
+      ForEach(notchWidgets.widgets) { widget in
+        HStack {
+          Label(widget.kind.module.title, systemImage: widget.kind.module.symbol)
+          Spacer()
+          Picker("Widget size", selection: Binding(get: { widget.size }, set: { notchWidgets.resize(widget.kind, to: $0) })) {
+            ForEach(NotchWidgetSize.allCases) { Text($0.label).tag($0) }
+          }.labelsHidden().frame(width: 120)
+          Toggle("Launcher", isOn: Binding(get: { widget.pinned }, set: { _ in notchWidgets.togglePinned(widget.kind) }))
+        }
+      }
+      Button("Reset widget layout", action: notchWidgets.reset)
+    }
+  }
+
+  private var files: some View {
+    VStack(alignment: .leading, spacing: 17) {
       VStack(alignment: .leading, spacing: 9) {
         Label("Parcel file tray", systemImage: "shippingbox").font(.system(size: 13, weight: .semibold))
         Toggle("Clean .DS_Store and __MACOSX from ZIPs", isOn: $store.preferences.cleanMetadata).disabled(store.busy)
@@ -328,18 +442,6 @@ struct PreferencesView: View {
       }.pickerStyle(.segmented).disabled(!courier.shiftConvertEnabled)
       Text("Start dragging image, PDF, video, document, or spreadsheet files, then hold Shift. Drop onto a relevant output in the compact ribbon. The current format is hidden; every result is saved in Skippy.")
         .font(.system(size: 11)).foregroundStyle(Ink.secondary)
-      HStack {
-        Button("Enable Finder selection…") {
-          captureAccessMessage = FinderSelection.hasAccess(request: true)
-            ? "Finder selection is enabled." : "Allow Finder access in System Settings → Privacy & Security → Automation."
-        }
-        Button("Enable selection in other apps…") {
-          let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-          captureAccessMessage = AXIsProcessTrustedWithOptions(options)
-            ? "Selection capture is enabled." : "Allow Skippy in System Settings → Privacy & Security → Accessibility."
-        }
-      }.font(.caption)
-      if let captureAccessMessage { Text(captureAccessMessage).font(.caption).foregroundStyle(.secondary) }
       Text("Right-click selected files or folders in Finder → Services → Send to Skippy. macOS controls which apps expose Services. If hidden, enable it in System Settings → Keyboard → Keyboard Shortcuts → Services.")
         .font(.system(size: 11)).foregroundStyle(Ink.secondary)
       Divider()
@@ -379,36 +481,11 @@ struct PreferencesView: View {
       }
       if let message = watches.message { Text(message).font(.system(size: 10)).foregroundStyle(Ink.secondary) }
       Toggle(
-        "Open Parcel at login",
-        isOn: Binding(
-          get: { store.preferences.launchAtLogin },
-          set: { value in
-            do {
-              if value {
-                try SMAppService.mainApp.register()
-              } else {
-                try SMAppService.mainApp.unregister()
-              }
-              store.preferences.launchAtLogin = value
-              store.preferences.save()
-            } catch {
-              message = "Login preference could not be changed: \(error.localizedDescription)"
-            }
-          }))
-      Toggle(
         "Open Skippy when dragging files or images",
         isOn: Binding(
           get: { DropPopupController.shared.isEnabled },
           set: { DropPopupController.shared.isEnabled = $0 })
       )
-      Text(
-        "The menu-bar island, top-screen edge, file drag, mouse shake, or global shortcut opens Skippy. In Finder, the global shortcut also adds selected files. Tab changes pages; / searches; Command-P packs; Command-S opens Settings; Escape closes."
-      ).font(.system(size: 11)).foregroundStyle(Ink.secondary).lineSpacing(4)
-      HStack {
-        Button("Open Skippy") { DropPopupController.shared.summon() }
-          .buttonStyle(QuietButtonStyle())
-        Spacer()
-      }
       Divider().overlay(Ink.line)
       HStack {
         Text("Default save location")
@@ -434,6 +511,29 @@ struct PreferencesView: View {
     }.font(.system(size: 12)).toggleStyle(.checkbox)
       .onChange(of: store.preferences) { _, _ in store.savePreferences() }
   }
+  private var privacy: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      Toggle("Keep local clipboard history", isOn: $clipboardHistory.captureEnabled)
+      LabeledContent("Screen recording", value: CGPreflightScreenCaptureAccess() ? "Allowed" : "Permission required")
+      Button("Request screen recording access…") {
+        captureAccessMessage = CGRequestScreenCaptureAccess() ? "Screen recording is allowed." :
+          "Allow Skippy in System Settings → Privacy & Security → Screen & System Audio Recording."
+      }
+      HStack {
+        Button("Enable Finder selection…") {
+          captureAccessMessage = FinderSelection.hasAccess(request: true)
+            ? "Finder selection is enabled." : "Allow Finder access in System Settings → Privacy & Security → Automation."
+        }
+        Button("Enable selection in other apps…") {
+          let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+          captureAccessMessage = AXIsProcessTrustedWithOptions(options)
+            ? "Selection capture is enabled." : "Allow Skippy in System Settings → Privacy & Security → Accessibility."
+        }
+      }.font(.caption)
+      if let captureAccessMessage { Text(captureAccessMessage).font(.caption).foregroundStyle(.secondary) }
+    }
+  }
+
   private func preferencePill(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
     Button(action: action) {
       Text(title).font(.system(size: 10, weight: selected ? .semibold : .medium))
