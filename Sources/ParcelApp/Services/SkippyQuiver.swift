@@ -149,8 +149,9 @@ enum QuiverEmblem: String, CaseIterable {
       panel.orderFrontRegardless()
       let revealAfterLanding = { [weak self, weak panel] in
         guard origin != nil, let self, let panel, self.floating === panel,
-          panel.isVisible, panel.frame.contains(NSEvent.mouseLocation) else { return }
+          panel.isVisible, self.surface != .floating else { return }
         self.hover(true)
+        if !panel.frame.contains(NSEvent.mouseLocation) { self.hover(false) }
       }
       if animate {
         NSAnimationContext.runAnimationGroup({ context in
@@ -423,9 +424,9 @@ enum QuiverEmblem: String, CaseIterable {
     mark.dragHover = { [weak self] inside in self?.hover(inside) }
     mark.registerForDraggedTypes([.fileURL, .png, .tiff, .URL, .string] + NSFilePromiseReceiver.readableDraggedTypes.map { .init($0) })
     if surface != .dock {
-      mark.windowMovement = WindowMoveActions(begin: {}, drag: { [weak self, weak mark] _ in
+      mark.windowMovement = WindowMoveActions(begin: {}, drag: { [weak self, weak mark] press in
         guard let self, let mark else { return }
-        self.dragLauncher(from: mark)
+        self.dragLauncher(from: mark, press: press)
       }, end: {})
     }
     strip.addSubview(mark)
@@ -434,11 +435,12 @@ enum QuiverEmblem: String, CaseIterable {
     if unfolded { trackArrow() }
   }
 
-  private func dragLauncher(from view: QuiverMark) {
+  private func dragLauncher(from view: QuiverMark, press: NSEvent) {
     guard let window = view.window else { return }
     let start = window.convertToScreen(view.convert(view.bounds, to: nil))
-    let pointer = NSEvent.mouseLocation
-    let badge = movingBadge(at: start)
+    let grip = window.convertPoint(toScreen: press.locationInWindow)
+    let current = NSEvent.mouseLocation
+    let badge = movingBadge(at: start.offsetBy(dx: current.x - grip.x, dy: current.y - grip.y))
     dragging = true
     hoverCleanup()
     for satellite in satellites.values { satellite.orderOut(nil) }
@@ -449,7 +451,7 @@ enum QuiverEmblem: String, CaseIterable {
     var target: (QuiverSurface, NSScreen)?
     while let next = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
       let point = NSEvent.mouseLocation
-      let origin = CGPoint(x: start.minX + point.x - pointer.x, y: start.minY + point.y - pointer.y)
+      let origin = CGPoint(x: start.minX + point.x - grip.x, y: start.minY + point.y - grip.y)
       badge.setFrameOrigin(origin)
       if let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }) {
         let surface = QuiverSurface.snapped(at: point, screen: screen.frame, visible: screen.visibleFrame)
